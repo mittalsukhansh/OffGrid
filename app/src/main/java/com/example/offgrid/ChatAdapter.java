@@ -1,0 +1,113 @@
+package com.example.offgrid;
+
+import android.content.Context;
+import android.graphics.drawable.GradientDrawable;
+import android.text.format.DateFormat;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Renders chat bubbles: own messages on the right, messages from peers on the left.
+ * The adapter displays the list it is given; the owner mutates the list and calls the
+ * matching notifyItem* method.
+ */
+public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
+
+    /** One row in the chat history. */
+    public static final class ChatEntry {
+        public final MeshMessage message;
+        public final boolean outgoing;
+        /** Time shown in the bubble (send time for own messages, receive time for peers'). */
+        public final long displayTimeMs;
+
+        public ChatEntry(@NonNull MeshMessage message, boolean outgoing, long displayTimeMs) {
+            this.message = message;
+            this.outgoing = outgoing;
+            this.displayTimeMs = displayTimeMs;
+        }
+    }
+
+    private static final int OUT_BG = 0xFF1565C0;
+    private static final int OUT_TEXT = 0xFFFFFFFF;
+    private static final int OUT_META = 0xCCFFFFFF;
+    private static final int IN_BG = 0xFFE3E3E8;
+    private static final int IN_TEXT = 0xFF1B1B1F;
+    private static final int IN_META = 0x991B1B1F;
+    private static final float CORNER_RADIUS_DP = 16f;
+
+    private final List<ChatEntry> entries;
+
+    public ChatAdapter(@NonNull List<ChatEntry> entries) {
+        this.entries = entries;
+    }
+
+    @NonNull
+    @Override
+    public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.item_message, parent, false);
+        return new ViewHolder(view);
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+        ChatEntry entry = entries.get(position);
+        Context context = holder.itemView.getContext();
+
+        holder.senderText.setText(entry.outgoing ? "You" : "Peer " + shortId(entry));
+        holder.messageText.setText(entry.message.getText());
+        holder.timeText.setText(
+                DateFormat.getTimeFormat(context).format(new Date(entry.displayTimeMs)));
+
+        GradientDrawable background = new GradientDrawable();
+        background.setCornerRadius(CORNER_RADIUS_DP * context.getResources().getDisplayMetrics().density);
+        background.setColor(entry.outgoing ? OUT_BG : IN_BG);
+        holder.bubble.setBackground(background);
+
+        int textColor = entry.outgoing ? OUT_TEXT : IN_TEXT;
+        int metaColor = entry.outgoing ? OUT_META : IN_META;
+        holder.messageText.setTextColor(textColor);
+        holder.senderText.setTextColor(metaColor);
+        holder.timeText.setTextColor(metaColor);
+
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) holder.bubble.getLayoutParams();
+        params.gravity = entry.outgoing ? Gravity.END : Gravity.START;
+        holder.bubble.setLayoutParams(params);
+    }
+
+    @Override
+    public int getItemCount() {
+        return entries.size();
+    }
+
+    private static String shortId(ChatEntry entry) {
+        String id = entry.message.getSenderId();
+        return id.substring(0, Math.min(4, id.length())).toUpperCase(Locale.ROOT);
+    }
+
+    static final class ViewHolder extends RecyclerView.ViewHolder {
+        final View bubble;
+        final TextView senderText;
+        final TextView messageText;
+        final TextView timeText;
+
+        ViewHolder(@NonNull View itemView) {
+            super(itemView);
+            bubble = itemView.findViewById(R.id.bubble);
+            senderText = itemView.findViewById(R.id.senderText);
+            messageText = itemView.findViewById(R.id.messageText);
+            timeText = itemView.findViewById(R.id.timeText);
+        }
+    }
+}
