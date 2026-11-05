@@ -1,19 +1,25 @@
 package com.example.offgrid;
-import com.example.offgrid.mesh.MeshService;
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.text.InputFilter;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -27,6 +33,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Chat screen for the OffGrid mesh.
@@ -40,22 +47,30 @@ import java.util.List;
  * </ol>
  *
  * <p>The Activity binds <em>without</em> BIND_AUTO_CREATE, so the binding never keeps the
- * service alive and the UI always mirrors the real service state - including when the user
- * taps "Stop" in the notification. Leaving the app does not stop the mesh.
+ * service alive and the UI always mirrors the real service state. Leaving the app does not
+ * stop the mesh.
+ *
+ * <p>Private messaging: the "To:" button picks "Everyone" or a contact. Contacts are added by
+ * importing a contact string ("My contact" on the other phone) or appear automatically once
+ * their key has been heard on the mesh.
  */
 public class MainActivity extends AppCompatActivity {
 
     private static final int MAX_HISTORY = 500;
 
-    /** Keeps the chat history across configuration changes (e.g. rotation). */
+    /** Keeps chat history and the selected recipient across configuration changes. */
     public static class ChatViewModel extends ViewModel {
         final List<ChatAdapter.ChatEntry> entries = new ArrayList<>();
+        /** Device ID of the selected private recipient, or null for "Everyone". */
+        @Nullable String recipientId;
     }
 
     // Views
     private TextView statusText;
     private Button toggleButton;
     private Button sendButton;
+    private Button recipientButton;
+    private Button contactButton;
     private EditText messageInput;
     private RecyclerView chatRecycler;
     private LinearLayoutManager layoutManager;
@@ -81,6 +96,8 @@ public class MainActivity extends AppCompatActivity {
         statusText = findViewById(R.id.statusText);
         toggleButton = findViewById(R.id.toggleButton);
         sendButton = findViewById(R.id.sendButton);
+        recipientButton = findViewById(R.id.recipientButton);
+        contactButton = findViewById(R.id.contactButton);
         messageInput = findViewById(R.id.messageInput);
         chatRecycler = findViewById(R.id.chatRecycler);
 
@@ -104,10 +121,13 @@ public class MainActivity extends AppCompatActivity {
         });
         sendButton.setOnClickListener(v -> sendCurrentMessage());
         toggleButton.setOnClickListener(v -> onToggleClicked());
+        recipientButton.setOnClickListener(v -> showRecipientDialog());
+        contactButton.setOnClickListener(v -> showMyContactDialog());
 
         // Must be created during onCreate (registers Activity Result launchers).
         permissionHelper = new BlePermissionHelper(this, permissionCallback);
 
+        updateRecipientButton();
         updateUi();
     }
 
@@ -155,6 +175,7 @@ public class MainActivity extends AppCompatActivity {
     private final MeshService.MeshListener meshListener = new MeshService.MeshListener() {
         @Override
         public void onMessageReceived(@NonNull MeshMessage message) {
+            // Public messages, and private messages already decrypted by the service.
             addEntry(new ChatAdapter.ChatEntry(message, false, System.currentTimeMillis()));
         }
 
@@ -234,13 +255,160 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Start the mesh first", Toast.LENGTH_SHORT).show();
             return;
         }
-        MeshMessage sent = mesh.sendMessage(text);
-        if (sent == null) {
-            Toast.makeText(this, "Couldn't send that message", Toast.LENGTH_SHORT).show();
-            return;
+
+        String recipient = chatViewModel.recipientId;
+        MeshMessage sent;
+        if (recipient == null) {
+            sent = mesh.sendMessage(text);
+            if (sent == null) {
+                Toast.makeText(this, "Couldn't send that message", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        } else {
+            MeshService.SendResult result = mesh.sendPrivateMessage(recipient, text);
+            if (result.status != MeshService.SendStatus.SENT || result.message == null) {
+                Toast.makeText(this, describeFailure(result.status), Toast.LENGTH_LONG).show();
+                return;
+            }
+            sent = result.message;
         }
         addEntry(new ChatAdapter.ChatEntry(sent, true, sent.getTimestamp()));
         messageInput.setText("");
+    }
+
+    private static String describeFailure(MeshService.SendStatus status) {
+        switch (status) {
+            case RECIPIENT_KEY_UNKNOWN:
+                return "No key for that contact yet. Import their contact, or wait until "
+                        + "their phone is heard on the mesh.";
+            case ENCRYPTION_FAILED:
+                return "Encryption failed; message not sent";
+            default:
+                return "Couldn't send that message";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Recipient + contacts
+    // ------------------------------------------------------------------
+
+    private CryptoManager crypto() {
+        return CryptoManager.getInstance(this);
+    }
+
+    private void setRecipient(@Nullable String id) {
+        chatViewModel.recipientId = id;
+        updateRecipientButton();
+    }
+
+    private void updateRecipientButton() {
+        String id = chatViewModel.recipientId;
+        recipientButton.setText(id == null
+                ? "To: Everyone"
+                : "To: \uD83D\uDD12 " + CryptoManager.formatId(id, 16));
+    }
+
+    private void showRecipientDialog() {
+        final List<CryptoManager.Contact> contacts = crypto().getContacts();
+        final List<CharSequence> labels = new ArrayList<>();
+        labels.add("Everyone (public)");
+        for (CryptoManager.Contact c : contacts) {
+            labels.add("\uD83D\uDD12 " + CryptoManager.formatId(c.id, 16)
+                    + (c.addedManually ? "" : "   (heard on mesh)"));
+        }
+        labels.add("+ Add contact…");
+
+        new AlertDialog.Builder(this)
+                .setTitle("Send to")
+                .setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
+                    if (which == 0) {
+                        setRecipient(null);
+                    } else if (which == labels.size() - 1) {
+                        showAddContactDialog();
+                    } else {
+                        setRecipient(contacts.get(which - 1).id);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void showAddContactDialog() {
+        final EditText input = new EditText(this);
+        input.setHint(CryptoManager.CONTACT_PREFIX + "…");
+        input.setMaxLines(4);
+
+        String clip = readClipboardText();
+        if (clip != null && clip.trim().toLowerCase(Locale.ROOT)
+                .startsWith(CryptoManager.CONTACT_PREFIX)) {
+            input.setText(clip.trim()); // convenience: they probably just copied it
+        }
+
+        int pad = (int) (20 * getResources().getDisplayMetrics().density);
+        FrameLayout container = new FrameLayout(this);
+        container.setPadding(pad, pad / 2, pad, 0);
+        container.addView(input, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        new AlertDialog.Builder(this)
+                .setTitle("Add contact")
+                .setMessage("Paste the contact string from the other person's \"My contact\" "
+                        + "screen.")
+                .setView(container)
+                .setPositiveButton("Add", (dialog, which) -> {
+                    String id = crypto().importContact(input.getText().toString());
+                    if (id == null) {
+                        Toast.makeText(this, "That isn't a valid OffGrid contact",
+                                Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(this, "Contact added", Toast.LENGTH_SHORT).show();
+                        setRecipient(id);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void showMyContactDialog() {
+        final CryptoManager cm = crypto();
+        new AlertDialog.Builder(this)
+                .setTitle("My contact")
+                .setMessage("Your ID:\n" + CryptoManager.formatId(cm.getLocalId(), 32)
+                        + "\n\nShare your contact with people who should be able to message you "
+                        + "privately. Confirm the ID with them in person or on another channel "
+                        + "so you know the contact is really theirs.")
+                .setPositiveButton("Share", (d, w) -> {
+                    Intent send = new Intent(Intent.ACTION_SEND)
+                            .setType("text/plain")
+                            .putExtra(Intent.EXTRA_TEXT, cm.getContactString());
+                    startActivity(Intent.createChooser(send, "Share contact"));
+                })
+                .setNeutralButton("Copy", (d, w) -> {
+                    ClipboardManager clipboard =
+                            (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(
+                                ClipData.newPlainText("OffGrid contact", cm.getContactString()));
+                        Toast.makeText(this, "Contact copied", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    @Nullable
+    private String readClipboardText() {
+        try {
+            ClipboardManager clipboard =
+                    (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null || !clipboard.hasPrimaryClip()) return null;
+            ClipData data = clipboard.getPrimaryClip();
+            if (data == null || data.getItemCount() == 0) return null;
+            CharSequence text = data.getItemAt(0).coerceToText(this);
+            return text == null ? null : text.toString();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------

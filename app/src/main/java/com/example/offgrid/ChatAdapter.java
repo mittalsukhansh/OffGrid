@@ -19,8 +19,9 @@ import java.util.Locale;
 
 /**
  * Renders chat bubbles: own messages on the right, messages from peers on the left.
- * The adapter displays the list it is given; the owner mutates the list and calls the
- * matching notifyItem* method.
+ * Private (end-to-end encrypted) messages are marked with a lock and show who they are
+ * addressed to. The adapter displays the list it is given; the owner mutates the list and
+ * calls the matching notifyItem* method.
  */
 public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
 
@@ -45,6 +46,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
     private static final int IN_TEXT = 0xFF1B1B1F;
     private static final int IN_META = 0x991B1B1F;
     private static final float CORNER_RADIUS_DP = 16f;
+    private static final String LOCK = " \uD83D\uDD12"; // lock emoji
 
     private final List<ChatEntry> entries;
 
@@ -65,7 +67,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         ChatEntry entry = entries.get(position);
         Context context = holder.itemView.getContext();
 
-        holder.senderText.setText(entry.outgoing ? "You" : "Peer " + shortId(entry));
+        holder.senderText.setText(senderLabel(entry));
         holder.messageText.setText(entry.message.getText());
         holder.timeText.setText(
                 DateFormat.getTimeFormat(context).format(new Date(entry.displayTimeMs)));
@@ -91,9 +93,17 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         return entries.size();
     }
 
-    private static String shortId(ChatEntry entry) {
-        String id = entry.message.getSenderId();
-        return id.substring(0, Math.min(4, id.length())).toUpperCase(Locale.ROOT);
+    private static String senderLabel(ChatEntry entry) {
+        MeshMessage m = entry.message;
+        if (entry.outgoing) {
+            return m.isPrivate() ? "You \u2192 " + shortId(m.getTargetId()) + LOCK : "You";
+        }
+        return "Peer " + shortId(m.getSenderId()) + (m.isPrivate() ? " \u00B7 private" + LOCK : "");
+    }
+
+    private static String shortId(String id) {
+        if (id == null) return "?";
+        return id.substring(0, Math.min(8, id.length())).toUpperCase(Locale.ROOT);
     }
 
     static final class ViewHolder extends RecyclerView.ViewHolder {

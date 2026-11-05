@@ -1,6 +1,5 @@
-package com.example.offgrid.mesh;
-import com.example.offgrid.MeshMessage;
-import com.example.offgrid.MessageCache;
+package com.example.offgrid;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Notification;
@@ -31,7 +30,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.LocationManager;
@@ -52,6 +50,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.location.LocationManagerCompat;
 
 import java.io.ByteArrayOutputStream;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -83,6 +82,12 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * </ol>
  * To avoid broadcast storms in crowded venues relaying uses random jitter, a cap on concurrent
  * outbound connections, and a per-message fan-out limit.
+ *
+ * <h3>Private messages</h3>
+ * Every node floods every packet, but a {@link MeshMessage#TYPE_PRIVATE} packet carries an
+ * AES-GCM ciphertext that only its target can decrypt (see {@link CryptoManager}). Non-target
+ * nodes relay it untouched and never display it. Nodes also announce their public key
+ * periodically so others can encrypt to them.
  *
  * <h3>Usage</h3>
  * <pre>
@@ -155,8 +160,6 @@ public class MeshService extends Service {
 
     private static final String CHANNEL_ID = "offgrid_mesh";
     private static final int NOTIFICATION_ID = 1001;
-    private static final String PREFS_NAME = "offgrid_prefs";
-    private static final String PREF_SENDER_ID = "sender_id";
 
     private static final int MAX_CONCURRENT_OUTBOUND = 3;      // BLE stacks handle ~7 links total
     private static final int MAX_MESSAGES_PER_SESSION = 20;
@@ -176,6 +179,9 @@ public class MeshService extends Service {
     private static final int MAX_INBOUND_BUFFERS = 16;
     private static final long MAX_SCAN_BACKOFF_MS = 60_000L;
     private static final long MAX_ADVERTISE_BACKOFF_MS = 60_000L;
+    /** Public-key announcements are low priority and flood the whole mesh: keep them rare. */
+    private static final long KEY_ANNOUNCE_INTERVAL_MS = 10 * 60_000L;
+    private static final int KEY_ANNOUNCE_TTL = 4;
 
     // Framing: [flags:1][payload...]. One message may span several frames.
     private static final int ATT_OVERHEAD = 3;
@@ -196,6 +202,8 @@ public class MeshService extends Service {
     private Handler mainHandler;
 
     private String localSenderId;
+    private CryptoManager crypto;
+    private long lastKeyAnnounceMs;   // mesh thread only
     private volatile int peerCount;
     private volatile boolean meshActive;
     private volatile boolean destroyed;
@@ -233,7 +241,8 @@ public class MeshService extends Service {
         meshThread.start();
         meshHandler = new Handler(meshThread.getLooper());
         mainHandler = new Handler(Looper.getMainLooper());
-        localSenderId = loadOrCreateSenderId();
+        crypto = CryptoManager.getInstance(this);   // first run generates the identity key
+        localSenderId = crypto.getLocalId();
 
         createNotificationChannel();
         ContextCompat.registerReceiver(this, bluetoothStateReceiver,
@@ -346,6 +355,61 @@ public class MeshService extends Service {
         return message;
     }
 
+    public enum SendStatus {
+        SENT,
+        /** Bad recipient ID, sending to yourself, or empty/too long text. */
+        INVALID_MESSAGE,
+        /** We do not have the recipient's public key yet. */
+        RECIPIENT_KEY_UNKNOWN,
+        ENCRYPTION_FAILED
+    }
+
+    public static final class SendResult {
+        @NonNull public final SendStatus status;
+        /** Plaintext view of the sent message for the local UI; non-null only when SENT. */
+        @Nullable public final MeshMessage message;
+
+        SendResult(@NonNull SendStatus status, @Nullable MeshMessage message) {
+            this.status = status;
+            this.message = message;
+        }
+    }
+
+    /**
+     * Encrypts {@code text} for {@code targetId} and floods it through the mesh. Every node
+     * relays the packet, but only the target can read it.
+     */
+    @NonNull
+    public SendResult sendPrivateMessage(@NonNull String targetId, @NonNull String text) {
+        if (!MeshMessage.isValidTargetId(targetId) || targetId.equals(localSenderId)
+                || text.trim().isEmpty() || text.length() > MeshMessage.MAX_TEXT_LENGTH) {
+            return new SendResult(SendStatus.INVALID_MESSAGE, null);
+        }
+        if (!crypto.hasKeyFor(targetId)) {
+            return new SendResult(SendStatus.RECIPIENT_KEY_UNKNOWN, null);
+        }
+        try {
+            String messageId = UUID.randomUUID().toString();
+            long timestamp = System.currentTimeMillis();
+            String ciphertext = crypto.encrypt(messageId, targetId, timestamp, text);
+            final MeshMessage wire = MeshMessage.createPrivate(messageId, localSenderId, targetId,
+                    ciphertext, crypto.getPublicKeyBase64(), MeshMessage.DEFAULT_TTL, timestamp);
+            final MeshMessage view = wire.withPlaintext(text);
+            meshHandler.post(() -> {
+                seenCache.markSeen(wire.getMessageId());
+                addToRelayBuffer(wire); // only the ciphertext form is ever buffered or sent
+                scheduleConnectPass(nextJitterMs());
+            });
+            return new SendResult(SendStatus.SENT, view);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "Rejected private message: " + e.getMessage());
+            return new SendResult(SendStatus.INVALID_MESSAGE, null);
+        } catch (GeneralSecurityException e) {
+            Log.w(TAG, "Encryption failed", e);
+            return new SendResult(SendStatus.ENCRYPTION_FAILED, null);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Mesh start / stop (mesh thread)
     // ------------------------------------------------------------------
@@ -388,6 +452,7 @@ public class MeshService extends Service {
         openGattServer();
         startScanning();
         meshHandler.postDelayed(maintenanceRunnable, MAINTENANCE_INTERVAL_MS);
+        announceKey();
         setStatus("Mesh active");
         Log.i(TAG, "Mesh started");
     }
@@ -453,6 +518,7 @@ public class MeshService extends Service {
                 if (now - bit.next().storedAtMs > RELAY_BUFFER_TTL_MS) bit.remove();
             }
             seenCache.purgeExpired();
+            if (now - lastKeyAnnounceMs >= KEY_ANNOUNCE_INTERVAL_MS) announceKey();
 
             // Self-healing: restart radios that failed or were silently stopped.
             if (serverReady && !advertising) startAdvertising();
@@ -613,16 +679,63 @@ public class MeshService extends Service {
             return; // our own message looped back
         }
 
-        dispatchReceived(incoming);
+        if (!processByType(incoming)) {
+            return; // forged or undecryptable: neither delivered nor relayed
+        }
 
         Peer source = peers.get(sourceAddress);
         if (source != null) source.remember(incoming.getMessageId());
 
+        // Relay every valid packet, including private ones meant for someone else (flooding).
+        // Relays only ever handle the encrypted form.
         MeshMessage outgoing = incoming.withDecrementedTtl();
         if (outgoing.isRelayable()) {
             addToRelayBuffer(outgoing);
             scheduleConnectPass(nextJitterMs());
         }
+    }
+
+    /**
+     * Applies type-specific handling to a new (non-duplicate) packet.
+     *
+     * @return false if the packet is bogus and must not be relayed
+     */
+    private boolean processByType(MeshMessage message) {
+        switch (message.getType()) {
+            case MeshMessage.TYPE_PUBLIC:
+                dispatchReceived(message);
+                return true;
+
+            case MeshMessage.TYPE_KEY_ANNOUNCE:
+                // Valid only if the key hashes to the claimed sender ID.
+                return crypto.registerAnnouncedKey(message.getSenderId(), message.getText());
+
+            case MeshMessage.TYPE_PRIVATE:
+                if (!localSenderId.equals(message.getTargetId())) {
+                    return true; // not for us: relay it, but never look inside
+                }
+                try {
+                    String plaintext = crypto.decrypt(message);
+                    dispatchReceived(message.withPlaintext(plaintext));
+                    return true;
+                } catch (GeneralSecurityException | IllegalArgumentException e) {
+                    Log.w(TAG, "Dropped undecryptable private message: " + e.getMessage());
+                    return false;
+                }
+
+            default:
+                return false;
+        }
+    }
+
+    /** Floods our public key so peers can send us private messages. */
+    private void announceKey() {
+        lastKeyAnnounceMs = SystemClock.elapsedRealtime();
+        MeshMessage announce = MeshMessage.createKeyAnnounce(
+                localSenderId, crypto.getPublicKeyBase64(), KEY_ANNOUNCE_TTL);
+        seenCache.markSeen(announce.getMessageId());
+        addToRelayBuffer(announce);
+        scheduleConnectPass(nextJitterMs());
     }
 
     // ------------------------------------------------------------------
@@ -826,10 +939,18 @@ public class MeshService extends Service {
     private void addToRelayBuffer(MeshMessage message) {
         relayBuffer.put(message.getMessageId(),
                 new BufferedMessage(message, SystemClock.elapsedRealtime()));
-        Iterator<String> it = relayBuffer.keySet().iterator();
-        while (relayBuffer.size() > RELAY_BUFFER_MAX && it.hasNext()) {
-            it.next();
-            it.remove();
+        // When full, evict a key announcement first (cheap to resend), else the oldest entry.
+        while (relayBuffer.size() > RELAY_BUFFER_MAX) {
+            String victim = null;
+            for (Map.Entry<String, BufferedMessage> e : relayBuffer.entrySet()) {
+                if (victim == null) victim = e.getKey();
+                if (e.getValue().message.isKeyAnnounce()) {
+                    victim = e.getKey();
+                    break;
+                }
+            }
+            if (victim == null) break;
+            relayBuffer.remove(victim);
         }
     }
 
@@ -1207,16 +1328,6 @@ public class MeshService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return false;
         LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         return lm == null || !LocationManagerCompat.isLocationEnabled(lm);
-    }
-
-    private String loadOrCreateSenderId() {
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        String id = prefs.getString(PREF_SENDER_ID, null);
-        if (id == null || id.isEmpty()) {
-            id = UUID.randomUUID().toString();
-            prefs.edit().putString(PREF_SENDER_ID, id).apply();
-        }
-        return id;
     }
 
     // ------------------------------------------------------------------
