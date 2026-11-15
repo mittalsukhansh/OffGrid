@@ -1,0 +1,76 @@
+name: Publish test APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft prerelease tag
+        required: true
+        default: v0.1
+        type: string
+      source_sha:
+        description: Full tested commit SHA from main
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: test-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+      - name: Verify release source and successful CI
+        shell: bash
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[A-Za-z0-9.-]+)?$ ]]
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow android.yml --commit "$SOURCE_SHA" --json conclusion --jq 'any(.[]; .conclusion == "success")')
+          test "$passed" = true
+          draft=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+          test "$draft" = true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android platform
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+      - name: Build test APK
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Verify and stage release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          apk="release-assets/OffGrid-${RELEASE_TAG}-test.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
+          actual=$(apkanalyzer manifest version-name "$apk")
+          test "$actual" = "${RELEASE_TAG#v}"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk" > release-assets/APK-SIGNATURE.txt
+          cp TESTING.md release-assets/TESTING.md
+          cd release-assets
+          sha256sum "OffGrid-${RELEASE_TAG}-test.apk" > SHA256SUMS.txt
+      - name: Upload APK and publish prerelease
+        shell: bash
+        run: |
+          gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --draft=false

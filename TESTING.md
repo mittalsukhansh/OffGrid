@@ -13,8 +13,9 @@ implemented; use test messages and test contacts.
 2. Upgrading an existing installation requires the same signing certificate.
    If Android reports a signature mismatch, do not uninstall until any needed
    test information has been saved: uninstalling deletes local history, keys,
-   and identity. This test APK uses the development workspace's debug certificate,
-   which can differ from earlier CI APKs. The version code is 2 so Android permits
+   and identity. This test APK uses the release job's debug certificate,
+   which can differ from earlier local or CI APKs. `APK-SIGNATURE.txt` records it.
+   The version code is 2 so Android permits
    an upgrade from the earlier version-code-1 builds with the same certificate.
 3. Label three phones A, B, and C. Record model, Android version, and battery
    optimization settings. Keep automatic date/time enabled; packet admission
