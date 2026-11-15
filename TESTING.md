@@ -75,5 +75,6 @@ device identifiers and diagnostic information; review them before sharing public
 Automated CI covers parsing/signature checks, TTL-bound signing behavior,
 duplicate/replay handling, persistence, crypto tampering, QR encoding, and migration.
 It does not establish physical Bluetooth range, manufacturer-specific screen-off
-behavior, or successful A-B-C routing. Dedicated byte-level fragmentation and
-reassembly tests remain a follow-up; packaging this APK does not imply they were added.
+behavior, or successful A-B-C routing. Current development adds dedicated FrameCodec fragmentation/reassembly and relay
+scheduling tests, plus three-logical-node protocol/storage tests. Those tests do not
+retroactively change the published v0.1 APK or establish physical mesh reliability.

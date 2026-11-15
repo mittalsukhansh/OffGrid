@@ -1,147 +1,106 @@
 # OffGrid
 
-Version **0.1** is a test prerelease. Download the APK from
-[GitHub Releases](https://github.com/mittalsukhansh/OffGrid/releases) and follow
-[the three-phone test checklist](TESTING.md). The combined development codebase
-is on `main`; new work uses short feature branches.
+OffGrid is an Android prototype for offline messaging over a custom Bluetooth Low
+Energy/GATT relay network. Phones discover peers, exchange signed packets, and
+retain messages for later forwarding. It is not an implementation of the Bluetooth
+SIG Mesh standard.
 
-**OffGrid** is an offline-first, peer-to-peer (P2P) messaging network built for Android. It enables secure communication without requiring an active internet connection or cellular service by creating a decentralized Bluetooth Low Energy (BLE) mesh network.
+[Download the v0.1 test prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v0.1).
+Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
+Development continues from `main` on short feature branches; the published v0.1 APK
+is an immutable earlier snapshot, not every later commit.
 
----
+## Implemented versus verified
 
-## Build and checks
+No physical three-phone results have been supplied yet. Passing emulator tests
+or a simulated A-B-C protocol exchange does not establish real radio range,
+screen-off reliability, or successful Bluetooth mesh delivery.
 
-Requirements: JDK 25 (the Gradle daemon toolchain), Android SDK Platform 37,
-and Android SDK command-line tools. The app supports Android 8.0 / API 26 and newer.
-Java source compatibility remains Java 11.
+| Area | Implemented | Automated verification | Physical-device status |
+| --- | --- | --- | --- |
+| Discovery and transport | Filtered BLE scanning, advertising, GATT server/client, MTU negotiation and retries | Build/lint; framing tests exercise the byte boundary | Real discovery, GATT callback ordering and range unverified |
+| Framing | Fragmentation/reassembly, independent peer buffers, size limits and deadlines | JVM round trips at MTU 23/247/517, UTF-8 boundaries, malformed/oversized frames and timeout/capacity tests | Large-MTU interoperability still needs phones |
+| Relay scheduling | Three concurrent outbound sessions, 20-packet batches, six-forward eligibility limit, jitter, peer freshness and backoff | Fake-clock/fake-transport tests for ordering, limits, expiry, recovery and stale callbacks | A-B-C routing and movement unverified |
+| Message protocol | JSON packet types, TTL, signatures, private encryption, authenticated acknowledgements and replay rejection | Android tests run the production protocol/storage components across three logical nodes; parser and security regressions | This simulation does not use Bluetooth |
+| Persistence and delivery | Encrypted Room history/queues, atomic message/receipt/replay writes, restart recovery, honest delivery states | Emulator SQLite/Keystore, rollback, migration and restart tests | Manufacturer-specific process/service recovery unverified |
+| Contact trust | QR exchange, full fingerprint comparison and a persistent Verified indicator | QR image round trip and contact-state tests | Physical camera scanning and the complete UI flow need device checks |
+| Abuse protection | Packet signatures, timestamp admission, persistent replay ledger and bounded flood budgets | JVM rules and emulator security tests | No independent security audit or radio-level denial-of-service guarantee |
+| Background operation | Connected-device foreground service, radio-state handling and maintenance | Component tests and compilation; no physical screen-off evidence | Screen off, battery optimization and Bluetooth toggling await the checklist |
+| Forward secrecy | **Not implemented**; private messages still use static ECDH | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
 
-Set `JAVA_HOME` to your JDK 25 installation and `ANDROID_HOME` to your Android SDK.
-Install the platform with `sdkmanager "platforms;android-37.0" "build-tools;36.0.0"`, accepting the Android
-SDK licenses when prompted. Alternatively, configure these tools in Android Studio.
+## Components and documentation
+
+The Android service is a lifecycle/binding adapter; it no longer owns the GATT
+callbacks, relay peer table, packet acceptance policy, or database queries.
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): component ownership, dependency boundaries,
+  threading, persistence transactions and how to test changes.
+- [PACKET_FORMAT.md](PACKET_FORMAT.md): protocol version 3 fields, canonical
+  signatures, private encryption/ACKs, TTL and exact BLE framing.
+- [SECURITY.md](SECURITY.md): trust model, flood/replay policy, upgrade behavior,
+  limitations and the forward-secrecy assessment.
+- [TESTING.md](TESTING.md): installation, the physical three-phone plan and logs.
+
+The `MeshTransport` interface separates byte delivery from routing. `BleTransport`
+and `GattOutboundSession` own Android Bluetooth resources; `FrameCodec` and
+`RelayScheduler` can be tested without Android or radios. `MeshProtocol` handles
+packet acceptance and receipts through `MeshStorage`; `RoomMeshStorage` adapts the
+existing encrypted `MessageStore` and its atomic transactions.
+
+## Delivery and stored data
+
+Outgoing requests return **ACCEPTED** for asynchronous persistence. The composer
+clears only after the message is saved. Public broadcasts are signed but readable;
+private messages and ACKs use ECDH, HKDF-SHA256 and AES-GCM.
+
+- **Queued:** saved locally and awaiting forwarding.
+- **Forwarded:** written successfully to a nearby peer; this is not final delivery.
+- **Delivered:** the intended private recipient authenticated/decrypted the message,
+  saved it, and returned a valid receipt. It is not a read receipt. Broadcasts never
+  claim this state.
+- **Expired:** no confirmation arrived within ten minutes. A valid late receipt
+  can still confirm a private message.
+- **Failed:** the pending message could not remain eligible, for example after
+  queue eviction or rejection of a legacy/invalid stored packet. Storage failures
+  before acceptance retain the draft and report an error.
+
+Room retains conversation IDs, history, outgoing status and pending packets across
+restarts. The screen shows the latest 500 messages; older rows remain stored.
+Message bodies and queued packets are encrypted with a separate Android Keystore
+key. IDs, timestamps, conversation membership, counts and status are metadata in
+cleartext. This is field encryption, not whole-database encryption. Clearing app
+storage or losing its key can make history unrecoverable; backup is disabled.
+
+The queue holds at most 200 packets and expires them after ten minutes; it does not
+promise indefinite or guaranteed delivery. Recovery preserves deadlines and
+forward counts. Live traffic requires version 3 signatures and reasonably accurate
+clocks. Version 2 history is readable; old unsigned pending packets must be resent
+using the updated app. Every participating endpoint and relay must upgrade.
+
+## Build and run checks
+
+Requirements: JDK 25, Android SDK Platform 37, Build Tools 36.0.0 and Android
+command-line tools. The minimum supported Android version is 8.0 / API 26.
+Java source compatibility remains Java 11. Gradle 9.6.0 is pinned by the wrapper
+and its distribution checksum; the Android plugin and dependencies are pinned in
+`gradle/libs.versions.toml`.
+
+Set `JAVA_HOME` and `ANDROID_HOME`, accept the SDK licenses, then run:
 
 ```sh
+sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
 ./gradlew assembleDebug lintDebug testDebugUnitTest assembleDebugAndroidTest
 ```
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
-The Gradle wrapper pins Gradle 9.6.0 and verifies its distribution checksum;
-the Android Gradle plugin is pinned in `gradle/libs.versions.toml`.
+APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
-GitHub Actions runs the build, lint, and unit tests on pushes and pull requests,
-runs instrumented tests on an API 30 emulator, and uploads the debug APK and check reports.
-To run the instrumented tests on a connected device or emulator:
+For the Android integration tests, use a connected device or emulator:
 
 ```sh
 ./gradlew connectedDebugAndroidTest
 ```
 
-The service-registration regression test checks that Android can resolve the
-actual `MeshService` class. Storage tests use the emulator's SQLite and Android Keystore.
-Real BLE discovery, background operation, and multi-hop delivery need testing on
-physical phones; an APK build alone does not verify these features.
-
----
-
-## Key Features
-
-See [SECURITY.md](SECURITY.md) for signed protocol version 3, QR contact verification,
-durable replay rejection, flood limits, upgrade behavior, and the forward-secrecy
-assessment. Forward secrecy is not implemented in this release.
-
-### Persistent messages
-
-Room stores conversation IDs, message status, and pending relay packets. The screen
-loads the latest 500 messages from the database, including messages received while
-the screen was closed. Older history stays in the database. Public messages belong
-to the `public` conversation; private messages are grouped by the other device's ID.
-
-Message bodies (including public messages), saved private display text, and relay
-packets are encrypted at rest with AES-256-GCM and a separate Android Keystore key.
-Table name and message ID are authenticated to prevent ciphertext substitution.
-IDs, conversation membership, timestamps, forwarding counts, and status are queryable
-metadata, not encrypted. This is field encryption, not full-database encryption.
-Backup is disabled. Clearing app data or losing the Keystore key makes saved content
-unrecoverable; decryption failures do not erase the original rows or use plaintext.
-
-Outgoing history and pending packets commit in one transaction before forwarding.
-The composer clears only after the saved row appears. Pending packets survive service
-or process restarts and resume when the mesh service next starts, retaining the
-existing 10-minute expiry and forwarding limit. Recovery uses the persisted wall-clock
-expiry, so changing the device clock can affect expiration. Private relay packets
-retain their end-to-end ciphertext; decrypted display copies are never transmitted.
-
-Outgoing bubbles show **Queued**, **Forwarded**, **Delivered**, **Expired**, or **Failed**.
-“Forwarded” means a GATT write to a nearby peer succeeded. For a private message,
-“Delivered” requires an authenticated receipt from its intended recipient after
-the recipient committed the message to Room. It does not mean the person read it.
-The existing 200-packet queue limit
-still applies, with key announcements evicted first. Restarting does not reset
-persisted forwarding counts, but per-peer connection history remains in memory.
-
-`MessageStoreTest` exercises database reopening, private-content encryption, deduplication,
-forwarding progress, expiration, transactional rollback, and ciphertext authentication
-on an Android device with `./gradlew connectedDebugAndroidTest`.
-
-### Delivery acknowledgements
-
-`sendPrivateMessage` returns `ACCEPTED` for an asynchronous persistence request;
-only the committed database row confirms **Queued**. It never returns `SENT`.
-Storage failures preserve the composer's draft and show an error. Queue eviction
-records **Failed**. Transient Bluetooth failures keep retrying within the existing
-relay scheduling limits rather than claiming delivery or immediately failing.
-
-Private recipients generate an encrypted ACK (packet type 3) using ECDH,
-HKDF-SHA256 with a separate `offgrid-ack-v1` purpose, and AES-GCM. The receipt
-references the original message ID and SHA-256 fingerprint of its immutable wire
-fields. The sender authenticates/decrypts the ACK, checks both endpoints and the
-fingerprint against the saved outgoing message, then atomically marks it
-**Delivered** and deletes its pending packet. Relays cannot forge receipts;
-changing a private chat packet's type into an ACK fails authentication.
-
-The recipient atomically saves the incoming message and receipt outbox entry.
-Its encrypted history also caches the receipt so a duplicate original packet can
-requeue the same receipt after a restart without duplicating the conversation,
-resetting its expiry, or resetting its forwarding budget. ACKs are relayed as
-ciphertext and never appear as chat bubbles. Delivery does not automatically imply
-a read receipt.
-
-Unconfirmed private messages become **Expired** after ten minutes, including ones
-already forwarded or removed from the pending queue. A late valid receipt can
-confirm an expired/failed message; a subsequent GATT callback, timeout, or duplicate
-receipt cannot downgrade **Delivered**. Expiration means confirmation did not arrive
-in time, not proof that the recipient never received the message. Public broadcasts
-have no single intended recipient, so they never claim **Delivered** and remain
-**Forwarded** after a successful peer write.
-
-Live traffic now requires signed protocol version 3; upgrade both endpoints and
-relays. Existing version 2 encrypted history remains readable. Room migrates to
-version 2 to add the durable replay ledger without deleting history.
-`DeliveryReceiptTest` runs on the JVM; `AuthenticatedDeliveryTest` exercises three
-independent identities, real crypto, Room, replay protection, and terminal states
-in the CI emulator. Real multi-hop Bluetooth behavior still requires physical phones.
-
-* **Peer-to-Peer Mesh Networking**: Relays messages across multi-hop BLE connections to extend communication range beyond point-to-point hardware limits.
-* **Store & Forward Architecture**: Buffers outgoing packets locally until a route or recipient becomes reachable.
-* **End-to-End Encryption (E2EE)**: Secures message payloads using AES-GCM prior to network transmission.
-* **Packet Deduplication**: Uses rolling hash caches and unique Time-To-Live (TTL) identifiers to prevent routing loops and flooding.
-* **GATT Server/Client Hybrid**: Operates simultaneously as both a BLE GATT Server and Client for dual-direction packet relaying.
-
----
-
-## Tech Stack
-
-| Domain | Tech / Tools |
-| :--- | :--- |
-| **Platform** | Android |
-| **Language** | Java |
-| **Networking** | Bluetooth Low Energy (BLE), GATT API |
-| **Cryptography** | AES-GCM (WebCrypto / Java Cryptography Architecture) |
-| **Architecture** | Custom Mesh Protocol (TTL Routing, Packet Caching) |
-| **IDE & Tools** | Android Studio, Git |
-
----
-
-## System Architecture & Topology
-
-### Mesh Relay Topology
-Nodes automatically discover nearby peers and form dynamic links. If Node A wants to send a message to Node C, Node B acts as an intermediate relay hop.
+GitHub Actions runs build/lint/JVM checks and an API 30 emulator test job. The
+separate test-release workflow only publishes a draft prerelease from a tested
+commit on `main`; it attaches an APK, checksum, certificate report and checklist.
+CI test artifacts do not replace the physical validation table above.

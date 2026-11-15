@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
 
 /** Database operations run on the mesh thread or the history executor, never the UI thread. */
 public final class MessageStore {
-    public static final long DELIVERY_TIMEOUT_MS = 10 * 60_000L;
+    public static final long DELIVERY_TIMEOUT_MS = com.example.offgrid.mesh.MeshConfig.PENDING_TTL_MS;
     private static volatile MessageStore instance;
     final MessageDatabase database;
     final StorageCipher cipher;
