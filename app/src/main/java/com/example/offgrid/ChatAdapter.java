@@ -74,7 +74,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         ChatEntry entry = entries.get(position);
         Context context = holder.itemView.getContext();
 
-        holder.senderText.setText(senderLabel(entry));
+        holder.senderText.setText(senderLabel(entry, context));
         holder.messageText.setText(entry.message.getText());
         holder.timeText.setText(
                 DateFormat.getTimeFormat(context).format(new Date(entry.displayTimeMs))
@@ -101,12 +101,15 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         return entries.size();
     }
 
-    private static String senderLabel(ChatEntry entry) {
+    private static String senderLabel(ChatEntry entry, Context context) {
         MeshMessage m = entry.message;
         if (entry.outgoing) {
             return m.isPrivate() ? "You \u2192 " + shortId(m.getTargetId()) + LOCK : "You";
         }
-        return "Peer " + shortId(m.getSenderId()) + (m.isPrivate() ? " \u00B7 private" + LOCK : "");
+        String trust = CryptoManager.getInstance(context).isVerified(m.getSenderId())
+                ? " · ✓ Verified contact" : " · Unverified contact";
+        if (m.isPublic() && m.getSignature() == null) trust = " · Legacy unsigned message";
+        return "Peer " + shortId(m.getSenderId()) + (m.isPrivate() ? " · private" + LOCK : "") + trust;
     }
 
     private static String statusLabel(String status) {
@@ -114,7 +117,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
             case "FORWARDED": return "Forwarded";
             case "DELIVERED": return "Delivered";
             case "EXPIRED": return "Expired";
-            case "FAILED":
+            case "FAILED": return "Failed";
             case "EVICTED": return "Failed · queue full";
             default: return "Queued";
         }

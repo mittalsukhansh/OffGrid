@@ -9,6 +9,12 @@ import java.util.List;
 
 @Dao
 public interface MessageDao {
+    @Insert void insertReplay(ReplayRecord row);
+    @Insert(onConflict = OnConflictStrategy.REPLACE) void saveClock(SecurityClock clock);
+    @Query("SELECT * FROM security_clock WHERE id = 1") SecurityClock clock();
+    @Query("SELECT COUNT(*) FROM replay_ledger WHERE id = :id") int replayed(String id);
+    @Query("SELECT COUNT(*) FROM replay_ledger") int replayCount();
+    @Query("DELETE FROM replay_ledger WHERE expiresAtMs <= :now") void pruneReplay(long now);
     @Insert(onConflict = OnConflictStrategy.IGNORE) void insertChat(ChatRecord row);
     @Insert(onConflict = OnConflictStrategy.IGNORE) void insertPending(PendingRecord row);
     @Query("SELECT * FROM messages ORDER BY displayTimeMs DESC, id DESC LIMIT 500")

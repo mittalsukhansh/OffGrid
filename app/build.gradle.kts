@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
     namespace = "com.example.offgrid"
     compileSdk {
         version = release(37)
@@ -37,6 +38,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.zxing.embedded)
+    implementation(libs.zxing.core)
     implementation(libs.room.runtime)
     annotationProcessor(libs.room.compiler)
     implementation(libs.activity.ktx)
@@ -46,4 +49,5 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
+    androidTestImplementation(libs.room.testing)
 }

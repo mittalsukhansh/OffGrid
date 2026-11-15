@@ -39,6 +39,10 @@ physical phones; an APK build alone does not verify these features.
 
 ## Key Features
 
+See [SECURITY.md](SECURITY.md) for signed protocol version 3, QR contact verification,
+durable replay rejection, flood limits, upgrade behavior, and the forward-secrecy
+assessment. Forward secrecy is not implemented in this release.
+
 ### Persistent messages
 
 Room stores conversation IDs, message status, and pending relay packets. The screen
@@ -104,9 +108,9 @@ in time, not proof that the recipient never received the message. Public broadca
 have no single intended recipient, so they never claim **Delivered** and remain
 **Forwarded** after a successful peer write.
 
-ACK is an additive extension to protocol version 2. Upgrade both endpoints for
-delivery confirmation; older clients ignore the new type and cannot confirm
-delivery. Existing encrypted history remains readable without a schema migration.
+Live traffic now requires signed protocol version 3; upgrade both endpoints and
+relays. Existing version 2 encrypted history remains readable. Room migrates to
+version 2 to add the durable replay ledger without deleting history.
 `DeliveryReceiptTest` runs on the JVM; `AuthenticatedDeliveryTest` exercises three
 independent identities, real crypto, Room, replay protection, and terminal states
 in the CI emulator. Real multi-hop Bluetooth behavior still requires physical phones.

@@ -15,11 +15,16 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -79,6 +84,7 @@ public class MainActivity extends AppCompatActivity {
     private ChatViewModel chatViewModel;
     private BlePermissionHelper permissionHelper;
     private int historyVersion;
+    private ActivityResultLauncher<ScanOptions> contactScanner;
 
     // Service connection state (main thread only)
     private MeshService mesh;      // non-null == service is running and connected
@@ -91,6 +97,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        contactScanner = registerForActivityResult(new ScanContract(), result -> {
+            if (result.getContents() == null) return;
+            String id = crypto().importContact(result.getContents());
+            if (id == null) {
+                Toast.makeText(this, "This QR is not a valid OffGrid contact", Toast.LENGTH_LONG).show();
+                return;
+            }
+            setRecipient(id);
+            showVerificationDialog(id);
+        });
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
@@ -328,7 +344,8 @@ public class MainActivity extends AppCompatActivity {
         String id = chatViewModel.recipientId;
         recipientButton.setText(id == null
                 ? "To: Everyone"
-                : "To: \uD83D\uDD12 " + CryptoManager.formatId(id, 16));
+                : "To: \uD83D\uDD12 " + CryptoManager.formatId(id, 16)
+                        + (crypto().isVerified(id) ? " · ✓ Verified" : " · Unverified"));
     }
 
     private void showRecipientDialog() {
@@ -337,6 +354,7 @@ public class MainActivity extends AppCompatActivity {
         labels.add("Everyone (public)");
         for (CryptoManager.Contact c : contacts) {
             labels.add("\uD83D\uDD12 " + CryptoManager.formatId(c.id, 16)
+                    + (c.verified ? "   ✓ Verified" : "   Unverified")
                     + (c.addedManually ? "" : "   (heard on mesh)"));
         }
         labels.add("+ Add contact…");
@@ -352,6 +370,10 @@ public class MainActivity extends AppCompatActivity {
                         setRecipient(contacts.get(which - 1).id);
                     }
                 })
+                .setNeutralButton(chatViewModel.recipientId == null ? "Scan QR" : "Verify selected", (d, w) -> {
+                    if (chatViewModel.recipientId == null) scanContact();
+                    else showVerificationDialog(chatViewModel.recipientId);
+                })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
@@ -360,6 +382,7 @@ public class MainActivity extends AppCompatActivity {
         final EditText input = new EditText(this);
         input.setHint(CryptoManager.CONTACT_PREFIX + "…");
         input.setMaxLines(4);
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(200)});
 
         String clip = readClipboardText();
         if (clip != null && clip.trim().toLowerCase(Locale.ROOT)
@@ -388,18 +411,67 @@ public class MainActivity extends AppCompatActivity {
                         setRecipient(id);
                     }
                 })
+                .setNeutralButton("Scan QR", (d, w) -> scanContact())
                 .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void scanContact() {
+        if (!getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)) {
+            Toast.makeText(this, "No camera available. Paste a contact and compare fingerprints instead.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        contactScanner.launch(new ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt("Scan the contact QR on the other person's phone")
+                .setBeepEnabled(false).setOrientationLocked(false));
+    }
+
+    private void showVerificationDialog(String id) {
+        String fingerprint = crypto().contactFingerprint(id);
+        if (fingerprint == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Verify contact")
+                .setMessage("Compare this full fingerprint with the one shown in My contact on "
+                        + "the other person's phone, in person or over a trusted channel. "
+                        + "Scanning or importing alone does not verify who owns the contact.\n\n"
+                        + CryptoManager.formatId(fingerprint, 64))
+                .setPositiveButton("Fingerprints match", (d, w) -> {
+                    if (crypto().setVerified(id, fingerprint, true)) {
+                        updateRecipientButton();
+                        adapter.notifyDataSetChanged();
+                    }
+                })
+                .setNeutralButton("Remove verification", (d, w) -> {
+                    crypto().setVerified(id, fingerprint, false);
+                    updateRecipientButton();
+                    adapter.notifyDataSetChanged();
+                })
+                .setNegativeButton("Not verified", null)
                 .show();
     }
 
     private void showMyContactDialog() {
         final CryptoManager cm = crypto();
+        ImageView qr = new ImageView(this);
+        int size = (int) (240 * getResources().getDisplayMetrics().density);
+        qr.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        qr.setContentDescription("Your OffGrid contact QR code");
+        try { qr.setImageBitmap(ContactQr.bitmap(cm.getContactString(), 512)); }
+        catch (com.google.zxing.WriterException e) {
+            Toast.makeText(this, "Could not create contact QR", Toast.LENGTH_LONG).show();
+        }
+        LinearLayout qrContainer = new LinearLayout(this);
+        qrContainer.setGravity(android.view.Gravity.CENTER);
+        qrContainer.addView(qr);
         new AlertDialog.Builder(this)
                 .setTitle("My contact")
                 .setMessage("Your ID:\n" + CryptoManager.formatId(cm.getLocalId(), 32)
+                        + "\n\nFull fingerprint:\n" + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
                         + "\n\nShare your contact with people who should be able to message you "
                         + "privately. Confirm the ID with them in person or on another channel "
                         + "so you know the contact is really theirs.")
+                .setView(qrContainer)
                 .setPositiveButton("Share", (d, w) -> {
                     Intent send = new Intent(Intent.ACTION_SEND)
                             .setType("text/plain")

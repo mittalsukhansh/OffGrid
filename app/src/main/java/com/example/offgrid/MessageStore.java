@@ -30,7 +30,8 @@ public final class MessageStore {
                 if (instance == null) {
                     try {
                         instance = new MessageStore(Room.databaseBuilder(context.getApplicationContext(),
-                                MessageDatabase.class, "offgrid-messages.db").build(), new StorageCipher());
+                                MessageDatabase.class, "offgrid-messages.db")
+                                .addMigrations(MessageDatabase.MIGRATION_1_2).build(), new StorageCipher());
                     } catch (Exception e) {
                         throw new IllegalStateException("Encrypted message storage unavailable", e);
                     }
@@ -59,6 +60,12 @@ public final class MessageStore {
     /** Atomically saves the display copy and relay packet before either is acknowledged locally. */
     public void save(MeshMessage wire, MeshMessage display, boolean outgoing,
                      long displayTime, MeshMessage relay, long storedAt, long expiresAt) throws Exception {
+        save(wire, display, outgoing, displayTime, relay, storedAt, expiresAt, false);
+    }
+
+    public void save(MeshMessage wire, MeshMessage display, boolean outgoing,
+                     long displayTime, MeshMessage relay, long storedAt, long expiresAt,
+                     boolean rememberInbound) throws Exception {
         ChatRecord chat = null;
         if (display != null) {
             chat = new ChatRecord();
@@ -87,6 +94,7 @@ public final class MessageStore {
         ChatRecord finalChat = chat;
         PendingRecord finalPending = pending;
         database.runInTransaction(() -> {
+            if (rememberInbound) rememberInbound(wire, storedAt);
             if (finalChat != null) dao().insertChat(finalChat);
             if (finalPending != null) dao().insertPending(finalPending);
         });
@@ -113,12 +121,18 @@ public final class MessageStore {
 
     /** Accepts only already-authenticated ACK plaintext, bound to the exact outgoing packet. */
     public String confirmDelivery(MeshMessage ack, String authenticatedPayload) throws Exception {
+        return confirmDelivery(ack, authenticatedPayload, false, System.currentTimeMillis());
+    }
+
+    public String confirmDelivery(MeshMessage ack, String authenticatedPayload,
+                                  boolean rememberInbound, long now) throws Exception {
         DeliveryReceipt receipt = DeliveryReceipt.parse(authenticatedPayload);
         ChatRecord row = dao().chat(receipt.originalId);
         if (row == null || !row.outgoing) return null;
         MeshMessage original = MeshMessage.fromJson(historyBody(row).getJSONObject("wire"));
         if (!receipt.matches(ack, original)) return null;
         database.runInTransaction(() -> {
+            if (rememberInbound) rememberInbound(ack, now);
             dao().markDelivered(original.getMessageId());
             dao().deletePending(original.getMessageId());
         });
@@ -172,8 +186,41 @@ public final class MessageStore {
 
     public void expire(long now) {
         database.runInTransaction(() -> {
+            // Never prune evidence after a wall-clock rollback.
+            if (clockSafe(now)) {
+                advanceClock(now);
+                dao().pruneReplay(now);
+            }
             dao().expireStatuses(now - DELIVERY_TIMEOUT_MS);
             dao().deleteExpired(now);
         });
+    }
+
+    public boolean clockSafe(long now) {
+        SecurityClock clock = dao().clock();
+        return clock == null || now >= clock.highWaterMs - PacketSecurity.CLOCK_SKEW_MS;
+    }
+
+    private void advanceClock(long now) {
+        SecurityClock clock = dao().clock();
+        if (clock == null) clock = new SecurityClock();
+        clock.highWaterMs = Math.max(clock.highWaterMs, now);
+        dao().saveClock(clock);
+    }
+
+    /** Called only inside the same transaction as history/outbox/status changes. */
+    private void rememberInbound(MeshMessage packet, long now) {
+        if (!PacketSecurity.fresh(packet, now) || !clockSafe(now)) {
+            throw new IllegalStateException("Packet outside trusted time window");
+        }
+        dao().pruneReplay(now);
+        if (dao().replayCount() >= PacketSecurity.MAX_REPLAY_ENTRIES) {
+            throw new IllegalStateException("Replay ledger full; unexpired evidence was kept");
+        }
+        ReplayRecord row = new ReplayRecord();
+        row.id = packet.getMessageId();
+        row.expiresAtMs = now + PacketSecurity.REPLAY_RETENTION_MS;
+        dao().insertReplay(row); // a duplicate aborts the entire acceptance transaction
+        advanceClock(now);
     }
 }

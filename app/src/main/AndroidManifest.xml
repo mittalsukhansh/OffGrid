@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!--  ===== Hardware: BLE is required for this app =====  -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
 
     <!--  ===== Legacy Bluetooth permissions (Android 11 / API 30 and below) =====  -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>

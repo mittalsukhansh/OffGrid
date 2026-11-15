@@ -197,6 +197,7 @@ public class MeshService extends Service {
     private final Set<MeshListener> listeners = new CopyOnWriteArraySet<>();
     private final MessageCache seenCache = new MessageCache();
     private final Random random = new Random();
+    private final FloodGuard floodGuard = new FloodGuard(SystemClock::elapsedRealtime);
 
     private HandlerThread meshThread;
     private Handler meshHandler;
@@ -206,6 +207,7 @@ public class MeshService extends Service {
     private CryptoManager crypto;
     private MessageStore store;
     private boolean storageReady;
+    private boolean clockWarningShown;
     private long lastKeyAnnounceMs;   // mesh thread only
     private volatile int peerCount;
     private volatile boolean meshActive;
@@ -231,6 +233,7 @@ public class MeshService extends Service {
     private final Map<String, Peer> peers = new HashMap<>();
     private final Map<String, OutboundSession> sessions = new HashMap<>();
     private final Map<String, ByteArrayOutputStream> inboundBuffers = new HashMap<>();
+    private final Map<String, Long> inboundStarted = new HashMap<>();
     private final LinkedHashMap<String, BufferedMessage> relayBuffer = new LinkedHashMap<>();
 
     // ------------------------------------------------------------------
@@ -347,8 +350,8 @@ public class MeshService extends Service {
     public MeshMessage sendMessage(@NonNull String text) {
         final MeshMessage message;
         try {
-            message = MeshMessage.create(localSenderId, text, MeshMessage.DEFAULT_TTL);
-        } catch (IllegalArgumentException e) {
+            message = crypto.signPacket(MeshMessage.create(localSenderId, text, MeshMessage.DEFAULT_TTL));
+        } catch (IllegalArgumentException | GeneralSecurityException e) {
             Log.w(TAG, "Rejected outgoing message: " + e.getMessage());
             return null;
         }
@@ -396,11 +399,11 @@ public class MeshService extends Service {
             return new SendResult(SendStatus.RECIPIENT_KEY_UNKNOWN, null);
         }
         try {
-            String messageId = UUID.randomUUID().toString();
+            String messageId = MeshMessage.newId(localSenderId);
             long timestamp = System.currentTimeMillis();
             String ciphertext = crypto.encrypt(messageId, targetId, timestamp, text);
-            final MeshMessage wire = MeshMessage.createPrivate(messageId, localSenderId, targetId,
-                    ciphertext, crypto.getPublicKeyBase64(), MeshMessage.DEFAULT_TTL, timestamp);
+            final MeshMessage wire = crypto.signPacket(MeshMessage.createPrivate(messageId, localSenderId, targetId,
+                    ciphertext, crypto.getPublicKeyBase64(), MeshMessage.DEFAULT_TTL, timestamp));
             final MeshMessage view = wire.withPlaintext(text);
             meshHandler.post(() -> {
                 if (persistAndBuffer(wire, view, true, wire)) {
@@ -483,6 +486,7 @@ public class MeshService extends Service {
         sessions.clear();
         closeGattServer();
         inboundBuffers.clear();
+        inboundStarted.clear();
         peers.clear();
         updatePeerCount();
         Log.i(TAG, "Mesh stopped");
@@ -510,6 +514,11 @@ public class MeshService extends Service {
         public void run() {
             if (!meshActive) return;
             long now = SystemClock.elapsedRealtime();
+            inboundStarted.entrySet().removeIf(entry -> {
+                if (now - entry.getValue() < SESSION_STEP_TIMEOUT_MS) return false;
+                inboundBuffers.remove(entry.getKey());
+                return true;
+            });
 
             // Forget peers that left (but never one we are mid-session with).
             boolean peersChanged = false;
@@ -616,7 +625,7 @@ public class MeshService extends Service {
                                                     int newState) {
                     if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                         final String address = device.getAddress();
-                        runOnMesh(() -> inboundBuffers.remove(address)); // drop half-received data
+                        runOnMesh(() -> { inboundBuffers.remove(address); inboundStarted.remove(address); }); // drop half-received data
                     }
                 }
 
@@ -630,7 +639,8 @@ public class MeshService extends Service {
                             && !preparedWrite
                             && offset == 0
                             && value != null
-                            && value.length > 1;
+                            && value.length > 1 && value.length <= 512
+                            && meshActive && floodGuard.allowFrame(device.getAddress());
 
                     BluetoothGattServer server = gattServer;
                     if (responseNeeded && server != null) {
@@ -655,6 +665,7 @@ public class MeshService extends Service {
         if (!meshActive) return;
 
         int flags = frame[0] & 0xFF;
+        if ((flags & ~(FRAME_FIRST | FRAME_LAST)) != 0) return;
         boolean first = (flags & FRAME_FIRST) != 0;
         boolean last = (flags & FRAME_LAST) != 0;
         int payloadLength = frame.length - 1;
@@ -668,13 +679,21 @@ public class MeshService extends Service {
             }
             buffer = new ByteArrayOutputStream(Math.max(64, payloadLength));
             inboundBuffers.put(address, buffer);
+            inboundStarted.put(address, SystemClock.elapsedRealtime());
         } else {
             buffer = inboundBuffers.get(address);
+            Long started = inboundStarted.get(address);
+            if (started == null || SystemClock.elapsedRealtime() - started >= SESSION_STEP_TIMEOUT_MS) {
+                inboundBuffers.remove(address);
+                inboundStarted.remove(address);
+                return;
+            }
             if (buffer == null) return; // continuation without a start frame
         }
 
         if (buffer.size() + payloadLength > MeshMessage.MAX_SERIALIZED_BYTES) {
             inboundBuffers.remove(address);
+            inboundStarted.remove(address);
             Log.w(TAG, "Inbound message too large; dropped");
             return;
         }
@@ -682,11 +701,13 @@ public class MeshService extends Service {
 
         if (last) {
             inboundBuffers.remove(address);
+            inboundStarted.remove(address);
             handleInboundMessage(address, buffer.toByteArray());
         }
     }
 
     private void handleInboundMessage(String sourceAddress, byte[] bytes) {
+        if (!floodGuard.allowPacket(sourceAddress)) return;
         final MeshMessage incoming;
         try {
             incoming = MeshMessage.fromBytes(bytes);
@@ -696,22 +717,33 @@ public class MeshService extends Service {
         }
 
         if (incoming.getSenderId().equals(localSenderId)) return;
+        long wallNow = System.currentTimeMillis();
+        if (!PacketSecurity.namespaced(incoming) || !PacketSecurity.fresh(incoming, wallNow)
+                || !crypto.verifyPacket(incoming) || !floodGuard.allowSender(incoming.getSenderId())) return;
         try {
-            // ACKs addressed to us must be authenticated before any status mutation.
-            if (incoming.isAcknowledgement() && localSenderId.equals(incoming.getTargetId())) {
-                String payload = crypto.decryptAcknowledgement(incoming);
-                String originalId = store.confirmDelivery(incoming, payload);
-                if (originalId != null) {
-                    relayBuffer.remove(originalId);
-                    seenCache.markSeen(incoming.getMessageId());
+            if (!store.clockSafe(wallNow)) {
+                if (!clockWarningShown) reportError("Receiving paused: device time moved backwards; check system time");
+                clockWarningShown = true;
+                return;
+            }
+            clockWarningShown = false;
+            // Permit only exact, previously authenticated private duplicates to reuse a cached receipt.
+            if (incoming.isPrivate() && localSenderId.equals(incoming.getTargetId())
+                    && store.dao().containsChat(incoming.getMessageId()) > 0) {
+                MeshMessage ack = store.cachedReceipt(incoming, wallNow);
+                if (ack != null && persistAndBuffer(ack, null, false, ack)) {
+                    scheduleConnectPass(nextJitterMs());
                 }
                 return;
             }
-            if (incoming.isPrivate() && localSenderId.equals(incoming.getTargetId())
-                    && store.dao().containsChat(incoming.getMessageId()) > 0) {
-                MeshMessage ack = store.cachedReceipt(incoming, System.currentTimeMillis());
-                if (ack != null && persistAndBuffer(incoming, null, false, ack)) {
-                    scheduleConnectPass(nextJitterMs());
+            if (store.dao().replayed(incoming.getMessageId()) > 0) return;
+            // ACKs addressed to us must be authenticated before any status mutation.
+            if (incoming.isAcknowledgement() && localSenderId.equals(incoming.getTargetId())) {
+                String payload = crypto.decryptAcknowledgement(incoming);
+                String originalId = store.confirmDelivery(incoming, payload, true, wallNow);
+                if (originalId != null) {
+                    relayBuffer.remove(originalId);
+                    seenCache.markSeen(incoming.getMessageId());
                 }
                 return;
             }
@@ -757,8 +789,14 @@ public class MeshService extends Service {
     /** Floods our public key so peers can send us private messages. */
     private void announceKey() {
         lastKeyAnnounceMs = SystemClock.elapsedRealtime();
-        MeshMessage announce = MeshMessage.createKeyAnnounce(
-                localSenderId, crypto.getPublicKeyBase64(), KEY_ANNOUNCE_TTL);
+        final MeshMessage announce;
+        try {
+            announce = crypto.signPacket(MeshMessage.createKeyAnnounce(
+                    localSenderId, crypto.getPublicKeyBase64(), KEY_ANNOUNCE_TTL));
+        } catch (GeneralSecurityException e) {
+            reportError("Could not sign identity announcement");
+            return;
+        }
         if (persistAndBuffer(announce, null, false, announce)) {
             seenCache.markSeen(announce.getMessageId());
             scheduleConnectPass(nextJitterMs());
@@ -970,6 +1008,11 @@ public class MeshService extends Service {
             store.expire(wallNow);
             for (PendingRecord row : store.dao().pending()) {
                 MeshMessage message = store.decodePending(row);
+                if (!crypto.verifyPacket(message) || !PacketSecurity.namespaced(message)
+                        || !PacketSecurity.fresh(message, wallNow)) {
+                    store.removePending(row.id, "FAILED");
+                    continue; // legacy/invalid pending packets never bypass the new ingress policy
+                }
                 long remaining = Math.min(RELAY_BUFFER_TTL_MS, row.expiresAtMs - wallNow);
                 if (remaining <= 0) continue;
                 cachePending(row, message, elapsedNow, wallNow);
@@ -1002,7 +1045,7 @@ public class MeshService extends Service {
         try {
             long now = System.currentTimeMillis();
             store.save(wire, display, outgoing, outgoing ? wire.getTimestamp() : now,
-                    relay, now, now + RELAY_BUFFER_TTL_MS);
+                    relay, now, now + RELAY_BUFFER_TTL_MS, !localSenderId.equals(wire.getSenderId()));
             if (relay != null) {
                 PendingRecord row = store.dao().pendingById(relay.getMessageId());
                 if (row != null) cachePending(row, relay, SystemClock.elapsedRealtime(), now);

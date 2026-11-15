@@ -99,16 +99,19 @@ public final class CryptoManager {
         @NonNull public final String id;
         /** True if added by the user (contact string); false if only heard on the mesh. */
         public final boolean addedManually;
+        public final boolean verified;
 
-        Contact(@NonNull String id, boolean addedManually) {
+        Contact(@NonNull String id, boolean addedManually, boolean verified) {
             this.id = id;
             this.addedManually = addedManually;
+            this.verified = verified;
         }
     }
 
     private static final class ContactRecord {
         final String keyB64;
         boolean manual;
+        boolean verified;
         final long addedAt;
 
         ContactRecord(String keyB64, boolean manual, long addedAt) {
@@ -201,10 +204,11 @@ public final class CryptoManager {
      */
     @Nullable
     public String importContact(@Nullable String contactString) {
-        if (contactString == null) return null;
+        if (contactString == null || contactString.length() > 200) return null;
         String s = contactString.trim();
         if (!s.regionMatches(true, 0, CONTACT_PREFIX, 0, CONTACT_PREFIX.length())) return null;
         String keyB64 = s.substring(CONTACT_PREFIX.length()).trim();
+        if (keyB64.length() != 87) return null;
         try {
             byte[] raw = Base64.decode(keyB64, B64_FLAGS);
             String id = deriveId(raw);
@@ -237,9 +241,72 @@ public final class CryptoManager {
         });
         List<Contact> out = new ArrayList<>(entries.size());
         for (Map.Entry<String, ContactRecord> e : entries) {
-            out.add(new Contact(e.getKey(), e.getValue().manual));
+            out.add(new Contact(e.getKey(), e.getValue().manual, e.getValue().verified));
         }
         return out;
+    }
+
+    public synchronized boolean isVerified(String id) {
+        ContactRecord record = contacts.get(id);
+        return record != null && record.verified;
+    }
+
+    public String getOwnFingerprint() { return fullFingerprint(publicKeyBytes); }
+
+    public synchronized String contactFingerprint(String id) {
+        ContactRecord record = contacts.get(id);
+        return record == null ? null : fullFingerprint(Base64.decode(record.keyB64, B64_FLAGS));
+    }
+
+    /** Import/discovery never verifies a person; explicit fingerprint comparison is required. */
+    public synchronized boolean setVerified(String id, String comparedFingerprint, boolean verified) {
+        ContactRecord record = contacts.get(id);
+        if (record == null || !contactFingerprint(id).equals(comparedFingerprint)) return false;
+        record.verified = verified;
+        if (verified) record.manual = true;
+        persistContacts();
+        return true;
+    }
+
+    private static String fullFingerprint(byte[] key) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(key);
+            StringBuilder result = new StringBuilder();
+            for (byte b : hash) {
+                result.append(Character.forDigit((b >>> 4) & 15, 16));
+                result.append(Character.forDigit(b & 15, 16));
+            }
+            return result.toString();
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
+    /** Signs all immutable packet fields; forwarding may only change TTL. */
+    public MeshMessage signPacket(MeshMessage message) throws GeneralSecurityException {
+        if (message.getProtocolVersion() != MeshMessage.PROTOCOL_VERSION) {
+            throw new GeneralSecurityException("Legacy packet must be recreated before sending");
+        }
+        if (!localId.equals(message.getSenderId())) throw new GeneralSecurityException("Not our identity");
+        if (message.isPrivate() && !message.isPayloadEncrypted()) {
+            throw new GeneralSecurityException("Cannot sign a display-only plaintext copy");
+        }
+        MeshMessage keyed = message.withAuthentication(publicKeyB64, null);
+        java.security.Signature signer = java.security.Signature.getInstance("SHA256withECDSA");
+        signer.initSign(privateKey, secureRandom);
+        signer.update(PacketSecurity.signingBytes(keyed));
+        return keyed.withAuthentication(publicKeyB64, Base64.encodeToString(signer.sign(), B64_FLAGS));
+    }
+
+    public boolean verifyPacket(MeshMessage packet) {
+        if (packet.getProtocolVersion() != MeshMessage.PROTOCOL_VERSION
+                || packet.getSignature() == null || packet.getSenderKey() == null) return false;
+        try {
+            byte[] raw = Base64.decode(packet.getSenderKey(), B64_FLAGS);
+            if (!deriveId(raw).equals(packet.getSenderId())) return false;
+            java.security.Signature verifier = java.security.Signature.getInstance("SHA256withECDSA");
+            verifier.initVerify(decodePublicKey(raw));
+            verifier.update(PacketSecurity.signingBytes(packet));
+            return verifier.verify(Base64.decode(packet.getSignature(), B64_FLAGS));
+        } catch (GeneralSecurityException | IllegalArgumentException e) { return false; }
     }
 
     // ------------------------------------------------------------------
@@ -263,12 +330,12 @@ public final class CryptoManager {
         if (!original.isPrivate() || !localId.equals(original.getTargetId())) {
             throw new GeneralSecurityException("Cannot acknowledge another device's message");
         }
-        String id = java.util.UUID.randomUUID().toString();
+        String id = MeshMessage.newId(localId);
         long timestamp = System.currentTimeMillis();
         String payload = DeliveryReceipt.payloadFor(original);
-        return MeshMessage.createAcknowledgement(id, localId, original.getSenderId(),
+        return signPacket(MeshMessage.createAcknowledgement(id, localId, original.getSenderId(),
                 encryptForPurpose(id, original.getSenderId(), timestamp, payload, true),
-                publicKeyB64, timestamp);
+                publicKeyB64, timestamp));
     }
 
     private String encryptForPurpose(String messageId, String targetId, long timestamp,
@@ -447,11 +514,16 @@ public final class CryptoManager {
                 while (ids.hasNext()) {
                     String id = ids.next();
                     JSONObject o = root.getJSONObject(id);
-                    contacts.put(id, new ContactRecord(
-                            o.getString("k"), o.optBoolean("m", false), o.optLong("t", 0L)));
+                    String key = o.getString("k");
+                    byte[] raw = Base64.decode(key, B64_FLAGS);
+                    if (!isValidId(id) || !deriveId(raw).equals(id)) continue;
+                    decodePublicKey(raw);
+                    ContactRecord record = new ContactRecord(key, o.optBoolean("m", false), o.optLong("t", 0L));
+                    record.verified = o.optBoolean("verified", false);
+                    contacts.put(id, record);
                 }
             }
-        } catch (JSONException e) {
+        } catch (JSONException | GeneralSecurityException | IllegalArgumentException e) {
             Log.w(TAG, "Contacts unreadable; starting empty", e);
         }
     }
@@ -463,6 +535,7 @@ public final class CryptoManager {
                 JSONObject o = new JSONObject();
                 o.put("k", e.getValue().keyB64);
                 o.put("m", e.getValue().manual);
+                o.put("verified", e.getValue().verified);
                 o.put("t", e.getValue().addedAt);
                 root.put(e.getKey(), o);
             }

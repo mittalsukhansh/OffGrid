@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
  * A node delivers a message locally, then relays {@link #withDecrementedTtl()} only while
  * {@link #isRelayable()} (ttl &gt; 0 after the decrement).
  *
- * <h3>Wire format (protocol version 2)</h3>
+ * <h3>Wire format (protocol version 3)</h3>
  * <pre>{"v":2,"id":"..","sid":"..","typ":1,"tid":"..","txt":"..","spk":"..","ttl":7,"ts":1760000000000}</pre>
  * {@code tid} and {@code spk} (sender public key) appear only on private messages. The
  * target ID is visible to relays (they need it to know the packet is not for them); only the
@@ -41,7 +41,7 @@ import java.util.regex.Pattern;
  */
 public final class MeshMessage {
 
-    public static final int PROTOCOL_VERSION = 2;
+    public static final int PROTOCOL_VERSION = 3;
 
     public static final int TYPE_PUBLIC = 0;
     public static final int TYPE_PRIVATE = 1;
@@ -82,6 +82,8 @@ public final class MeshMessage {
     private static final String K_TTL = "ttl";
     private static final String K_TIMESTAMP = "ts";
 
+    private final int wireVersion;
+    private final String signature;
     private final String messageId;
     private final String senderId;
     private final String targetId;      // null unless TYPE_PRIVATE
@@ -95,6 +97,24 @@ public final class MeshMessage {
     private MeshMessage(String messageId, String senderId, @Nullable String targetId, int type,
                         String text, @Nullable String senderKey, boolean payloadEncrypted,
                         int ttl, long timestamp) {
+        this(messageId, senderId, targetId, type, text, senderKey, payloadEncrypted, ttl, timestamp, null);
+    }
+
+    private MeshMessage(String messageId, String senderId, @Nullable String targetId, int type,
+                        String text, @Nullable String senderKey, boolean payloadEncrypted,
+                        int ttl, long timestamp, @Nullable String signature) {
+        this(messageId, senderId, targetId, type, text, senderKey, payloadEncrypted,
+                ttl, timestamp, signature, PROTOCOL_VERSION);
+    }
+
+    private MeshMessage(String messageId, String senderId, @Nullable String targetId, int type,
+                        String text, @Nullable String senderKey, boolean payloadEncrypted,
+                        int ttl, long timestamp, @Nullable String signature, int wireVersion) {
+        this.wireVersion = wireVersion;
+        if (signature != null && !signature.matches("[A-Za-z0-9_-]{8,104}")) {
+            throw new IllegalArgumentException("Invalid signature encoding");
+        }
+        this.signature = signature;
         this.messageId = requireId(messageId, "messageId");
         this.senderId = requireId(senderId, "senderId");
         if (ttl < 0 || ttl > MAX_TTL) {
@@ -109,7 +129,7 @@ public final class MeshMessage {
                 if (targetId != null && !BROADCAST.equals(targetId)) {
                     throw new IllegalArgumentException("public message cannot have a target");
                 }
-                if (senderKey != null || payloadEncrypted) {
+                if ((senderKey != null && !PUBLIC_KEY.matcher(senderKey).matches()) || payloadEncrypted) {
                     throw new IllegalArgumentException("public message cannot be encrypted");
                 }
                 requireChatText(text);
@@ -134,7 +154,8 @@ public final class MeshMessage {
                 break;
 
             case TYPE_KEY_ANNOUNCE:
-                if (targetId != null || senderKey != null || payloadEncrypted) {
+                if (targetId != null || payloadEncrypted
+                        || (senderKey != null && !senderKey.equals(text))) {
                     throw new IllegalArgumentException("invalid key announcement");
                 }
                 if (text == null || !PUBLIC_KEY.matcher(text).matches()) {
@@ -162,7 +183,7 @@ public final class MeshMessage {
     /** New public (group) message. */
     @NonNull
     public static MeshMessage create(@NonNull String senderId, @NonNull String text, int ttl) {
-        return new MeshMessage(UUID.randomUUID().toString(), senderId, null, TYPE_PUBLIC,
+        return new MeshMessage(newId(senderId), senderId, null, TYPE_PUBLIC,
                 text, null, false, ttl, System.currentTimeMillis());
     }
 
@@ -189,7 +210,7 @@ public final class MeshMessage {
     @NonNull
     public static MeshMessage createKeyAnnounce(@NonNull String senderId,
                                                 @NonNull String publicKey, int ttl) {
-        return new MeshMessage(UUID.randomUUID().toString(), senderId, null, TYPE_KEY_ANNOUNCE,
+        return new MeshMessage(newId(senderId), senderId, null, TYPE_KEY_ANNOUNCE,
                 publicKey, null, false, ttl, System.currentTimeMillis());
     }
 
@@ -197,6 +218,22 @@ public final class MeshMessage {
                                                      String ciphertext, String senderKey, long timestamp) {
         return new MeshMessage(id, senderId, targetId, TYPE_ACK, ciphertext, senderKey, true,
                 DEFAULT_TTL, timestamp);
+    }
+
+    /** Sender-prefixed IDs prevent an authenticated stranger from occupying another sender's ID. */
+    public static String newId(String senderId) {
+        if (senderId == null || !senderId.matches("[0-9a-f]{32}")) {
+            throw new IllegalArgumentException("Invalid sender identity");
+        }
+        return senderId + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    public int getProtocolVersion() { return wireVersion; }
+    public String getSignature() { return signature; }
+
+    public MeshMessage withAuthentication(String key, String signature) {
+        return new MeshMessage(messageId, senderId, targetId, type, text, key,
+                payloadEncrypted, ttl, timestamp, signature, wireVersion);
     }
 
     public boolean isAcknowledgement() { return type == TYPE_ACK; }
@@ -274,7 +311,7 @@ public final class MeshMessage {
     @NonNull
     public MeshMessage withDecrementedTtl() {
         return new MeshMessage(messageId, senderId, targetId, type, text, senderKey,
-                payloadEncrypted, Math.max(0, ttl - 1), timestamp);
+                payloadEncrypted, Math.max(0, ttl - 1), timestamp, signature, wireVersion);
     }
 
     /**
@@ -289,7 +326,7 @@ public final class MeshMessage {
             throw new IllegalStateException("not an encrypted private message");
         }
         return new MeshMessage(messageId, senderId, targetId, TYPE_PRIVATE, plaintext, senderKey,
-                false, ttl, timestamp);
+                false, ttl, timestamp, signature, wireVersion);
     }
 
     /** @return true if this message should still be forwarded to other peers. */
@@ -316,13 +353,14 @@ public final class MeshMessage {
         }
         try {
             JSONObject json = new JSONObject();
-            json.put(K_VERSION, PROTOCOL_VERSION);
+            json.put(K_VERSION, wireVersion);
             json.put(K_ID, messageId);
             json.put(K_SENDER, senderId);
             json.put(K_TYPE, type);
             if (targetId != null) json.put(K_TARGET, targetId);
             json.put(K_TEXT, text);
             if (senderKey != null) json.put(K_SENDER_KEY, senderKey);
+            if (signature != null) json.put("sig", signature);
             json.put(K_TTL, ttl);
             json.put(K_TIMESTAMP, timestamp);
             return json;
@@ -379,7 +417,7 @@ public final class MeshMessage {
     public static MeshMessage fromJson(@NonNull JSONObject json) {
         try {
             int version = json.optInt(K_VERSION, PROTOCOL_VERSION);
-            if (version != PROTOCOL_VERSION) {
+            if (version != PROTOCOL_VERSION && version != 2) {
                 throw new IllegalArgumentException("unsupported protocol version " + version);
             }
             int type = json.optInt(K_TYPE, TYPE_PUBLIC);
@@ -392,7 +430,7 @@ public final class MeshMessage {
                     json.isNull(K_SENDER_KEY) ? null : json.getString(K_SENDER_KEY),
                     type == TYPE_PRIVATE || type == TYPE_ACK,
                     json.getInt(K_TTL),
-                    json.getLong(K_TIMESTAMP));
+                    json.getLong(K_TIMESTAMP), json.isNull("sig") ? null : json.getString("sig"), version);
         } catch (JSONException e) {
             throw new IllegalArgumentException("missing or invalid field: " + e.getMessage(), e);
         }
