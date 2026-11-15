@@ -39,7 +39,7 @@
 
         <!--  Foreground service that hosts scanning + advertising + relaying  -->
         <service
-            android:name=".mesh.MeshService"
+            android:name=".MeshService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice"/>
