@@ -1,5 +1,10 @@
 # OffGrid
 
+Version **0.1** is a test prerelease. Download the APK from
+[GitHub Releases](https://github.com/mittalsukhansh/OffGrid/releases) and follow
+[the three-phone test checklist](TESTING.md). The combined development codebase
+is on `main`; new work uses short feature branches.
+
 **OffGrid** is an offline-first, peer-to-peer (P2P) messaging network built for Android. It enables secure communication without requiring an active internet connection or cellular service by creating a decentralized Bluetooth Low Energy (BLE) mesh network.
 
 ---
