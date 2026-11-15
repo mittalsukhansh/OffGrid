@@ -2,7 +2,7 @@
 
 ## Implemented protections
 
-Live traffic uses protocol version 3. Every public message, private message,
+Live traffic uses protocol version 4. Every public message, private message,
 identity announcement, and acknowledgement carries a P-256 SHA256withECDSA
 signature and the sender's public key. The sender ID must equal the first 128 bits
 of SHA-256 of that key. `PacketSecurity.signingBytes` length-delimits the protocol
@@ -116,8 +116,8 @@ References: [Signal specifications](https://signal.org/docs/),
 
 ## Upgrade and verification
 
-Every participating endpoint and relay must upgrade for version 3 traffic.
-Version 2 history remains readable. Unsigned/legacy pending packets are removed
+Every participating endpoint and relay must upgrade for version 4 traffic.
+Version 2/3 history remains readable. Unsigned/legacy pending packets are removed
 from the active relay queue and outgoing ones are marked Failed rather than
 silently bypassing authentication; users can resend their content with the new app.
 The database migration itself preserves encrypted history and queue contents.
@@ -128,3 +128,27 @@ round trips, replay transactions, clock handling, ledger capacity, and Room migr
 alongside the existing persistence and receipt tests. Physical camera scanning and
 multi-hop Bluetooth operation still require device testing. These checks do not
 constitute an independent security audit.
+
+## Version 0.2 offline sharing
+
+Local nicknames are labels pinned to contact IDs, not globally unique usernames or
+proof of real-world identity. They are stored in app-private contact preferences.
+Changing a name cannot grant verification or transfer it to another key.
+
+Withdrawal/control packets have their own encryption purpose and signed envelopes.
+Only the original sender can withdraw a private message, and only its target can
+confirm the request. Durable author/target-bound tombstones prevent delayed message
+or file resurrection. Withdrawal is not a guarantee that an offline peer received
+the request, nor secure deletion of screenshots, external exports or disk remnants.
+
+Attachment manifests and chunks are end-to-end encrypted and signed. Incoming file
+size, part count/index, format and final SHA-256 digest are checked. JPEG decoding
+is dimension bounded; short MP4s are size/duration checked and are not autoplayed.
+Files/chunks are encrypted at rest; small image previews stay in a bounded memory
+cache. Opening a file explicitly writes it to a FileProvider-scoped private cache
+and grants an external viewer read access. Such viewers may retain their own copies.
+No broad storage access, address-book access, phone login or server was added.
+
+The small transfer window, storage/active-transfer caps and existing flood budgets
+limit work; they do not guarantee that a long transfer survives movement or radio
+jamming. Do not infer physical mesh reliability from the emulator sharing tests.

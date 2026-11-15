@@ -1,4 +1,4 @@
-# OffGrid packet format, version 3
+# OffGrid packet format, version 4
 
 This describes the current custom BLE/GATT protocol, not Bluetooth SIG Mesh.
 See `MeshMessage`, `PacketSecurity`, `DeliveryReceipt`, `CryptoManager` and
@@ -47,16 +47,16 @@ The sender emits compact UTF-8 JSON, at most 2,048 bytes including its envelope.
 This abbreviated public example is illustrative, **not** a valid signature vector:
 
 ```json
-{"v":3,"id":"<64 lowercase hex>","sid":"<32 lowercase hex>","typ":0,"txt":"Hello","spk":"<public key>","sig":"<signature>","ttl":7,"ts":1770000000000}
+{"v":4,"id":"<64 lowercase hex>","sid":"<32 lowercase hex>","typ":0,"txt":"Hello","spk":"<public key>","sig":"<signature>","ttl":7,"ts":1770000000000}
 ```
 
 | Key | Emitted type | Meaning |
 | --- | --- | --- |
-| `v` | integer | `3` for live traffic. The data model can also read saved version 2 history. |
+| `v` | integer | `4` for live traffic. The data model can also read saved version 2/3 history. |
 | `id` | string | 64 lowercase hex characters: sender ID followed by 32 random UUID hex characters. |
 | `sid` | string | 32 lowercase hex characters: first 16 bytes of SHA-256 of the raw public key. |
-| `typ` | integer | 0 public chat, 1 private chat, 2 key announcement, 3 ACK. |
-| `tid` | string, optional | Recipient's 32-hex ID for types 1 and 3; omitted for 0 and 2. |
+| `typ` | integer | 0 public chat, 1 private chat, 2 key announcement, 3 ACK, 4 private control, 5 private media offer. |
+| `tid` | string, optional | Recipient's 32-hex ID for types 1, 3, 4 and 5; omitted for 0 and 2. |
 | `txt` | string | Type-specific plaintext, encrypted payload or announcement public key. |
 | `spk` | string | Sender's uncompressed P-256 public key, Base64url without padding. |
 | `sig` | string | DER-encoded SHA256withECDSA signature, Base64url without padding. |
@@ -136,7 +136,7 @@ that receiver. Private recipients emit a fresh signed ACK with its own default
 TTL 7 instead of continuing to flood the original. Announcements start with TTL 4;
 normal outgoing chat starts with TTL 7. Maximum accepted TTL is 15.
 
-Admission requires a version 3 signature, a sender-prefixed ID and creation time
+Admission requires a version 4 signature, a sender-prefixed ID and creation time
 within ten minutes past / two minutes future relative to the receiver. The durable
 replay ledger records accepted IDs for thirty minutes with a 10,000-entry cap;
 full capacity rejects new work rather than deleting unexpired evidence. A durable
@@ -149,3 +149,48 @@ sessions, 20 packets per session, bounded peer history, jitter and backoff. Rebo
 recovery preserves remaining lifetime and forwarding count. A successful GATT
 write means Forwarded, not Delivered. Radio errors can be retried; expiration is
 lack of confirmation, not proof of non-receipt. Flood limits are in SECURITY.md.
+
+## Version 4 offline actions
+
+Type 4 is a signed encrypted private control packet. Its HKDF info is
+`"offgrid-control-v1|" + senderId + ">" + targetId`; the IV, AES-GCM tag and AAD
+layout match the existing private encryption, but the distinct purpose prevents
+chat/receipt/control reflection. Its decrypted JSON has a `kind` and a `mid`
+referencing a 64-hex original message/transfer ID:
+
+| Kind | Additional fields / behavior |
+| --- | --- |
+| `withdraw` | `when`: original timestamp. Only the original author may withdraw a private message for that target. |
+| `withdraw_ack` | `request`: withdrawal packet ID. Only the intended recipient may confirm it. |
+| `media_query` | Ask for the persisted receiver bitmap, or a final receipt when complete. |
+| `media_missing` | Ask the source to retransmit an unaccepted offer within its original admission window. |
+| `media_offer` | `wire`: complete signed type-5 offer. The inner signature, endpoints, time and ID are revalidated; this permits recovery without resetting the original identity. |
+| `media_status` | `bits`: unpadded Base64url of Java BitSet.toByteArray (least significant bit first per byte); `failed`: boolean. This is progress, never proof of Delivered. |
+| `media_chunk` | `index`: zero-based part; `data`: unpadded Base64url of at most 640 file bytes. Exact last-part length is checked. |
+
+Type 5 is an encrypted private media manifest using the existing chat HKDF purpose;
+the envelope signature binds its distinct packet type. The plaintext JSON contains
+`mime` (`image/jpeg` or `video/mp4`), `size`, `parts = ceil(size/640)`, and `sha256`
+(the whole-file digest, 64 lowercase hex). It is saved as a conversation entry,
+but its ordinary private ACK is withheld until all bytes pass length/hash and media
+validation and the encrypted file commits to Room. That final normal ACK refers to
+the exact type-5 original; a progress bitmap cannot mark it Delivered.
+
+Outgoing parts have a four-part in-flight window, fresh signed packet IDs on retry
+after 45 seconds, and persisted send times/receiver bitmaps. The worker prepares
+at most two chunks per five-second pump across transfers, sharing the existing
+flood budgets. Initial offer admission expires after ten minutes; an accepted
+transfer can run for one hour. Restart recovery retains progress. Network delivery
+is still best-effort, including withdrawals.
+
+Withdrawal markers survive the temporary replay window. A valid deletion request
+may arrive before the original; later copies cannot resurrect it. Existing
+message content, partial files and app cache are removed at application level;
+this is not guaranteed secure erasure of SQLite/WAL/storage remnants or external
+copies. Acknowledgements to older withdrawal attempts do not confirm a newer
+retry. Ordinary late message ACKs cannot undo an unsend.
+
+Wire version 4 is required on every endpoint and relay. Saved history from versions
+2 and 3 remains readable. Room schema 3 adds withdrawal/media/part tables plus
+message kind/progress with a non-destructive 2→3 migration. Forward secrecy remains
+unimplemented.

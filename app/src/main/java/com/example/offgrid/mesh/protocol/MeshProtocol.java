@@ -39,7 +39,7 @@ public final class MeshProtocol {
         public final String deliveredId;
         public final String error;
 
-        private Incoming(
+        public Incoming(
                 MeshMessage wire,
                 MeshMessage display,
                 MeshMessage relay,
@@ -51,6 +51,20 @@ public final class MeshProtocol {
             this.deliveredId = deliveredId;
             this.error = error;
         }
+    }
+
+    public interface Extensions {
+        Incoming beforePrivate(MeshMessage packet, long now) throws Exception;
+
+        Incoming media(MeshMessage packet, String plaintext, long now) throws Exception;
+
+        Incoming control(MeshMessage packet, long now) throws Exception;
+    }
+
+    private Extensions extensions;
+
+    public void extensions(Extensions extensions) {
+        this.extensions = extensions;
     }
 
     private final CryptoManager crypto;
@@ -160,6 +174,13 @@ public final class MeshProtocol {
             return new Incoming(null, null, null, null, error);
         }
         clockWarningShown = false;
+        if (extensions != null && localId.equals(packet.getTargetId())) {
+            if (packet.isControl()) return extensions.control(packet, now);
+            if (packet.isPrivate()) {
+                Incoming early = extensions.beforePrivate(packet, now);
+                if (early != null) return early;
+            }
+        }
         if (packet.isPrivate()
                 && localId.equals(packet.getTargetId())
                 && storage.hasHistory(packet.getMessageId())) {
@@ -195,12 +216,19 @@ public final class MeshProtocol {
                         return Incoming.IGNORED;
                     break;
                 case MeshMessage.TYPE_PRIVATE:
+                case MeshMessage.TYPE_MEDIA:
                     if (localId.equals(packet.getTargetId())) {
-                        display = packet.withPlaintext(crypto.decrypt(packet));
+                        String plaintext = crypto.decrypt(packet);
+                        if (packet.isMedia()) {
+                            if (extensions == null) return Incoming.IGNORED;
+                            return extensions.media(packet, plaintext, now);
+                        }
+                        display = packet.withPlaintext(plaintext);
                         relay = crypto.createAcknowledgement(packet);
                     }
                     break;
                 case MeshMessage.TYPE_ACK:
+                case MeshMessage.TYPE_CONTROL:
                     break;
                 default:
                     return Incoming.IGNORED;

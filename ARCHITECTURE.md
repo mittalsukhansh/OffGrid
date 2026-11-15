@@ -106,3 +106,22 @@ Malformed frames discard their peer's partial assembly, rather than leaving it
 available for later continuations. Delayed GATT closes are tracked through teardown,
 preventing stop from abandoning a handle that was already removed from an active
 session map. These are bounded transport fixes, not evidence of device testing.
+
+## Offline-sharing extensions in 0.2
+
+Production composition supplies `PrivateActions` through `MeshProtocol.Extensions`.
+It runs only after signature, endpoint, timestamp and flood admission. Private
+withdrawals, type-5 media offers and type-4 encrypted control bodies use the same
+worker and Room transactions. Saved deletion markers block delayed content before
+normal history/receipt handling. `MediaTransfers` owns bounded file windows,
+receiver bitmaps, chunk retries and integrity/completion; `AttachmentPreparer`
+bounds user-selected media and `AttachmentFiles` scopes explicit viewer access.
+
+`MeshNode` reconciles the relay cache with persisted pending IDs after accepted
+extension actions and maintenance. Acknowledged chunks and withdrawn originals
+therefore stop being eligible even if older native batch snapshots still exist.
+Rejected/flooded packets do not trigger outbox database scans. File completion,
+receipt evidence and message status changes remain transactional. Existing
+protocol-only tests may omit extensions; the production service always installs
+them. Wire version 4 and Room schema 3 belong to this feature milestone, not the
+prior component extraction.

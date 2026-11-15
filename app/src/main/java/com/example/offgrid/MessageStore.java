@@ -3,10 +3,13 @@ package com.example.offgrid;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.room.Room;
+
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
+import androidx.room.Room;
+
 import org.json.JSONObject;
+
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,7 +19,8 @@ import java.util.concurrent.Executors;
 
 /** Database operations run on the mesh thread or the history executor, never the UI thread. */
 public final class MessageStore {
-    public static final long DELIVERY_TIMEOUT_MS = com.example.offgrid.mesh.MeshConfig.PENDING_TTL_MS;
+    public static final long DELIVERY_TIMEOUT_MS =
+            com.example.offgrid.mesh.MeshConfig.PENDING_TTL_MS;
     private static volatile MessageStore instance;
     final MessageDatabase database;
     final StorageCipher cipher;
@@ -29,9 +33,17 @@ public final class MessageStore {
             synchronized (MessageStore.class) {
                 if (instance == null) {
                     try {
-                        instance = new MessageStore(Room.databaseBuilder(context.getApplicationContext(),
-                                MessageDatabase.class, "offgrid-messages.db")
-                                .addMigrations(MessageDatabase.MIGRATION_1_2).build(), new StorageCipher());
+                        instance =
+                                new MessageStore(
+                                        Room.databaseBuilder(
+                                                        context.getApplicationContext(),
+                                                        MessageDatabase.class,
+                                                        "offgrid-messages.db")
+                                                .addMigrations(
+                                                        MessageDatabase.MIGRATION_1_2,
+                                                        MessageDatabase.MIGRATION_2_3)
+                                                .build(),
+                                        new StorageCipher());
                     } catch (Exception e) {
                         throw new IllegalStateException("Encrypted message storage unavailable", e);
                     }
@@ -46,42 +58,70 @@ public final class MessageStore {
         this.cipher = cipher;
     }
 
-    public MessageDao dao() { return database.messages(); }
-    public LiveData<String> outgoingFailures() { return outgoingFailures; }
-    public void outgoingFailed(String id) { outgoingFailures.postValue(id); }
+    public MessageDao dao() {
+        return database.messages();
+    }
+
+    public LiveData<String> outgoingFailures() {
+        return outgoingFailures;
+    }
+
+    public void outgoingFailed(String id) {
+        outgoingFailures.postValue(id);
+    }
 
     public void refreshExpiration(Runnable onError) {
         historyExecutor.execute(() -> {
-            try { expire(System.currentTimeMillis()); }
-            catch (RuntimeException e) { main.post(onError); }
+            try {
+                expire(System.currentTimeMillis());
+            } catch (RuntimeException e) {
+                main.post(onError);
+            }
         });
     }
 
     /** Atomically saves the display copy and relay packet before either is acknowledged locally. */
-    public void save(MeshMessage wire, MeshMessage display, boolean outgoing,
-                     long displayTime, MeshMessage relay, long storedAt, long expiresAt) throws Exception {
+    public void save(
+            MeshMessage wire,
+            MeshMessage display,
+            boolean outgoing,
+            long displayTime,
+            MeshMessage relay,
+            long storedAt,
+            long expiresAt)
+            throws Exception {
         save(wire, display, outgoing, displayTime, relay, storedAt, expiresAt, false);
     }
 
-    public void save(MeshMessage wire, MeshMessage display, boolean outgoing,
-                     long displayTime, MeshMessage relay, long storedAt, long expiresAt,
-                     boolean rememberInbound) throws Exception {
+    public void save(
+            MeshMessage wire,
+            MeshMessage display,
+            boolean outgoing,
+            long displayTime,
+            MeshMessage relay,
+            long storedAt,
+            long expiresAt,
+            boolean rememberInbound)
+            throws Exception {
         ChatRecord chat = null;
         if (display != null) {
             chat = new ChatRecord();
             chat.id = wire.getMessageId();
-            chat.conversationId = wire.isPrivate()
-                    ? (outgoing ? wire.getTargetId() : wire.getSenderId()) : "public";
+            chat.conversationId =
+                    wire.isPrivate()
+                            ? (outgoing ? wire.getTargetId() : wire.getSenderId())
+                            : "public";
             chat.outgoing = outgoing;
             chat.displayTimeMs = displayTime;
             chat.status = outgoing ? "QUEUED" : "RECEIVED";
-            JSONObject body = new JSONObject().put("wire", wire.toJson())
-                    .put("text", display.getText());
+            JSONObject body =
+                    new JSONObject().put("wire", wire.toJson()).put("text", display.getText());
             if (!outgoing && relay != null && relay.isAcknowledgement()) {
                 body.put("receipt", relay.toJson());
             }
-            chat.content = cipher.encrypt("history:" + chat.id,
-                    body.toString().getBytes(StandardCharsets.UTF_8));
+            chat.content =
+                    cipher.encrypt(
+                            "history:" + chat.id, body.toString().getBytes(StandardCharsets.UTF_8));
         }
         PendingRecord pending = null;
         if (relay != null) {
@@ -101,22 +141,48 @@ public final class MessageStore {
     }
 
     public MeshMessage decodePending(PendingRecord row) throws Exception {
-        MeshMessage message = MeshMessage.fromBytes(cipher.decrypt("pending:" + row.id, row.packet));
-        if (!row.id.equals(message.getMessageId())) throw new IllegalStateException("Packet ID mismatch");
+        MeshMessage message =
+                MeshMessage.fromBytes(cipher.decrypt("pending:" + row.id, row.packet));
+        if (!row.id.equals(message.getMessageId()))
+            throw new IllegalStateException("Packet ID mismatch");
         return message;
     }
 
     public ChatAdapter.ChatEntry decodeChat(ChatRecord row) throws Exception {
         JSONObject body = historyBody(row);
+        if (body.optBoolean("withdrawn", false)) {
+            WithdrawalRecord withdrawal = dao().withdrawal(row.id);
+            if (withdrawal == null) throw new IllegalStateException("Missing deletion marker");
+            MeshMessage placeholder =
+                    MeshMessage.createPrivate(
+                                    row.id,
+                                    withdrawal.senderId,
+                                    withdrawal.targetId,
+                                    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                                    withdrawal.senderKey,
+                                    0,
+                                    withdrawal.timestamp)
+                            .withPlaintext(
+                                    withdrawal.outgoing
+                                            ? (withdrawal.confirmed
+                                                    ? "You unsent this message"
+                                                    : "Unsend requested")
+                                            : "Message unsent");
+            return new ChatAdapter.ChatEntry(
+                    placeholder, row.outgoing, row.displayTimeMs, row.status, "text", 0);
+        }
         MeshMessage wire = MeshMessage.fromJson(body.getJSONObject("wire"));
-        if (!row.id.equals(wire.getMessageId())) throw new IllegalStateException("Message ID mismatch");
+        if (!row.id.equals(wire.getMessageId()))
+            throw new IllegalStateException("Message ID mismatch");
         MeshMessage display = wire.isPrivate() ? wire.withPlaintext(body.getString("text")) : wire;
-        return new ChatAdapter.ChatEntry(display, row.outgoing, row.displayTimeMs, row.status);
+        return new ChatAdapter.ChatEntry(
+                display, row.outgoing, row.displayTimeMs, row.status, row.kind, row.progress);
     }
 
     private JSONObject historyBody(ChatRecord row) throws Exception {
-        return new JSONObject(new String(cipher.decrypt("history:" + row.id, row.content),
-                StandardCharsets.UTF_8));
+        return new JSONObject(
+                new String(
+                        cipher.decrypt("history:" + row.id, row.content), StandardCharsets.UTF_8));
     }
 
     /** Accepts only already-authenticated ACK plaintext, bound to the exact outgoing packet. */
@@ -124,17 +190,28 @@ public final class MessageStore {
         return confirmDelivery(ack, authenticatedPayload, false, System.currentTimeMillis());
     }
 
-    public String confirmDelivery(MeshMessage ack, String authenticatedPayload,
-                                  boolean rememberInbound, long now) throws Exception {
+    public String confirmDelivery(
+            MeshMessage ack, String authenticatedPayload, boolean rememberInbound, long now)
+            throws Exception {
         DeliveryReceipt receipt = DeliveryReceipt.parse(authenticatedPayload);
         ChatRecord row = dao().chat(receipt.originalId);
-        if (row == null || !row.outgoing) return null;
+        if (row == null
+                || !row.outgoing
+                || row.status.startsWith("UNSENT")
+                || row.status.startsWith("UNSEND")) return null;
         MeshMessage original = MeshMessage.fromJson(historyBody(row).getJSONObject("wire"));
         if (!receipt.matches(ack, original)) return null;
         database.runInTransaction(() -> {
             if (rememberInbound) rememberInbound(ack, now);
             dao().markDelivered(original.getMessageId());
             dao().deletePending(original.getMessageId());
+            MediaRecord transfer = dao().media(original.getMessageId());
+            if (transfer != null && transfer.outgoing && !transfer.state.equals("CANCELLED")) {
+                transfer.state = "COMPLETE";
+                dao().cancelMediaPackets(transfer.id);
+                dao().deleteParts(transfer.id);
+                dao().putMedia(transfer);
+            }
         });
         return original.getMessageId();
     }
@@ -160,8 +237,20 @@ public final class MessageStore {
             List<ChatAdapter.ChatEntry> entries = new ArrayList<>();
             boolean unreadable = false;
             for (ChatRecord row : rows) {
-                try { entries.add(decodeChat(row)); }
-                catch (Exception e) { unreadable = true; } // keep original rows; never reset the database
+                try {
+                    ChatAdapter.ChatEntry entry = decodeChat(row);
+                    if (row.kind.equals("image")) {
+                        MediaRecord record = dao().media(row.id);
+                        if (record != null
+                                && record.file.length > 0
+                                && !record.state.equals("CANCELLED")) {
+                            entry.thumbnail = MediaThumbnails.load(row.id, record.file, cipher);
+                        }
+                    }
+                    entries.add(entry);
+                } catch (Exception e) {
+                    unreadable = true;
+                } // keep original rows; never reset the database
             }
             Collections.reverse(entries);
             boolean failed = unreadable;

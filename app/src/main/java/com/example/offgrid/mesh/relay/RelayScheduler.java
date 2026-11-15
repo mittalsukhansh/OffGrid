@@ -102,6 +102,14 @@ public final class RelayScheduler {
         queue.remove(id);
     }
 
+    public boolean contains(String id) {
+        return queue.containsKey(id);
+    }
+
+    public void reconcile(java.util.Collection<String> persistedIds) {
+        queue.keySet().retainAll(new java.util.HashSet<>(persistedIds));
+    }
+
     public boolean eligible(String id) {
         Buffered buffered = queue.get(id);
         return buffered != null

@@ -35,6 +35,11 @@ public final class RoomMeshStorage implements MeshStorage {
     }
 
     @Override
+    public List<String> pendingIds() {
+        return store.dao().pendingIds();
+    }
+
+    @Override
     public Pending pending(String id) throws Exception {
         return decode(store.dao().pendingById(id));
     }

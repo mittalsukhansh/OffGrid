@@ -22,6 +22,12 @@ public interface MeshStorage {
 
     List<Pending> pending() throws Exception;
 
+    default List<String> pendingIds() throws Exception {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (Pending row : pending()) ids.add(row.message.getMessageId());
+        return ids;
+    }
+
     Pending pending(String id) throws Exception;
 
     boolean hasHistory(String id);

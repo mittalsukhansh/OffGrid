@@ -5,6 +5,7 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import com.example.offgrid.MeshMessage;
+import com.example.offgrid.PrivateActions;
 import com.example.offgrid.mesh.protocol.MeshProtocol;
 import com.example.offgrid.mesh.relay.RelayScheduler;
 import com.example.offgrid.mesh.storage.MeshStorage;
@@ -26,6 +27,7 @@ public final class MeshNode implements MeshTransport.Listener {
         void onError(String message);
     }
 
+    private final PrivateActions actions;
     private final Handler worker;
     private final MeshTransport transport;
     private final MeshStorage storage;
@@ -43,7 +45,9 @@ public final class MeshNode implements MeshTransport.Listener {
             MeshTransport transport,
             MeshStorage storage,
             MeshProtocol protocol,
+            PrivateActions actions,
             Events events) {
+        this.actions = actions;
         this.worker = worker;
         this.transport = transport;
         this.storage = storage;
@@ -156,6 +160,36 @@ public final class MeshNode implements MeshTransport.Listener {
         return outgoing;
     }
 
+    public void unsend(String id) {
+        worker.post(() -> {
+            try {
+                actions.unsend(id, System.currentTimeMillis());
+                refreshOutbox();
+                relay.schedule(0);
+            } catch (Exception e) {
+                error("Could not request unsend: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    public void sendMedia(String target, byte[] bytes, String mime) {
+        worker.post(() -> {
+            try {
+                actions.offer(target, bytes, mime, System.currentTimeMillis());
+                refreshOutbox();
+                relay.schedule(0);
+            } catch (Exception e) {
+                error("Could not send attachment: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    private void refreshOutbox() throws Exception {
+        java.util.List<String> ids = storage.pendingIds();
+        relay.reconcile(ids);
+        for (String id : ids) if (!relay.contains(id)) relay.add(storage.pending(id));
+    }
+
     private void persistOutgoing(MeshProtocol.Outgoing outgoing) {
         if (closed || !ready) {
             storage.outgoingFailed(outgoing.wire.getMessageId());
@@ -198,6 +232,12 @@ public final class MeshNode implements MeshTransport.Listener {
         } catch (RuntimeException e) {
             events.onError("Could not refresh delivery deadlines");
         }
+        try {
+            actions.pump(System.currentTimeMillis());
+            refreshOutbox();
+        } catch (Exception e) {
+            error("Could not resume attachment transfers", e);
+        }
         relay.maintenance();
         protocol.maintenance();
         transport.maintain();
@@ -220,6 +260,7 @@ public final class MeshNode implements MeshTransport.Listener {
                 relay.add(storage.pending(incoming.relay.getMessageId()));
                 relay.schedule(jitter());
             }
+            if (incoming.wire != null) refreshOutbox();
             if (incoming.display != null) events.onReceived(incoming.display);
         } catch (Exception e) {
             error("Could not accept packet or update message storage", e);

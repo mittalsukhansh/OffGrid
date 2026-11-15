@@ -1,22 +1,22 @@
-# OffGrid 0.1: physical mesh test
+# OffGrid 0.2: physical mesh test
 
 This is a debug-signed test build for Android 8.0 / API 26 or newer. Install the
-same `OffGrid-v0.1-test.apk` on every phone. Protocol version 3 requires every
+same `OffGrid-v0.2-test.apk` on every phone. Protocol version 4 requires every
 participating phone and relay to use the updated app. Forward secrecy is not
 implemented; use test messages and test contacts.
 
 ## Install and prepare
 
-1. Download the APK from the GitHub v0.1 prerelease and install it. Android may
+1. Download the APK from the GitHub v0.2 prerelease and install it. Android may
    ask you to allow installation from the app used to download it. You can also
-   use `adb install -r OffGrid-v0.1-test.apk`.
+   use `adb install -r OffGrid-v0.2-test.apk`.
 2. Upgrading an existing installation requires the same signing certificate.
    If Android reports a signature mismatch, do not uninstall until any needed
    test information has been saved: uninstalling deletes local history, keys,
    and identity. This test APK uses the release job's debug certificate,
    which can differ from earlier local or CI APKs. `APK-SIGNATURE.txt` records it.
-   The version code is 2 so Android permits
-   an upgrade from the earlier version-code-1 builds with the same certificate.
+   The version code is 3 so Android permits
+   an upgrade from the earlier version-code-1/2 builds with the same certificate.
 3. Label three phones A, B, and C. Record model, Android version, and battery
    optimization settings. Keep automatic date/time enabled; packet admission
    rejects timestamps over two minutes in the future or ten minutes old.
@@ -78,3 +78,24 @@ It does not establish physical Bluetooth range, manufacturer-specific screen-off
 behavior, or successful A-B-C routing. Current development adds dedicated FrameCodec fragmentation/reassembly and relay
 scheduling tests, plus three-logical-node protocol/storage tests. Those tests do not
 retroactively change the published v0.1 APK or establish physical mesh reliability.
+
+## Offline sharing checks for 0.2
+
+- Rename two contacts to the same nickname. Confirm the warning and that their IDs
+  and verification remain distinct after restarting.
+- Unsend a private text while connected; check Requested then confirmed Unsent.
+  Repeat while the recipient is offline, including withdrawal arriving before the
+  original. After ten minutes without confirmation check Unsend unconfirmed and
+  retry. Confirm public chat has no unsend action.
+- Send a photo; verify a resized JPEG preview, progress, and a final receipt only
+  after the recipient has the complete image. Toggle the relay's radio mid-transfer
+  and verify progress resumes rather than starting a second conversation entry.
+- Try an MP4 below 256 KB / ten seconds, then one above each limit. The invalid clip
+  must be rejected, not silently queued. There is no video transcoder in this build.
+- Unsend a partially transferred and a completed attachment. Check that the app
+  cannot open it afterward; exported files/screenshots are outside this guarantee.
+
+All nodes must use the same version 4 APK. Updating from an APK signed with
+another debug certificate may require uninstalling; that deletes local identity
+and data. Preserve needed test information first. This is a test prerelease, not a
+production signing or recovery system.

@@ -103,12 +103,16 @@ public class MeshService extends Service {
         CryptoManager crypto = CryptoManager.getInstance(this);
         MeshStorage storage = new RoomMeshStorage(MessageStore.get(this), crypto.getLocalId());
         FloodGuard flood = new FloodGuard(SystemClock::elapsedRealtime);
+        PrivateActions actions = new PrivateActions(this, MessageStore.get(this), crypto);
+        MeshProtocol protocol = new MeshProtocol(crypto, storage, flood);
+        protocol.extensions(actions);
         node =
                 new MeshNode(
                         worker,
                         new BleTransport(this, worker, flood),
                         storage,
-                        new MeshProtocol(crypto, storage, flood),
+                        protocol,
+                        actions,
                         new MeshNode.Events() {
                             @Override
                             public void onStatus(String status) {
@@ -221,6 +225,14 @@ public class MeshService extends Service {
         if (destroyed) return new SendResult(SendStatus.INVALID_MESSAGE, null);
         MeshProtocol.Outgoing outgoing = node.sendPrivate(target, text);
         return new SendResult(SendStatus.valueOf(outgoing.status.name()), outgoing.display);
+    }
+
+    public void unsend(String id) {
+        if (!destroyed) node.unsend(id);
+    }
+
+    public void sendMedia(String target, byte[] bytes, String mime) {
+        if (!destroyed) node.sendMedia(target, bytes, mime);
     }
 
     private void createNotificationChannel() {

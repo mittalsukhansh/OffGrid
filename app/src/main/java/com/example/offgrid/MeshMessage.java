@@ -14,39 +14,48 @@ import java.util.regex.Pattern;
  * Immutable mesh packet.
  *
  * <h3>Types</h3>
+ *
  * <ul>
- *   <li>{@link #TYPE_PUBLIC} - plaintext group chat. {@code targetId} is null (or
- *       {@link #BROADCAST}); everyone displays it.</li>
- *   <li>{@link #TYPE_PRIVATE} - addressed to one device. On the wire {@code text} is an
- *       AES-GCM ciphertext (Base64url) that only the target can decrypt. Every node relays it,
- *       but only the node whose ID equals {@code targetId} ever decrypts or displays it.</li>
- *   <li>{@link #TYPE_KEY_ANNOUNCE} - carries the sender's public key in {@code text} so others
- *       can encrypt to them. The sender ID must be the hash of that key.</li>
+ *   <li>{@link #TYPE_PUBLIC} - plaintext group chat. {@code targetId} is null (or {@link
+ *       #BROADCAST}); everyone displays it.
+ *   <li>{@link #TYPE_PRIVATE} - addressed to one device. On the wire {@code text} is an AES-GCM
+ *       ciphertext (Base64url) that only the target can decrypt. Every node relays it, but only the
+ *       node whose ID equals {@code targetId} ever decrypts or displays it.
+ *   <li>{@link #TYPE_KEY_ANNOUNCE} - carries the sender's public key in {@code text} so others can
+ *       encrypt to them. The sender ID must be the hash of that key.
  * </ul>
  *
  * <h3>Plaintext view</h3>
- * After the target decrypts a private message, {@link #withPlaintext(String)} yields a copy
- * with {@link #isPayloadEncrypted()} == false for the UI. Such a copy refuses to serialize,
- * so plaintext can never be put back on the air by accident.
+ *
+ * After the target decrypts a private message, {@link #withPlaintext(String)} yields a copy with
+ * {@link #isPayloadEncrypted()} == false for the UI. Such a copy refuses to serialize, so plaintext
+ * can never be put back on the air by accident.
  *
  * <h3>TTL semantics</h3>
- * A node delivers a message locally, then relays {@link #withDecrementedTtl()} only while
- * {@link #isRelayable()} (ttl &gt; 0 after the decrement).
+ *
+ * A node delivers a message locally, then relays {@link #withDecrementedTtl()} only while {@link
+ * #isRelayable()} (ttl &gt; 0 after the decrement).
  *
  * <h3>Wire format (protocol version 3)</h3>
- * <pre>{"v":2,"id":"..","sid":"..","typ":1,"tid":"..","txt":"..","spk":"..","ttl":7,"ts":1760000000000}</pre>
- * {@code tid} and {@code spk} (sender public key) appear only on private messages. The
- * target ID is visible to relays (they need it to know the packet is not for them); only the
- * content is confidential.
+ *
+ * <pre>
+ * {"v":2,"id":"..","sid":"..","typ":1,"tid":"..","txt":"..","spk":"..","ttl":7,"ts":1760000000000}
+ * </pre>
+ *
+ * {@code tid} and {@code spk} (sender public key) appear only on private messages. The target ID is
+ * visible to relays (they need it to know the packet is not for them); only the content is
+ * confidential.
  */
 public final class MeshMessage {
 
-    public static final int PROTOCOL_VERSION = 3;
+    public static final int PROTOCOL_VERSION = 4;
 
     public static final int TYPE_PUBLIC = 0;
     public static final int TYPE_PRIVATE = 1;
     public static final int TYPE_KEY_ANNOUNCE = 2;
     public static final int TYPE_ACK = 3;
+    public static final int TYPE_CONTROL = 4;
+    public static final int TYPE_MEDIA = 5;
 
     /** Optional explicit marker for "everyone"; equivalent to a null target. */
     public static final String BROADCAST = "BROADCAST";
@@ -56,18 +65,21 @@ public final class MeshMessage {
 
     public static final int MAX_TEXT_LENGTH = 280;
     public static final int MAX_ID_LENGTH = 64;
+
     /** Worst case: 280 characters of 4-byte UTF-8 sequences. */
     public static final int MAX_PRIVATE_PLAINTEXT_BYTES = MAX_TEXT_LENGTH * 4;
+
     /** iv(12) + 1120 + tag(16) = 1148 bytes -> 1531 Base64 chars; 1600 leaves headroom. */
     public static final int MAX_CIPHERTEXT_LENGTH = 1600;
-    /**
-     * Worst-case private message is ~1.8 KB (ciphertext + 87-char key + ids), which fits.
-     */
+
+    /** Worst-case private message is ~1.8 KB (ciphertext + 87-char key + ids), which fits. */
     public static final int MAX_SERIALIZED_BYTES = 2048;
 
     private static final Pattern TARGET_ID = Pattern.compile("[0-9a-f]{32}");
+
     /** 65-byte uncompressed P-256 point as unpadded Base64url. */
     private static final Pattern PUBLIC_KEY = Pattern.compile("[A-Za-z0-9_-]{87}");
+
     /** iv(12) + at least 1 byte + tag(16) = 29 bytes -> at least 39 Base64 chars. */
     private static final Pattern CIPHERTEXT =
             Pattern.compile("[A-Za-z0-9_-]{39," + MAX_CIPHERTEXT_LENGTH + "}");
@@ -86,30 +98,74 @@ public final class MeshMessage {
     private final String signature;
     private final String messageId;
     private final String senderId;
-    private final String targetId;      // null unless TYPE_PRIVATE
+    private final String targetId; // null unless TYPE_PRIVATE
     private final int type;
-    private final String text;          // plaintext, ciphertext, or public key (see type)
-    private final String senderKey;     // only TYPE_PRIVATE
+    private final String text; // plaintext, ciphertext, or public key (see type)
+    private final String senderKey; // only TYPE_PRIVATE
     private final boolean payloadEncrypted;
     private final int ttl;
     private final long timestamp;
 
-    private MeshMessage(String messageId, String senderId, @Nullable String targetId, int type,
-                        String text, @Nullable String senderKey, boolean payloadEncrypted,
-                        int ttl, long timestamp) {
-        this(messageId, senderId, targetId, type, text, senderKey, payloadEncrypted, ttl, timestamp, null);
+    private MeshMessage(
+            String messageId,
+            String senderId,
+            @Nullable String targetId,
+            int type,
+            String text,
+            @Nullable String senderKey,
+            boolean payloadEncrypted,
+            int ttl,
+            long timestamp) {
+        this(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                text,
+                senderKey,
+                payloadEncrypted,
+                ttl,
+                timestamp,
+                null);
     }
 
-    private MeshMessage(String messageId, String senderId, @Nullable String targetId, int type,
-                        String text, @Nullable String senderKey, boolean payloadEncrypted,
-                        int ttl, long timestamp, @Nullable String signature) {
-        this(messageId, senderId, targetId, type, text, senderKey, payloadEncrypted,
-                ttl, timestamp, signature, PROTOCOL_VERSION);
+    private MeshMessage(
+            String messageId,
+            String senderId,
+            @Nullable String targetId,
+            int type,
+            String text,
+            @Nullable String senderKey,
+            boolean payloadEncrypted,
+            int ttl,
+            long timestamp,
+            @Nullable String signature) {
+        this(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                text,
+                senderKey,
+                payloadEncrypted,
+                ttl,
+                timestamp,
+                signature,
+                PROTOCOL_VERSION);
     }
 
-    private MeshMessage(String messageId, String senderId, @Nullable String targetId, int type,
-                        String text, @Nullable String senderKey, boolean payloadEncrypted,
-                        int ttl, long timestamp, @Nullable String signature, int wireVersion) {
+    private MeshMessage(
+            String messageId,
+            String senderId,
+            @Nullable String targetId,
+            int type,
+            String text,
+            @Nullable String senderKey,
+            boolean payloadEncrypted,
+            int ttl,
+            long timestamp,
+            @Nullable String signature,
+            int wireVersion) {
         this.wireVersion = wireVersion;
         if (signature != null && !signature.matches("[A-Za-z0-9_-]{8,104}")) {
             throw new IllegalArgumentException("Invalid signature encoding");
@@ -129,7 +185,8 @@ public final class MeshMessage {
                 if (targetId != null && !BROADCAST.equals(targetId)) {
                     throw new IllegalArgumentException("public message cannot have a target");
                 }
-                if ((senderKey != null && !PUBLIC_KEY.matcher(senderKey).matches()) || payloadEncrypted) {
+                if ((senderKey != null && !PUBLIC_KEY.matcher(senderKey).matches())
+                        || payloadEncrypted) {
                     throw new IllegalArgumentException("public message cannot be encrypted");
                 }
                 requireChatText(text);
@@ -138,6 +195,8 @@ public final class MeshMessage {
 
             case TYPE_PRIVATE:
             case TYPE_ACK:
+            case TYPE_CONTROL:
+            case TYPE_MEDIA:
                 if (targetId == null || !TARGET_ID.matcher(targetId).matches()) {
                     throw new IllegalArgumentException("private message needs a valid targetId");
                 }
@@ -154,7 +213,8 @@ public final class MeshMessage {
                 break;
 
             case TYPE_KEY_ANNOUNCE:
-                if (targetId != null || payloadEncrypted
+                if (targetId != null
+                        || payloadEncrypted
                         || (senderKey != null && !senderKey.equals(text))) {
                     throw new IllegalArgumentException("invalid key announcement");
                 }
@@ -183,8 +243,16 @@ public final class MeshMessage {
     /** New public (group) message. */
     @NonNull
     public static MeshMessage create(@NonNull String senderId, @NonNull String text, int ttl) {
-        return new MeshMessage(newId(senderId), senderId, null, TYPE_PUBLIC,
-                text, null, false, ttl, System.currentTimeMillis());
+        return new MeshMessage(
+                newId(senderId),
+                senderId,
+                null,
+                TYPE_PUBLIC,
+                text,
+                null,
+                false,
+                ttl,
+                System.currentTimeMillis());
     }
 
     @NonNull
@@ -197,27 +265,59 @@ public final class MeshMessage {
      * supplied by the caller because they are authenticated by the encryption (AAD).
      */
     @NonNull
-    public static MeshMessage createPrivate(@NonNull String messageId, @NonNull String senderId,
-                                            @NonNull String targetId,
-                                            @NonNull String ciphertext,
-                                            @NonNull String senderPublicKey,
-                                            int ttl, long timestamp) {
-        return new MeshMessage(messageId, senderId, targetId, TYPE_PRIVATE, ciphertext,
-                senderPublicKey, true, ttl, timestamp);
+    public static MeshMessage createPrivate(
+            @NonNull String messageId,
+            @NonNull String senderId,
+            @NonNull String targetId,
+            @NonNull String ciphertext,
+            @NonNull String senderPublicKey,
+            int ttl,
+            long timestamp) {
+        return new MeshMessage(
+                messageId,
+                senderId,
+                targetId,
+                TYPE_PRIVATE,
+                ciphertext,
+                senderPublicKey,
+                true,
+                ttl,
+                timestamp);
     }
 
     /** Announces {@code publicKey} (Base64url) as belonging to {@code senderId}. */
     @NonNull
-    public static MeshMessage createKeyAnnounce(@NonNull String senderId,
-                                                @NonNull String publicKey, int ttl) {
-        return new MeshMessage(newId(senderId), senderId, null, TYPE_KEY_ANNOUNCE,
-                publicKey, null, false, ttl, System.currentTimeMillis());
+    public static MeshMessage createKeyAnnounce(
+            @NonNull String senderId, @NonNull String publicKey, int ttl) {
+        return new MeshMessage(
+                newId(senderId),
+                senderId,
+                null,
+                TYPE_KEY_ANNOUNCE,
+                publicKey,
+                null,
+                false,
+                ttl,
+                System.currentTimeMillis());
     }
 
-    public static MeshMessage createAcknowledgement(String id, String senderId, String targetId,
-                                                     String ciphertext, String senderKey, long timestamp) {
-        return new MeshMessage(id, senderId, targetId, TYPE_ACK, ciphertext, senderKey, true,
-                DEFAULT_TTL, timestamp);
+    public static MeshMessage createAcknowledgement(
+            String id,
+            String senderId,
+            String targetId,
+            String ciphertext,
+            String senderKey,
+            long timestamp) {
+        return new MeshMessage(
+                id,
+                senderId,
+                targetId,
+                TYPE_ACK,
+                ciphertext,
+                senderKey,
+                true,
+                DEFAULT_TTL,
+                timestamp);
     }
 
     /** Sender-prefixed IDs prevent an authenticated stranger from occupying another sender's ID. */
@@ -228,15 +328,78 @@ public final class MeshMessage {
         return senderId + UUID.randomUUID().toString().replace("-", "");
     }
 
-    public int getProtocolVersion() { return wireVersion; }
-    public String getSignature() { return signature; }
-
-    public MeshMessage withAuthentication(String key, String signature) {
-        return new MeshMessage(messageId, senderId, targetId, type, text, key,
-                payloadEncrypted, ttl, timestamp, signature, wireVersion);
+    public int getProtocolVersion() {
+        return wireVersion;
     }
 
-    public boolean isAcknowledgement() { return type == TYPE_ACK; }
+    public String getSignature() {
+        return signature;
+    }
+
+    public MeshMessage withAuthentication(String key, String signature) {
+        return new MeshMessage(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                text,
+                key,
+                payloadEncrypted,
+                ttl,
+                timestamp,
+                signature,
+                wireVersion);
+    }
+
+    public static MeshMessage createControl(
+            String id,
+            String senderId,
+            String targetId,
+            String ciphertext,
+            String senderKey,
+            long timestamp) {
+        return new MeshMessage(
+                id,
+                senderId,
+                targetId,
+                TYPE_CONTROL,
+                ciphertext,
+                senderKey,
+                true,
+                DEFAULT_TTL,
+                timestamp);
+    }
+
+    public static MeshMessage createMedia(
+            String id,
+            String senderId,
+            String targetId,
+            String ciphertext,
+            String senderKey,
+            long timestamp) {
+        return new MeshMessage(
+                id,
+                senderId,
+                targetId,
+                TYPE_MEDIA,
+                ciphertext,
+                senderKey,
+                true,
+                DEFAULT_TTL,
+                timestamp);
+    }
+
+    public boolean isMedia() {
+        return type == TYPE_MEDIA;
+    }
+
+    public boolean isControl() {
+        return type == TYPE_CONTROL;
+    }
+
+    public boolean isAcknowledgement() {
+        return type == TYPE_ACK;
+    }
 
     // ------------------------------------------------------------------
     // Accessors
@@ -267,7 +430,7 @@ public final class MeshMessage {
     }
 
     public boolean isPrivate() {
-        return type == TYPE_PRIVATE;
+        return type == TYPE_PRIVATE || type == TYPE_MEDIA;
     }
 
     public boolean isKeyAnnounce() {
@@ -275,8 +438,8 @@ public final class MeshMessage {
     }
 
     /**
-     * Chat text for public messages and for decrypted private messages. For an encrypted
-     * private message this is ciphertext, and for a key announcement it is the public key.
+     * Chat text for public messages and for decrypted private messages. For an encrypted private
+     * message this is ciphertext, and for a key announcement it is the public key.
      */
     @NonNull
     public String getText() {
@@ -307,29 +470,53 @@ public final class MeshMessage {
     // Derived copies
     // ------------------------------------------------------------------
 
-    /** @return a copy with ttl reduced by one (never below zero). */
+    /**
+     * @return a copy with ttl reduced by one (never below zero).
+     */
     @NonNull
     public MeshMessage withDecrementedTtl() {
-        return new MeshMessage(messageId, senderId, targetId, type, text, senderKey,
-                payloadEncrypted, Math.max(0, ttl - 1), timestamp, signature, wireVersion);
+        return new MeshMessage(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                text,
+                senderKey,
+                payloadEncrypted,
+                Math.max(0, ttl - 1),
+                timestamp,
+                signature,
+                wireVersion);
     }
 
     /**
      * @return a display copy of this private message carrying {@code plaintext}. It cannot be
-     *         serialized.
-     * @throws IllegalStateException    if this is not an encrypted private message
+     *     serialized.
+     * @throws IllegalStateException if this is not an encrypted private message
      * @throws IllegalArgumentException if the plaintext is empty or too long
      */
     @NonNull
     public MeshMessage withPlaintext(@NonNull String plaintext) {
-        if (type != TYPE_PRIVATE || !payloadEncrypted) {
+        if (!isPrivate() || !payloadEncrypted) {
             throw new IllegalStateException("not an encrypted private message");
         }
-        return new MeshMessage(messageId, senderId, targetId, TYPE_PRIVATE, plaintext, senderKey,
-                false, ttl, timestamp, signature, wireVersion);
+        return new MeshMessage(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                plaintext,
+                senderKey,
+                false,
+                ttl,
+                timestamp,
+                signature,
+                wireVersion);
     }
 
-    /** @return true if this message should still be forwarded to other peers. */
+    /**
+     * @return true if this message should still be forwarded to other peers.
+     */
     public boolean isRelayable() {
         return ttl > 0;
     }
@@ -344,11 +531,11 @@ public final class MeshMessage {
 
     /**
      * @throws IllegalStateException if this is a decrypted private message (never transmit
-     *                               plaintext of a private message)
+     *     plaintext of a private message)
      */
     @NonNull
     public JSONObject toJson() {
-        if (type == TYPE_PRIVATE && !payloadEncrypted) {
+        if (isPrivate() && !payloadEncrypted) {
             throw new IllegalStateException("refusing to serialize a plaintext private message");
         }
         try {
@@ -417,7 +604,7 @@ public final class MeshMessage {
     public static MeshMessage fromJson(@NonNull JSONObject json) {
         try {
             int version = json.optInt(K_VERSION, PROTOCOL_VERSION);
-            if (version != PROTOCOL_VERSION && version != 2) {
+            if (version != PROTOCOL_VERSION && version != 2 && version != 3) {
                 throw new IllegalArgumentException("unsupported protocol version " + version);
             }
             int type = json.optInt(K_TYPE, TYPE_PUBLIC);
@@ -428,9 +615,14 @@ public final class MeshMessage {
                     type,
                     json.getString(K_TEXT),
                     json.isNull(K_SENDER_KEY) ? null : json.getString(K_SENDER_KEY),
-                    type == TYPE_PRIVATE || type == TYPE_ACK,
+                    type == TYPE_PRIVATE
+                            || type == TYPE_ACK
+                            || type == TYPE_CONTROL
+                            || type == TYPE_MEDIA,
                     json.getInt(K_TTL),
-                    json.getLong(K_TIMESTAMP), json.isNull("sig") ? null : json.getString("sig"), version);
+                    json.getLong(K_TIMESTAMP),
+                    json.isNull("sig") ? null : json.getString("sig"),
+                    version);
         } catch (JSONException e) {
             throw new IllegalArgumentException("missing or invalid field: " + e.getMessage(), e);
         }
@@ -476,12 +668,20 @@ public final class MeshMessage {
     @NonNull
     @Override
     public String toString() {
-        return "MeshMessage{id=" + messageId
-                + ", type=" + type
-                + ", sender=" + senderId
-                + ", target=" + targetId
-                + ", ttl=" + ttl
-                + ", textLength=" + text.length()
-                + ", ts=" + timestamp + '}';
+        return "MeshMessage{id="
+                + messageId
+                + ", type="
+                + type
+                + ", sender="
+                + senderId
+                + ", target="
+                + targetId
+                + ", ttl="
+                + ttl
+                + ", textLength="
+                + text.length()
+                + ", ts="
+                + timestamp
+                + '}';
     }
 }

@@ -54,25 +54,28 @@ import javax.crypto.spec.SecretKeySpec;
  * Device identity, contact keys and end-to-end encryption for private mesh messages.
  *
  * <h3>Identity</h3>
+ *
  * Each install owns a long-term P-256 key pair. The <b>device ID</b> is the first 16 bytes of
  * SHA-256(public key) as 32 hex characters. Because the ID is derived from the key, nobody can
  * publish a different key for somebody else's ID: a key is accepted for an ID only if its hash
- * matches. If you obtain someone's ID out-of-band (in person, QR, another app), a key heard
- * over the mesh for that ID is therefore automatically authentic.
+ * matches. If you obtain someone's ID out-of-band (in person, QR, another app), a key heard over
+ * the mesh for that ID is therefore automatically authentic.
  *
  * <p>The private key never leaves the device unencrypted: it is wrapped with an AES-256-GCM key
  * stored in the Android Keystore before being saved.
  *
  * <h3>Encryption (per message)</h3>
+ *
  * <pre>
  *   shared = ECDH(myPrivate, theirPublic)
  *   key    = HKDF-SHA256(shared, info = "offgrid-e2ee-v1|" + senderId + ">" + targetId)
  *   wire   = Base64url( iv(12) || AES-256-GCM(key, iv, plaintext, aad) )
  *   aad    = messageId | senderId | targetId | timestamp
  * </pre>
- * The key is direction-specific, and the AAD binds the ciphertext to the packet's routing
- * fields, so a relay cannot re-address or re-label a message without breaking authentication.
- * Relays never need (and never have) any key.
+ *
+ * The key is direction-specific, and the AAD binds the ciphertext to the packet's routing fields,
+ * so a relay cannot re-address or re-label a message without breaking authentication. Relays never
+ * need (and never have) any key.
  */
 public final class CryptoManager {
 
@@ -97,14 +100,18 @@ public final class CryptoManager {
     /** A person we can send private messages to. */
     public static final class Contact {
         @NonNull public final String id;
+
         /** True if added by the user (contact string); false if only heard on the mesh. */
         public final boolean addedManually;
-        public final boolean verified;
 
-        Contact(@NonNull String id, boolean addedManually, boolean verified) {
+        public final boolean verified;
+        @NonNull public final String nickname;
+
+        Contact(@NonNull String id, boolean addedManually, boolean verified, String nickname) {
             this.id = id;
             this.addedManually = addedManually;
             this.verified = verified;
+            this.nickname = nickname;
         }
     }
 
@@ -112,6 +119,7 @@ public final class CryptoManager {
         final String keyB64;
         boolean manual;
         boolean verified;
+        String nickname = "";
         final long addedAt;
 
         ContactRecord(String keyB64, boolean manual, long addedAt) {
@@ -235,15 +243,65 @@ public final class CryptoManager {
     @NonNull
     public synchronized List<Contact> getContacts() {
         List<Map.Entry<String, ContactRecord>> entries = new ArrayList<>(contacts.entrySet());
-        Collections.sort(entries, (a, b) -> {
-            if (a.getValue().manual != b.getValue().manual) return a.getValue().manual ? -1 : 1;
-            return Long.compare(b.getValue().addedAt, a.getValue().addedAt);
-        });
+        Collections.sort(
+                entries,
+                (a, b) -> {
+                    if (a.getValue().manual != b.getValue().manual)
+                        return a.getValue().manual ? -1 : 1;
+                    return Long.compare(b.getValue().addedAt, a.getValue().addedAt);
+                });
         List<Contact> out = new ArrayList<>(entries.size());
         for (Map.Entry<String, ContactRecord> e : entries) {
-            out.add(new Contact(e.getKey(), e.getValue().manual, e.getValue().verified));
+            out.add(
+                    new Contact(
+                            e.getKey(),
+                            e.getValue().manual,
+                            e.getValue().verified,
+                            e.getValue().nickname));
         }
         return out;
+    }
+
+    public static String normalizeNickname(String nickname) {
+        if (nickname == null) return "";
+        if (nickname.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("Nicknames cannot contain control characters");
+        }
+        String normalized = nickname.trim().replaceAll("\\s+", " ");
+        if (normalized.length() > 40 || normalized.matches(".*[\\p{Cc}].*")) {
+            throw new IllegalArgumentException(
+                    "Use at most 40 characters without control characters");
+        }
+        return normalized;
+    }
+
+    public synchronized boolean setNickname(String id, String nickname) {
+        ContactRecord record = contacts.get(id);
+        if (record == null) return false;
+        record.nickname = normalizeNickname(nickname);
+        record.manual = true;
+        persistContacts();
+        return true;
+    }
+
+    public synchronized String nickname(String id) {
+        ContactRecord record = contacts.get(id);
+        return record == null ? "" : record.nickname;
+    }
+
+    public synchronized boolean nicknameInUse(String id, String nickname) {
+        String name = normalizeNickname(nickname);
+        if (name.isEmpty()) return false;
+        for (Map.Entry<String, ContactRecord> entry : contacts.entrySet()) {
+            if (!entry.getKey().equals(id) && entry.getValue().nickname.equalsIgnoreCase(name))
+                return true;
+        }
+        return false;
+    }
+
+    public synchronized String contactLabel(String id) {
+        String name = nickname(id);
+        return (name.isEmpty() ? "" : name + " · ") + formatId(id, 8);
     }
 
     public synchronized boolean isVerified(String id) {
@@ -251,7 +309,9 @@ public final class CryptoManager {
         return record != null && record.verified;
     }
 
-    public String getOwnFingerprint() { return fullFingerprint(publicKeyBytes); }
+    public String getOwnFingerprint() {
+        return fullFingerprint(publicKeyBytes);
+    }
 
     public synchronized String contactFingerprint(String id) {
         ContactRecord record = contacts.get(id);
@@ -259,7 +319,8 @@ public final class CryptoManager {
     }
 
     /** Import/discovery never verifies a person; explicit fingerprint comparison is required. */
-    public synchronized boolean setVerified(String id, String comparedFingerprint, boolean verified) {
+    public synchronized boolean setVerified(
+            String id, String comparedFingerprint, boolean verified) {
         ContactRecord record = contacts.get(id);
         if (record == null || !contactFingerprint(id).equals(comparedFingerprint)) return false;
         record.verified = verified;
@@ -277,7 +338,9 @@ public final class CryptoManager {
                 result.append(Character.forDigit(b & 15, 16));
             }
             return result.toString();
-        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** Signs all immutable packet fields; forwarding may only change TTL. */
@@ -285,7 +348,8 @@ public final class CryptoManager {
         if (message.getProtocolVersion() != MeshMessage.PROTOCOL_VERSION) {
             throw new GeneralSecurityException("Legacy packet must be recreated before sending");
         }
-        if (!localId.equals(message.getSenderId())) throw new GeneralSecurityException("Not our identity");
+        if (!localId.equals(message.getSenderId()))
+            throw new GeneralSecurityException("Not our identity");
         if (message.isPrivate() && !message.isPayloadEncrypted()) {
             throw new GeneralSecurityException("Cannot sign a display-only plaintext copy");
         }
@@ -293,20 +357,25 @@ public final class CryptoManager {
         java.security.Signature signer = java.security.Signature.getInstance("SHA256withECDSA");
         signer.initSign(privateKey, secureRandom);
         signer.update(PacketSecurity.signingBytes(keyed));
-        return keyed.withAuthentication(publicKeyB64, Base64.encodeToString(signer.sign(), B64_FLAGS));
+        return keyed.withAuthentication(
+                publicKeyB64, Base64.encodeToString(signer.sign(), B64_FLAGS));
     }
 
     public boolean verifyPacket(MeshMessage packet) {
         if (packet.getProtocolVersion() != MeshMessage.PROTOCOL_VERSION
-                || packet.getSignature() == null || packet.getSenderKey() == null) return false;
+                || packet.getSignature() == null
+                || packet.getSenderKey() == null) return false;
         try {
             byte[] raw = Base64.decode(packet.getSenderKey(), B64_FLAGS);
             if (!deriveId(raw).equals(packet.getSenderId())) return false;
-            java.security.Signature verifier = java.security.Signature.getInstance("SHA256withECDSA");
+            java.security.Signature verifier =
+                    java.security.Signature.getInstance("SHA256withECDSA");
             verifier.initVerify(decodePublicKey(raw));
             verifier.update(PacketSecurity.signingBytes(packet));
             return verifier.verify(Base64.decode(packet.getSignature(), B64_FLAGS));
-        } catch (GeneralSecurityException | IllegalArgumentException e) { return false; }
+        } catch (GeneralSecurityException | IllegalArgumentException e) {
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -317,13 +386,17 @@ public final class CryptoManager {
      * Encrypts {@code plaintext} for {@code targetId}.
      *
      * @return Base64url(iv || ciphertext || tag) to put in a private {@link MeshMessage}
-     * @throws IllegalArgumentException  if the plaintext is empty or too large
-     * @throws GeneralSecurityException  if we have no key for the target or encryption fails
+     * @throws IllegalArgumentException if the plaintext is empty or too large
+     * @throws GeneralSecurityException if we have no key for the target or encryption fails
      */
     @NonNull
-    public String encrypt(@NonNull String messageId, @NonNull String targetId, long timestamp,
-                          @NonNull String plaintext) throws GeneralSecurityException {
-        return encryptForPurpose(messageId, targetId, timestamp, plaintext, false);
+    public String encrypt(
+            @NonNull String messageId,
+            @NonNull String targetId,
+            long timestamp,
+            @NonNull String plaintext)
+            throws GeneralSecurityException {
+        return encryptForPurpose(messageId, targetId, timestamp, plaintext, "chat");
     }
 
     public MeshMessage createAcknowledgement(MeshMessage original) throws GeneralSecurityException {
@@ -333,24 +406,49 @@ public final class CryptoManager {
         String id = MeshMessage.newId(localId);
         long timestamp = System.currentTimeMillis();
         String payload = DeliveryReceipt.payloadFor(original);
-        return signPacket(MeshMessage.createAcknowledgement(id, localId, original.getSenderId(),
-                encryptForPurpose(id, original.getSenderId(), timestamp, payload, true),
-                publicKeyB64, timestamp));
+        return signPacket(
+                MeshMessage.createAcknowledgement(
+                        id,
+                        localId,
+                        original.getSenderId(),
+                        encryptForPurpose(id, original.getSenderId(), timestamp, payload, "ack"),
+                        publicKeyB64,
+                        timestamp));
     }
 
-    private String encryptForPurpose(String messageId, String targetId, long timestamp,
-                                     String plaintext, boolean receipt) throws GeneralSecurityException {
+    public MeshMessage control(String targetId, String plaintext) throws GeneralSecurityException {
+        String id = MeshMessage.newId(localId);
+        long now = System.currentTimeMillis();
+        return signPacket(
+                MeshMessage.createControl(
+                        id,
+                        localId,
+                        targetId,
+                        encryptForPurpose(id, targetId, now, plaintext, "control"),
+                        publicKeyB64,
+                        now));
+    }
+
+    public String decryptControl(MeshMessage message) throws GeneralSecurityException {
+        return decryptForPurpose(message, "control");
+    }
+
+    private String encryptForPurpose(
+            String messageId, String targetId, long timestamp, String plaintext, String purpose)
+            throws GeneralSecurityException {
         byte[] pt = plaintext.getBytes(StandardCharsets.UTF_8);
         if (pt.length == 0 || pt.length > MeshMessage.MAX_PRIVATE_PLAINTEXT_BYTES) {
             throw new IllegalArgumentException("plaintext size out of range");
         }
         ECPublicKey targetKey = getContactKey(targetId);
-        byte[] key = deriveKey(targetKey, localId, targetId, receipt);
+        byte[] key = deriveKey(targetKey, localId, targetId, purpose);
         try {
             byte[] iv = new byte[GCM_IV_BYTES];
             secureRandom.nextBytes(iv);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"),
+            cipher.init(
+                    Cipher.ENCRYPT_MODE,
+                    new SecretKeySpec(key, "AES"),
                     new GCMParameterSpec(GCM_TAG_BITS, iv));
             cipher.updateAAD(aad(messageId, localId, targetId, timestamp));
             byte[] ct = cipher.doFinal(pt);
@@ -369,19 +467,23 @@ public final class CryptoManager {
      * remembered, so the user can reply.
      *
      * @throws GeneralSecurityException if the message is not for us, was tampered with, or the
-     *                                  embedded sender key does not match the sender ID
+     *     embedded sender key does not match the sender ID
      */
     @NonNull
     public String decrypt(@NonNull MeshMessage message) throws GeneralSecurityException {
-        return decryptForPurpose(message, false);
+        return decryptForPurpose(message, "chat");
     }
 
     public String decryptAcknowledgement(MeshMessage message) throws GeneralSecurityException {
-        return decryptForPurpose(message, true);
+        return decryptForPurpose(message, "ack");
     }
 
-    private String decryptForPurpose(MeshMessage message, boolean receipt) throws GeneralSecurityException {
-        if (!(receipt ? message.isAcknowledgement() : message.isPrivate()) || !message.isPayloadEncrypted()
+    private String decryptForPurpose(MeshMessage message, String purpose)
+            throws GeneralSecurityException {
+        if (!("control".equals(purpose)
+                        ? message.isControl()
+                        : "ack".equals(purpose) ? message.isAcknowledgement() : message.isPrivate())
+                || !message.isPayloadEncrypted()
                 || !localId.equals(message.getTargetId())) {
             throw new GeneralSecurityException("not a private message for this device");
         }
@@ -405,13 +507,19 @@ public final class CryptoManager {
         }
 
         ECPublicKey senderKey = decodePublicKey(senderKeyRaw);
-        byte[] key = deriveKey(senderKey, message.getSenderId(), localId, receipt);
+        byte[] key = deriveKey(senderKey, message.getSenderId(), localId, purpose);
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"),
+            cipher.init(
+                    Cipher.DECRYPT_MODE,
+                    new SecretKeySpec(key, "AES"),
                     new GCMParameterSpec(GCM_TAG_BITS, data, 0, GCM_IV_BYTES));
-            cipher.updateAAD(aad(message.getMessageId(), message.getSenderId(), localId,
-                    message.getTimestamp()));
+            cipher.updateAAD(
+                    aad(
+                            message.getMessageId(),
+                            message.getSenderId(),
+                            localId,
+                            message.getTimestamp()));
             byte[] pt = cipher.doFinal(data, GCM_IV_BYTES, data.length - GCM_IV_BYTES);
 
             registerKey(message.getSenderId(), senderKeyB64, false);
@@ -425,15 +533,23 @@ public final class CryptoManager {
     // Key derivation
     // ------------------------------------------------------------------
 
-    private byte[] deriveKey(ECPublicKey peer, String senderId, String targetId, boolean receipt)
+    private byte[] deriveKey(ECPublicKey peer, String senderId, String targetId, String purpose)
             throws GeneralSecurityException {
         KeyAgreement agreement = KeyAgreement.getInstance("ECDH");
         agreement.init(privateKey);
         agreement.doPhase(peer, true);
         byte[] shared = agreement.generateSecret();
         try {
-            byte[] info = ((receipt ? "offgrid-ack-v1|" : "offgrid-e2ee-v1|") + senderId + ">" + targetId)
-                    .getBytes(StandardCharsets.UTF_8);
+            byte[] info =
+                    (("control".equals(purpose)
+                                            ? "offgrid-control-v1|"
+                                            : "ack".equals(purpose)
+                                                    ? "offgrid-ack-v1|"
+                                                    : "offgrid-e2ee-v1|")
+                                    + senderId
+                                    + ">"
+                                    + targetId)
+                            .getBytes(StandardCharsets.UTF_8);
             return hkdfSha256(shared, info);
         } finally {
             Arrays.fill(shared, (byte) 0);
@@ -466,8 +582,8 @@ public final class CryptoManager {
         if (!isValidId(claimedId) || claimedId.equals(localId)) return false;
         try {
             byte[] raw = Base64.decode(keyB64, B64_FLAGS);
-            if (!deriveId(raw).equals(claimedId)) return false;   // key does not belong to this ID
-            decodePublicKey(raw);                                 // must be a valid curve point
+            if (!deriveId(raw).equals(claimedId)) return false; // key does not belong to this ID
+            decodePublicKey(raw); // must be a valid curve point
         } catch (GeneralSecurityException | IllegalArgumentException e) {
             return false;
         }
@@ -518,8 +634,10 @@ public final class CryptoManager {
                     byte[] raw = Base64.decode(key, B64_FLAGS);
                     if (!isValidId(id) || !deriveId(raw).equals(id)) continue;
                     decodePublicKey(raw);
-                    ContactRecord record = new ContactRecord(key, o.optBoolean("m", false), o.optLong("t", 0L));
+                    ContactRecord record =
+                            new ContactRecord(key, o.optBoolean("m", false), o.optLong("t", 0L));
                     record.verified = o.optBoolean("verified", false);
+                    record.nickname = normalizeNickname(o.optString("nickname", ""));
                     contacts.put(id, record);
                 }
             }
@@ -536,6 +654,7 @@ public final class CryptoManager {
                 o.put("k", e.getValue().keyB64);
                 o.put("m", e.getValue().manual);
                 o.put("verified", e.getValue().verified);
+                o.put("nickname", e.getValue().nickname);
                 o.put("t", e.getValue().addedAt);
                 root.put(e.getKey(), o);
             }
@@ -555,8 +674,9 @@ public final class CryptoManager {
         if (wrapped != null && pubB64 != null) {
             try {
                 byte[] pkcs8 = unwrap(Base64.decode(wrapped, B64_FLAGS));
-                PrivateKey priv = KeyFactory.getInstance("EC")
-                        .generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
+                PrivateKey priv =
+                        KeyFactory.getInstance("EC")
+                                .generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
                 Arrays.fill(pkcs8, (byte) 0);
                 byte[] pub = Base64.decode(pubB64, B64_FLAGS);
                 decodePublicKey(pub); // sanity check
@@ -596,14 +716,17 @@ public final class CryptoManager {
             KeyStore ks = KeyStore.getInstance(ANDROID_KEYSTORE);
             ks.load(null);
             if (!ks.containsAlias(WRAP_KEY_ALIAS)) {
-                KeyGenerator kg = KeyGenerator.getInstance(
-                        KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE);
-                kg.init(new KeyGenParameterSpec.Builder(WRAP_KEY_ALIAS,
-                        KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                        .setKeySize(256)
-                        .build());
+                KeyGenerator kg =
+                        KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE);
+                kg.init(
+                        new KeyGenParameterSpec.Builder(
+                                        WRAP_KEY_ALIAS,
+                                        KeyProperties.PURPOSE_ENCRYPT
+                                                | KeyProperties.PURPOSE_DECRYPT)
+                                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                                .setKeySize(256)
+                                .build());
                 return kg.generateKey();
             }
             return (SecretKey) ks.getKey(WRAP_KEY_ALIAS, null);
@@ -624,9 +747,12 @@ public final class CryptoManager {
     }
 
     private static byte[] unwrap(byte[] data) throws GeneralSecurityException {
-        if (data.length <= GCM_IV_BYTES) throw new GeneralSecurityException("wrapped key too short");
+        if (data.length <= GCM_IV_BYTES)
+            throw new GeneralSecurityException("wrapped key too short");
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateWrapKey(),
+        cipher.init(
+                Cipher.DECRYPT_MODE,
+                getOrCreateWrapKey(),
                 new GCMParameterSpec(GCM_TAG_BITS, data, 0, GCM_IV_BYTES));
         return cipher.doFinal(data, GCM_IV_BYTES, data.length - GCM_IV_BYTES);
     }
@@ -693,9 +819,10 @@ public final class CryptoManager {
         if (raw.length != PUBLIC_KEY_BYTES || raw[0] != 0x04) {
             throw new InvalidKeyException("not an uncompressed P-256 point");
         }
-        ECPoint point = new ECPoint(
-                new BigInteger(1, Arrays.copyOfRange(raw, 1, 33)),
-                new BigInteger(1, Arrays.copyOfRange(raw, 33, 65)));
+        ECPoint point =
+                new ECPoint(
+                        new BigInteger(1, Arrays.copyOfRange(raw, 1, 33)),
+                        new BigInteger(1, Arrays.copyOfRange(raw, 33, 65)));
         ECParameterSpec spec = P256Holder.SPEC;
         EllipticCurve curve = spec.getCurve();
         BigInteger p = ((ECFieldFp) curve.getField()).getP();
@@ -709,7 +836,7 @@ public final class CryptoManager {
         if (!lhs.equals(rhs)) {
             throw new InvalidKeyException("point is not on the curve");
         }
-        return (ECPublicKey) KeyFactory.getInstance("EC")
-                .generatePublic(new ECPublicKeySpec(point, spec));
+        return (ECPublicKey)
+                KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(point, spec));
     }
 }

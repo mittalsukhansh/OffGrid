@@ -5,10 +5,43 @@ Energy/GATT relay network. Phones discover peers, exchange signed packets, and
 retain messages for later forwarding. It is not an implementation of the Bluetooth
 SIG Mesh standard.
 
-[Download the v0.1 test prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v0.1).
+[Download the v0.2 test prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v0.2).
 Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
-Development continues from `main` on short feature branches; the published v0.1 APK
+Development continues from `main` on short feature branches; the published v0.2 APK
 is an immutable earlier snapshot, not every later commit.
+
+## Offline sharing in 0.2
+
+No account, phone number, address-book permission, hosted VM or messaging server is
+required. Contacts are public-key identities exchanged by QR or contact strings.
+Use **To → Manage selected → Edit local nickname** to label them on your phone;
+duplicate names warn but never merge identities or change verification.
+
+Long-press your private message or attachment to request **Unsend**. Your app copy
+is replaced with a deletion marker and an authenticated request is queued for the
+contact. It shows **Unsend requested**, **Unsend unconfirmed** after the request
+window, or **Unsent** when acknowledged. You can retry an unconfirmed request.
+Offline phones may never receive it; screenshots, exported copies and forensic
+remnants cannot be recalled. Saved tombstones prevent delayed originals from
+reappearing. Public-message unsend is not supported.
+
+Choose a private contact and tap **Attach**:
+
+- Photos are converted to JPEG, resized and compressed to at most **48 KB**.
+- MP4 clips must already be **256 KB or smaller and at most 10 seconds**. There is
+  no built-in video transcoder. Unsupported/oversized media is rejected.
+- Files and partial chunks are encrypted locally. A small persisted transfer window,
+  integrity hashes, receiver bitmaps and retries allow resumption after reconnects
+  and restarts. The recipient must validate/save the whole file before Delivered.
+- Media uses the existing slow BLE mesh: only two chunks are prepared per five-second
+  pump. Images can take minutes and video much longer. Transfers expire after an
+  hour; initial offer acceptance has a ten-minute window. Keep both meshes running.
+- Up to two outgoing/four total active transfers, 64 retained attachments, and about
+  16 MB of encrypted file storage are allowed in this test build.
+
+Tap a ready attachment to open it. This explicitly creates a plaintext copy in app
+cache for an external viewer. Unsend removes the app's cached copy and revokes its
+URI grant, but cannot remove anything an external viewer already copied.
 
 ## Implemented versus verified
 
@@ -26,6 +59,7 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 | Contact trust | QR exchange, full fingerprint comparison and a persistent Verified indicator | QR image round trip and contact-state tests | Physical camera scanning and the complete UI flow need device checks |
 | Abuse protection | Packet signatures, timestamp admission, persistent replay ledger and bounded flood budgets | JVM rules and emulator security tests | No independent security audit or radio-level denial-of-service guarantee |
 | Background operation | Connected-device foreground service, radio-state handling and maintenance | Component tests and compilation; no physical screen-off evidence | Screen off, battery optimization and Bluetooth toggling await the checklist |
+| Offline sharing | Local nicknames, private withdrawals, encrypted image/short-video transfers | Emulator regression tests for authorization, tombstones, integrity, resumption and size/duration bounds | Camera/gallery/player UI and real media throughput need phones |
 | Forward secrecy | **Not implemented**; private messages still use static ECDH | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
 
 ## Components and documentation
@@ -35,7 +69,7 @@ callbacks, relay peer table, packet acceptance policy, or database queries.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): component ownership, dependency boundaries,
   threading, persistence transactions and how to test changes.
-- [PACKET_FORMAT.md](PACKET_FORMAT.md): protocol version 3 fields, canonical
+- [PACKET_FORMAT.md](PACKET_FORMAT.md): protocol version 4 fields, canonical
   signatures, private encryption/ACKs, TTL and exact BLE framing.
 - [SECURITY.md](SECURITY.md): trust model, flood/replay policy, upgrade behavior,
   limitations and the forward-secrecy assessment.
@@ -58,7 +92,7 @@ private messages and ACKs use ECDH, HKDF-SHA256 and AES-GCM.
 - **Delivered:** the intended private recipient authenticated/decrypted the message,
   saved it, and returned a valid receipt. It is not a read receipt. Broadcasts never
   claim this state.
-- **Expired:** no confirmation arrived within ten minutes. A valid late receipt
+- **Expired:** no confirmation arrived within ten minutes for text; accepted media transfers have a longer transfer deadline. A valid late receipt
   can still confirm a private message.
 - **Failed:** the pending message could not remain eligible, for example after
   queue eviction or rejection of a legacy/invalid stored packet. Storage failures
@@ -73,8 +107,8 @@ storage or losing its key can make history unrecoverable; backup is disabled.
 
 The queue holds at most 200 packets and expires them after ten minutes; it does not
 promise indefinite or guaranteed delivery. Recovery preserves deadlines and
-forward counts. Live traffic requires version 3 signatures and reasonably accurate
-clocks. Version 2 history is readable; old unsigned pending packets must be resent
+forward counts. Live traffic requires version 4 signatures and reasonably accurate
+clocks. Version 2/3 history is readable; old unsigned pending packets must be resent
 using the updated app. Every participating endpoint and relay must upgrade.
 
 ## Build and run checks

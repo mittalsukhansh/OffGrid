@@ -6,6 +6,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -20,11 +21,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.activity.result.ActivityResultLauncher;
-import com.journeyapps.barcodescanner.ScanContract;
-import com.journeyapps.barcodescanner.ScanOptions;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -36,6 +36,9 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -44,30 +47,34 @@ import java.util.Locale;
  * Chat screen for the OffGrid mesh.
  *
  * <p>Flow when the user taps "Start Mesh":
+ *
  * <ol>
- *   <li>{@link BlePermissionHelper#requestPermissions()} - runtime permissions</li>
- *   <li>{@link BlePermissionHelper#requestEnableBluetooth()} - Bluetooth on</li>
+ *   <li>{@link BlePermissionHelper#requestPermissions()} - runtime permissions
+ *   <li>{@link BlePermissionHelper#requestEnableBluetooth()} - Bluetooth on
  *   <li>{@link MeshService#start(android.content.Context)} - foreground service starts and the
- *       already-registered binding connects to it</li>
+ *       already-registered binding connects to it
  * </ol>
  *
- * <p>The Activity binds <em>without</em> BIND_AUTO_CREATE, so the binding never keeps the
- * service alive and the UI always mirrors the real service state. Leaving the app does not
- * stop the mesh.
+ * <p>The Activity binds <em>without</em> BIND_AUTO_CREATE, so the binding never keeps the service
+ * alive and the UI always mirrors the real service state. Leaving the app does not stop the mesh.
  *
  * <p>Private messaging: the "To:" button picks "Everyone" or a contact. Contacts are added by
- * importing a contact string ("My contact" on the other phone) or appear automatically once
- * their key has been heard on the mesh.
+ * importing a contact string ("My contact" on the other phone) or appear automatically once their
+ * key has been heard on the mesh.
  */
 public class MainActivity extends AppCompatActivity {
 
     /** Keeps chat history and the selected recipient across configuration changes. */
     public static class ChatViewModel extends ViewModel {
         final List<ChatAdapter.ChatEntry> entries = new ArrayList<>();
+
         /** Device ID of the selected private recipient, or null for "Everyone". */
         @Nullable String recipientId;
+
         @Nullable String pendingMessageId;
         @Nullable String pendingText;
+        @Nullable String mediaTarget;
+        @Nullable String mediaMime;
     }
 
     // Views
@@ -85,9 +92,12 @@ public class MainActivity extends AppCompatActivity {
     private BlePermissionHelper permissionHelper;
     private int historyVersion;
     private ActivityResultLauncher<ScanOptions> contactScanner;
+    private ActivityResultLauncher<String> mediaPicker;
+    private final java.util.concurrent.ExecutorService mediaWorker =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
 
     // Service connection state (main thread only)
-    private MeshService mesh;      // non-null == service is running and connected
+    private MeshService mesh; // non-null == service is running and connected
     private boolean bound;
 
     // ------------------------------------------------------------------
@@ -97,16 +107,26 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        contactScanner = registerForActivityResult(new ScanContract(), result -> {
-            if (result.getContents() == null) return;
-            String id = crypto().importContact(result.getContents());
-            if (id == null) {
-                Toast.makeText(this, "This QR is not a valid OffGrid contact", Toast.LENGTH_LONG).show();
-                return;
-            }
-            setRecipient(id);
-            showVerificationDialog(id);
-        });
+        mediaPicker =
+                registerForActivityResult(
+                        new ActivityResultContracts.GetContent(), this::prepareAttachment);
+        contactScanner =
+                registerForActivityResult(
+                        new ScanContract(),
+                        result -> {
+                            if (result.getContents() == null) return;
+                            String id = crypto().importContact(result.getContents());
+                            if (id == null) {
+                                Toast.makeText(
+                                                this,
+                                                "This QR is not a valid OffGrid contact",
+                                                Toast.LENGTH_LONG)
+                                        .show();
+                                return;
+                            }
+                            setRecipient(id);
+                            showVerificationDialog(id);
+                        });
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         setContentView(R.layout.activity_main);
 
@@ -122,28 +142,104 @@ public class MainActivity extends AppCompatActivity {
 
         chatViewModel = new ViewModelProvider(this).get(ChatViewModel.class);
         adapter = new ChatAdapter(chatViewModel.entries);
+        adapter.interaction(
+                new ChatAdapter.Interaction() {
+                    @Override
+                    public void open(ChatAdapter.ChatEntry entry) {
+                        openAttachment(entry);
+                    }
+
+                    @Override
+                    public boolean longPress(ChatAdapter.ChatEntry entry) {
+                        if (!entry.outgoing
+                                || !entry.message.isPrivate()
+                                || entry.status.equals("UNSENT")) return false;
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Unsend private message?")
+                                .setMessage(
+                                        "Removes your app copy and requests removal on the"
+                                            + " contact's phone. They must reconnect for the"
+                                            + " request to arrive. Screenshots and exported copies"
+                                            + " cannot be recalled.")
+                                .setPositiveButton(
+                                        "Request unsend",
+                                        (d, w) -> {
+                                            if (mesh != null)
+                                                mesh.unsend(entry.message.getMessageId());
+                                            else
+                                                mediaWorker.execute(() -> {
+                                                    try {
+                                                        new PrivateActions(
+                                                                        MainActivity.this,
+                                                                        MessageStore.get(
+                                                                                MainActivity.this),
+                                                                        crypto())
+                                                                .unsend(
+                                                                        entry.message
+                                                                                .getMessageId(),
+                                                                        System.currentTimeMillis());
+                                                        runOnUiThread(() -> {
+                                                            if (!isDestroyed())
+                                                                Toast.makeText(
+                                                                                MainActivity.this,
+                                                                                "Unsend saved."
+                                                                                    + " Start the"
+                                                                                    + " mesh within"
+                                                                                    + " 10 minutes"
+                                                                                    + " to attempt"
+                                                                                    + " delivery.",
+                                                                                Toast.LENGTH_LONG)
+                                                                        .show();
+                                                        });
+                                                    } catch (Exception e) {
+                                                        runOnUiThread(() -> {
+                                                            if (!isDestroyed())
+                                                                Toast.makeText(
+                                                                                MainActivity.this,
+                                                                                e.getMessage(),
+                                                                                Toast.LENGTH_LONG)
+                                                                        .show();
+                                                        });
+                                                    }
+                                                });
+                                        })
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show();
+                        return true;
+                    }
+                });
         layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
         chatRecycler.setLayoutManager(layoutManager);
         chatRecycler.setAdapter(adapter);
         MessageStore store = MessageStore.get(this);
-        store.outgoingFailures().observe(this, messageId -> {
-            if (messageId.equals(chatViewModel.pendingMessageId)) {
-                chatViewModel.pendingMessageId = null;
-                chatViewModel.pendingText = null;
-                updateUi(); // leave the draft available, even if failure happened off-screen
-            }
-        });
-        store.dao().observeHistory().observe(this, rows -> {
-            int version = ++historyVersion;
-            store.loadHistory(rows, (entries, unreadable) -> {
-                if (isDestroyed() || version != historyVersion) return;
-                showStoredHistory(entries, unreadable);
-            });
-        });
+        store.outgoingFailures()
+                .observe(
+                        this,
+                        messageId -> {
+                            if (messageId.equals(chatViewModel.pendingMessageId)) {
+                                chatViewModel.pendingMessageId = null;
+                                chatViewModel.pendingText = null;
+                                updateUi(); // leave the draft available, even if failure happened
+                                // off-screen
+                            }
+                        });
+        store.dao()
+                .observeHistory()
+                .observe(
+                        this,
+                        rows -> {
+                            int version = ++historyVersion;
+                            store.loadHistory(
+                                    rows,
+                                    (entries, unreadable) -> {
+                                        if (isDestroyed() || version != historyVersion) return;
+                                        showStoredHistory(entries, unreadable);
+                                    });
+                        });
 
-        messageInput.setFilters(new InputFilter[]{
-                new InputFilter.LengthFilter(MeshMessage.MAX_TEXT_LENGTH)});
+        messageInput.setFilters(
+                new InputFilter[] {new InputFilter.LengthFilter(MeshMessage.MAX_TEXT_LENGTH)});
         messageInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendCurrentMessage();
@@ -152,6 +248,7 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
         sendButton.setOnClickListener(v -> sendCurrentMessage());
+        findViewById(R.id.attachButton).setOnClickListener(v -> chooseAttachment());
         toggleButton.setOnClickListener(v -> onToggleClicked());
         recipientButton.setOnClickListener(v -> showRecipientDialog());
         contactButton.setOnClickListener(v -> showMyContactDialog());
@@ -164,12 +261,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onDestroy() {
+        mediaWorker.shutdown();
+        super.onDestroy();
+    }
+
+    @Override
     protected void onStart() {
         super.onStart();
-        MessageStore.get(this).refreshExpiration(() -> {
-            if (!isDestroyed()) Toast.makeText(this,
-                    "Could not refresh saved message status", Toast.LENGTH_LONG).show();
-        });
+        MessageStore.get(this)
+                .refreshExpiration(() -> {
+                    if (!isDestroyed())
+                        Toast.makeText(
+                                        this,
+                                        "Could not refresh saved message status",
+                                        Toast.LENGTH_LONG)
+                                .show();
+                });
         // flags = 0: connect if/when the service is running, never create or keep it alive.
         bound = bindService(new Intent(this, MeshService.class), serviceConnection, 0);
     }
@@ -192,40 +300,42 @@ public class MainActivity extends AppCompatActivity {
     // Service binding
     // ------------------------------------------------------------------
 
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder binder) {
-            mesh = ((MeshService.LocalBinder) binder).getService();
-            mesh.addListener(meshListener);
-            updateUi();
-        }
+    private final ServiceConnection serviceConnection =
+            new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder binder) {
+                    mesh = ((MeshService.LocalBinder) binder).getService();
+                    mesh.addListener(meshListener);
+                    updateUi();
+                }
 
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            // Service stopped (Stop button, notification action, or process death).
-            mesh = null;
-            updateUi();
-        }
-    };
+                @Override
+                public void onServiceDisconnected(ComponentName name) {
+                    // Service stopped (Stop button, notification action, or process death).
+                    mesh = null;
+                    updateUi();
+                }
+            };
 
-    private final MeshService.MeshListener meshListener = new MeshService.MeshListener() {
-        @Override
-        public void onMessageReceived(@NonNull MeshMessage message) {
-            // Public messages, and private messages already decrypted by the service.
-            // Room updates the screen, including messages received while it was closed.
-        }
+    private final MeshService.MeshListener meshListener =
+            new MeshService.MeshListener() {
+                @Override
+                public void onMessageReceived(@NonNull MeshMessage message) {
+                    // Public messages, and private messages already decrypted by the service.
+                    // Room updates the screen, including messages received while it was closed.
+                }
 
-        @Override
-        public void onPeerCountChanged(int peerCount) {
-            updateUi();
-        }
+                @Override
+                public void onPeerCountChanged(int peerCount) {
+                    updateUi();
+                }
 
-        @Override
-        public void onMeshError(@NonNull String description) {
-            Toast.makeText(MainActivity.this, description, Toast.LENGTH_LONG).show();
-            updateUi();
-        }
-    };
+                @Override
+                public void onMeshError(@NonNull String description) {
+                    Toast.makeText(MainActivity.this, description, Toast.LENGTH_LONG).show();
+                    updateUi();
+                }
+            };
 
     // ------------------------------------------------------------------
     // Start / stop
@@ -256,8 +366,11 @@ public class MainActivity extends AppCompatActivity {
                     if (enabled) {
                         startMeshService();
                     } else {
-                        Toast.makeText(MainActivity.this,
-                                "Bluetooth must be on to join the mesh", Toast.LENGTH_LONG).show();
+                        Toast.makeText(
+                                        MainActivity.this,
+                                        "Bluetooth must be on to join the mesh",
+                                        Toast.LENGTH_LONG)
+                                .show();
                     }
                 }
             };
@@ -342,10 +455,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateRecipientButton() {
         String id = chatViewModel.recipientId;
-        recipientButton.setText(id == null
-                ? "To: Everyone"
-                : "To: \uD83D\uDD12 " + CryptoManager.formatId(id, 16)
-                        + (crypto().isVerified(id) ? " · ✓ Verified" : " · Unverified"));
+        recipientButton.setText(
+                id == null
+                        ? "To: Everyone"
+                        : "To: \uD83D\uDD12 "
+                                + crypto().contactLabel(id)
+                                + (crypto().isVerified(id) ? " · ✓ Verified" : " · Unverified"));
     }
 
     private void showRecipientDialog() {
@@ -353,27 +468,33 @@ public class MainActivity extends AppCompatActivity {
         final List<CharSequence> labels = new ArrayList<>();
         labels.add("Everyone (public)");
         for (CryptoManager.Contact c : contacts) {
-            labels.add("\uD83D\uDD12 " + CryptoManager.formatId(c.id, 16)
-                    + (c.verified ? "   ✓ Verified" : "   Unverified")
-                    + (c.addedManually ? "" : "   (heard on mesh)"));
+            labels.add(
+                    "\uD83D\uDD12 "
+                            + crypto().contactLabel(c.id)
+                            + (c.verified ? "   ✓ Verified" : "   Unverified")
+                            + (c.addedManually ? "" : "   (heard on mesh)"));
         }
         labels.add("+ Add contact…");
 
         new AlertDialog.Builder(this)
                 .setTitle("Send to")
-                .setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
-                    if (which == 0) {
-                        setRecipient(null);
-                    } else if (which == labels.size() - 1) {
-                        showAddContactDialog();
-                    } else {
-                        setRecipient(contacts.get(which - 1).id);
-                    }
-                })
-                .setNeutralButton(chatViewModel.recipientId == null ? "Scan QR" : "Verify selected", (d, w) -> {
-                    if (chatViewModel.recipientId == null) scanContact();
-                    else showVerificationDialog(chatViewModel.recipientId);
-                })
+                .setItems(
+                        labels.toArray(new CharSequence[0]),
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                setRecipient(null);
+                            } else if (which == labels.size() - 1) {
+                                showAddContactDialog();
+                            } else {
+                                setRecipient(contacts.get(which - 1).id);
+                            }
+                        })
+                .setNeutralButton(
+                        chatViewModel.recipientId == null ? "Scan QR" : "Manage selected",
+                        (d, w) -> {
+                            if (chatViewModel.recipientId == null) scanContact();
+                            else showContactActions(chatViewModel.recipientId);
+                        })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
@@ -382,49 +503,202 @@ public class MainActivity extends AppCompatActivity {
         final EditText input = new EditText(this);
         input.setHint(CryptoManager.CONTACT_PREFIX + "…");
         input.setMaxLines(4);
-        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(200)});
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(200)});
 
         String clip = readClipboardText();
-        if (clip != null && clip.trim().toLowerCase(Locale.ROOT)
-                .startsWith(CryptoManager.CONTACT_PREFIX)) {
+        if (clip != null
+                && clip.trim().toLowerCase(Locale.ROOT).startsWith(CryptoManager.CONTACT_PREFIX)) {
             input.setText(clip.trim()); // convenience: they probably just copied it
         }
 
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
         FrameLayout container = new FrameLayout(this);
         container.setPadding(pad, pad / 2, pad, 0);
-        container.addView(input, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        container.addView(
+                input,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         new AlertDialog.Builder(this)
                 .setTitle("Add contact")
-                .setMessage("Paste the contact string from the other person's \"My contact\" "
-                        + "screen.")
+                .setMessage(
+                        "Paste the contact string from the other person's \"My contact\" "
+                                + "screen.")
                 .setView(container)
-                .setPositiveButton("Add", (dialog, which) -> {
-                    String id = crypto().importContact(input.getText().toString());
-                    if (id == null) {
-                        Toast.makeText(this, "That isn't a valid OffGrid contact",
-                                Toast.LENGTH_LONG).show();
-                    } else {
-                        Toast.makeText(this, "Contact added", Toast.LENGTH_SHORT).show();
-                        setRecipient(id);
-                    }
-                })
+                .setPositiveButton(
+                        "Add",
+                        (dialog, which) -> {
+                            String id = crypto().importContact(input.getText().toString());
+                            if (id == null) {
+                                Toast.makeText(
+                                                this,
+                                                "That isn't a valid OffGrid contact",
+                                                Toast.LENGTH_LONG)
+                                        .show();
+                            } else {
+                                Toast.makeText(this, "Contact added", Toast.LENGTH_SHORT).show();
+                                setRecipient(id);
+                            }
+                        })
                 .setNeutralButton("Scan QR", (d, w) -> scanContact())
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
-    private void scanContact() {
-        if (!getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)) {
-            Toast.makeText(this, "No camera available. Paste a contact and compare fingerprints instead.",
-                    Toast.LENGTH_LONG).show();
+    private void showContactActions(String id) {
+        new AlertDialog.Builder(this)
+                .setTitle(crypto().contactLabel(id))
+                .setItems(
+                        new String[] {"Edit local nickname", "Verify fingerprint"},
+                        (d, which) -> {
+                            if (which == 0) showNicknameDialog(id);
+                            else showVerificationDialog(id);
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void showNicknameDialog(String id) {
+        EditText input = new EditText(this);
+        input.setSingleLine();
+        input.setText(crypto().nickname(id));
+        input.setHint("Local nickname (optional)");
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(40)});
+        new AlertDialog.Builder(this)
+                .setTitle("Edit nickname")
+                .setMessage(
+                        "Only stored on this phone. The contact ID and verification stay the same.")
+                .setView(input)
+                .setPositiveButton(
+                        "Save",
+                        (d, w) -> {
+                            String name = input.getText().toString();
+                            Runnable save =
+                                    () -> {
+                                        crypto().setNickname(id, name);
+                                        updateRecipientButton();
+                                        adapter.notifyDataSetChanged();
+                                    };
+                            if (crypto().nicknameInUse(id, name)) {
+                                new AlertDialog.Builder(this)
+                                        .setTitle("Nickname already used")
+                                        .setMessage(
+                                                "Another contact has this nickname. They remain"
+                                                        + " separate contacts; check their IDs.")
+                                        .setPositiveButton(
+                                                "Use anyway", (dialog, which) -> save.run())
+                                        .setNegativeButton(android.R.string.cancel, null)
+                                        .show();
+                            } else save.run();
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void chooseAttachment() {
+        if (mesh == null || chatViewModel.recipientId == null) {
+            Toast.makeText(
+                            this,
+                            "Start the mesh and choose a private contact first",
+                            Toast.LENGTH_LONG)
+                    .show();
             return;
         }
-        contactScanner.launch(new ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                .setPrompt("Scan the contact QR on the other person's phone")
-                .setBeepEnabled(false).setOrientationLocked(false));
+        new AlertDialog.Builder(this)
+                .setTitle("Send attachment")
+                .setItems(
+                        new String[] {
+                            "Photo (compressed, up to 48 KB)", "MP4 clip (up to 256 KB, 10 seconds)"
+                        },
+                        (d, which) -> {
+                            chatViewModel.mediaTarget = chatViewModel.recipientId;
+                            chatViewModel.mediaMime = which == 0 ? "image/jpeg" : "video/mp4";
+                            mediaPicker.launch(which == 0 ? "image/*" : "video/mp4");
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void prepareAttachment(Uri uri) {
+        if (uri == null) return;
+        String target = chatViewModel.mediaTarget, mime = chatViewModel.mediaMime;
+        if (target == null || mime == null) return;
+        Toast.makeText(this, "Preparing attachment…", Toast.LENGTH_SHORT).show();
+        mediaWorker.execute(() -> {
+            try {
+                byte[] bytes =
+                        mime.equals("image/jpeg")
+                                ? AttachmentPreparer.image(this, uri)
+                                : AttachmentPreparer.video(this, uri);
+                runOnUiThread(() -> {
+                    if (isDestroyed()) return;
+                    if (mesh == null)
+                        Toast.makeText(
+                                        this,
+                                        "Mesh stopped. Start it and select the attachment again.",
+                                        Toast.LENGTH_LONG)
+                                .show();
+                    else mesh.sendMedia(target, bytes, mime);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (!isDestroyed())
+                        Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void openAttachment(ChatAdapter.ChatEntry entry) {
+        if (entry.kind.equals("text")) return;
+        mediaWorker.execute(() -> {
+            try {
+                MessageStore store = MessageStore.get(this);
+                MediaRecord record = store.dao().media(entry.message.getMessageId());
+                if (record == null)
+                    throw new IllegalArgumentException("Attachment is not available");
+                byte[] bytes = new PrivateActions(this, store, crypto()).attachment(record.id);
+                Uri uri = AttachmentFiles.prepare(this, record.id, bytes, record.mime);
+                runOnUiThread(() -> {
+                    if (isDestroyed()) return;
+                    Intent view =
+                            new Intent(Intent.ACTION_VIEW)
+                                    .setDataAndType(uri, record.mime)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    view.setClipData(ClipData.newRawUri("OffGrid attachment", uri));
+                    try {
+                        startActivity(Intent.createChooser(view, "Open attachment"));
+                    } catch (android.content.ActivityNotFoundException e) {
+                        Toast.makeText(this, "No app can open this attachment", Toast.LENGTH_LONG)
+                                .show();
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (!isDestroyed())
+                        Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void scanContact() {
+        if (!getPackageManager()
+                .hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)) {
+            Toast.makeText(
+                            this,
+                            "No camera available. Paste a contact and compare fingerprints"
+                                    + " instead.",
+                            Toast.LENGTH_LONG)
+                    .show();
+            return;
+        }
+        contactScanner.launch(
+                new ScanOptions()
+                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        .setPrompt("Scan the contact QR on the other person's phone")
+                        .setBeepEnabled(false)
+                        .setOrientationLocked(false));
     }
 
     private void showVerificationDialog(String id) {
@@ -432,21 +706,26 @@ public class MainActivity extends AppCompatActivity {
         if (fingerprint == null) return;
         new AlertDialog.Builder(this)
                 .setTitle("Verify contact")
-                .setMessage("Compare this full fingerprint with the one shown in My contact on "
-                        + "the other person's phone, in person or over a trusted channel. "
-                        + "Scanning or importing alone does not verify who owns the contact.\n\n"
-                        + CryptoManager.formatId(fingerprint, 64))
-                .setPositiveButton("Fingerprints match", (d, w) -> {
-                    if (crypto().setVerified(id, fingerprint, true)) {
-                        updateRecipientButton();
-                        adapter.notifyDataSetChanged();
-                    }
-                })
-                .setNeutralButton("Remove verification", (d, w) -> {
-                    crypto().setVerified(id, fingerprint, false);
-                    updateRecipientButton();
-                    adapter.notifyDataSetChanged();
-                })
+                .setMessage(
+                        "Compare this full fingerprint with the one shown in My contact on the"
+                            + " other person's phone, in person or over a trusted channel. Scanning"
+                            + " or importing alone does not verify who owns the contact.\n\n"
+                                + CryptoManager.formatId(fingerprint, 64))
+                .setPositiveButton(
+                        "Fingerprints match",
+                        (d, w) -> {
+                            if (crypto().setVerified(id, fingerprint, true)) {
+                                updateRecipientButton();
+                                adapter.notifyDataSetChanged();
+                            }
+                        })
+                .setNeutralButton(
+                        "Remove verification",
+                        (d, w) -> {
+                            crypto().setVerified(id, fingerprint, false);
+                            updateRecipientButton();
+                            adapter.notifyDataSetChanged();
+                        })
                 .setNegativeButton("Not verified", null)
                 .show();
     }
@@ -457,8 +736,9 @@ public class MainActivity extends AppCompatActivity {
         int size = (int) (240 * getResources().getDisplayMetrics().density);
         qr.setLayoutParams(new LinearLayout.LayoutParams(size, size));
         qr.setContentDescription("Your OffGrid contact QR code");
-        try { qr.setImageBitmap(ContactQr.bitmap(cm.getContactString(), 512)); }
-        catch (com.google.zxing.WriterException e) {
+        try {
+            qr.setImageBitmap(ContactQr.bitmap(cm.getContactString(), 512));
+        } catch (com.google.zxing.WriterException e) {
             Toast.makeText(this, "Could not create contact QR", Toast.LENGTH_LONG).show();
         }
         LinearLayout qrContainer = new LinearLayout(this);
@@ -466,27 +746,37 @@ public class MainActivity extends AppCompatActivity {
         qrContainer.addView(qr);
         new AlertDialog.Builder(this)
                 .setTitle("My contact")
-                .setMessage("Your ID:\n" + CryptoManager.formatId(cm.getLocalId(), 32)
-                        + "\n\nFull fingerprint:\n" + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
-                        + "\n\nShare your contact with people who should be able to message you "
-                        + "privately. Confirm the ID with them in person or on another channel "
-                        + "so you know the contact is really theirs.")
+                .setMessage(
+                        "Your ID:\n"
+                                + CryptoManager.formatId(cm.getLocalId(), 32)
+                                + "\n\nFull fingerprint:\n"
+                                + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
+                                + "\n\n"
+                                + "Share your contact with people who should be able to message you"
+                                + " privately. Confirm the ID with them in person or on another"
+                                + " channel so you know the contact is really theirs.")
                 .setView(qrContainer)
-                .setPositiveButton("Share", (d, w) -> {
-                    Intent send = new Intent(Intent.ACTION_SEND)
-                            .setType("text/plain")
-                            .putExtra(Intent.EXTRA_TEXT, cm.getContactString());
-                    startActivity(Intent.createChooser(send, "Share contact"));
-                })
-                .setNeutralButton("Copy", (d, w) -> {
-                    ClipboardManager clipboard =
-                            (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                    if (clipboard != null) {
-                        clipboard.setPrimaryClip(
-                                ClipData.newPlainText("OffGrid contact", cm.getContactString()));
-                        Toast.makeText(this, "Contact copied", Toast.LENGTH_SHORT).show();
-                    }
-                })
+                .setPositiveButton(
+                        "Share",
+                        (d, w) -> {
+                            Intent send =
+                                    new Intent(Intent.ACTION_SEND)
+                                            .setType("text/plain")
+                                            .putExtra(Intent.EXTRA_TEXT, cm.getContactString());
+                            startActivity(Intent.createChooser(send, "Share contact"));
+                        })
+                .setNeutralButton(
+                        "Copy",
+                        (d, w) -> {
+                            ClipboardManager clipboard =
+                                    (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                            if (clipboard != null) {
+                                clipboard.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                                "OffGrid contact", cm.getContactString()));
+                                Toast.makeText(this, "Contact copied", Toast.LENGTH_SHORT).show();
+                            }
+                        })
                 .setNegativeButton("Close", null)
                 .show();
     }
@@ -526,9 +816,12 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         if (nearBottom && !entries.isEmpty()) chatRecycler.scrollToPosition(entries.size() - 1);
-        if (unreadable) Toast.makeText(this,
-                "Some saved messages could not be decrypted. Original data was kept.",
-                Toast.LENGTH_LONG).show();
+        if (unreadable)
+            Toast.makeText(
+                            this,
+                            "Some saved messages could not be decrypted. Original data was kept.",
+                            Toast.LENGTH_LONG)
+                    .show();
     }
 
     private boolean isNearBottom() {
@@ -558,19 +851,22 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------------
 
     private void showPermissionDeniedDialog(boolean permanentlyDenied) {
-        String permissionName = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                ? "Nearby devices" : "Location";
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                .setTitle("Permission needed")
-                .setMessage("OffGrid needs the \"" + permissionName + "\" permission to find and "
-                        + "talk to people around you without internet or cellular service.")
-                .setNegativeButton(android.R.string.cancel, null);
+        String permissionName =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? "Nearby devices" : "Location";
+        AlertDialog.Builder builder =
+                new AlertDialog.Builder(this)
+                        .setTitle("Permission needed")
+                        .setMessage(
+                                "OffGrid needs the \""
+                                        + permissionName
+                                        + "\" permission to find and talk to people around you"
+                                        + " without internet or cellular service.")
+                        .setNegativeButton(android.R.string.cancel, null);
         if (permanentlyDenied) {
-            builder.setPositiveButton("Open settings",
-                    (d, w) -> BlePermissionHelper.openAppSettings(this));
+            builder.setPositiveButton(
+                    "Open settings", (d, w) -> BlePermissionHelper.openAppSettings(this));
         } else {
-            builder.setPositiveButton("Try again",
-                    (d, w) -> permissionHelper.requestPermissions());
+            builder.setPositiveButton("Try again", (d, w) -> permissionHelper.requestPermissions());
         }
         builder.show();
     }
@@ -580,10 +876,11 @@ public class MainActivity extends AppCompatActivity {
         if (!BlePermissionHelper.isLocationServiceRequiredAndOff(this)) return;
         new AlertDialog.Builder(this)
                 .setTitle("Turn on Location")
-                .setMessage("On this Android version, Bluetooth scanning only works while "
-                        + "Location services are on. OffGrid never reads or stores your location.")
-                .setPositiveButton("Open settings",
-                        (d, w) -> BlePermissionHelper.openLocationSettings(this))
+                .setMessage(
+                        "On this Android version, Bluetooth scanning only works while Location"
+                                + " services are on. OffGrid never reads or stores your location.")
+                .setPositiveButton(
+                        "Open settings", (d, w) -> BlePermissionHelper.openLocationSettings(this))
                 .setNegativeButton("Not now", null)
                 .show();
     }
@@ -593,12 +890,17 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------------
 
     private void applyWindowInsets() {
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root), (view, insets) -> {
-            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
-                    | WindowInsetsCompat.Type.displayCutout());
-            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-            view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
-            return WindowInsetsCompat.CONSUMED;
-        });
+        ViewCompat.setOnApplyWindowInsetsListener(
+                findViewById(R.id.root),
+                (view, insets) -> {
+                    Insets bars =
+                            insets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                                            | WindowInsetsCompat.Type.displayCutout());
+                    Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+                    view.setPadding(
+                            bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
+                    return WindowInsetsCompat.CONSUMED;
+                });
     }
 }
