@@ -137,6 +137,7 @@ public class MeshService extends Service {
 
         /** A recoverable problem the UI may want to surface (e.g. Location is off). */
         void onMeshError(@NonNull String description);
+
     }
 
     public class LocalBinder extends Binder {
@@ -203,6 +204,8 @@ public class MeshService extends Service {
 
     private String localSenderId;
     private CryptoManager crypto;
+    private MessageStore store;
+    private boolean storageReady;
     private long lastKeyAnnounceMs;   // mesh thread only
     private volatile int peerCount;
     private volatile boolean meshActive;
@@ -243,6 +246,8 @@ public class MeshService extends Service {
         mainHandler = new Handler(Looper.getMainLooper());
         crypto = CryptoManager.getInstance(this);   // first run generates the identity key
         localSenderId = crypto.getLocalId();
+        store = MessageStore.get(this);
+        meshHandler.post(this::restorePending);
 
         createNotificationChannel();
         ContextCompat.registerReceiver(this, bluetoothStateReceiver,
@@ -348,9 +353,10 @@ public class MeshService extends Service {
             return null;
         }
         meshHandler.post(() -> {
-            seenCache.markSeen(message.getMessageId()); // so an echo from the mesh is dropped
-            addToRelayBuffer(message);
-            scheduleConnectPass(nextJitterMs());
+            if (persistAndBuffer(message, message, true, message)) {
+                seenCache.markSeen(message.getMessageId());
+                scheduleConnectPass(nextJitterMs());
+            }
         });
         return message;
     }
@@ -396,9 +402,10 @@ public class MeshService extends Service {
                     ciphertext, crypto.getPublicKeyBase64(), MeshMessage.DEFAULT_TTL, timestamp);
             final MeshMessage view = wire.withPlaintext(text);
             meshHandler.post(() -> {
-                seenCache.markSeen(wire.getMessageId());
-                addToRelayBuffer(wire); // only the ciphertext form is ever buffered or sent
-                scheduleConnectPass(nextJitterMs());
+                if (persistAndBuffer(wire, view, true, wire)) {
+                    seenCache.markSeen(wire.getMessageId());
+                    scheduleConnectPass(nextJitterMs());
+                }
             });
             return new SendResult(SendStatus.SENT, view);
         } catch (IllegalArgumentException e) {
@@ -416,6 +423,10 @@ public class MeshService extends Service {
 
     private void startMesh() {
         if (meshActive || destroyed) return;
+        if (!storageReady) {
+            reportError("Message storage unavailable; mesh was not started");
+            return;
+        }
 
         if (!hasBlePermissions()) {
             setStatus("Bluetooth permissions required");
@@ -515,7 +526,15 @@ public class MeshService extends Service {
             // Expire old relay entries and seen-ids.
             Iterator<BufferedMessage> bit = relayBuffer.values().iterator();
             while (bit.hasNext()) {
-                if (now - bit.next().storedAtMs > RELAY_BUFFER_TTL_MS) bit.remove();
+                BufferedMessage buffered = bit.next();
+                if (now - buffered.storedAtMs >= RELAY_BUFFER_TTL_MS) {
+                    try {
+                        store.removePending(buffered.message.getMessageId(), "EXPIRED");
+                        bit.remove();
+                    } catch (RuntimeException e) {
+                        reportError("Could not expire a stored message");
+                    }
+                }
             }
             seenCache.purgeExpired();
             if (now - lastKeyAnnounceMs >= KEY_ANNOUNCE_INTERVAL_MS) announceKey();
@@ -672,59 +691,38 @@ public class MeshService extends Service {
             return;
         }
 
-        if (!seenCache.markSeen(incoming.getMessageId())) {
-            return; // duplicate: already delivered/relayed
-        }
-        if (incoming.getSenderId().equals(localSenderId)) {
-            return; // our own message looped back
-        }
-
-        if (!processByType(incoming)) {
-            return; // forged or undecryptable: neither delivered nor relayed
-        }
-
-        Peer source = peers.get(sourceAddress);
-        if (source != null) source.remember(incoming.getMessageId());
-
-        // Relay every valid packet, including private ones meant for someone else (flooding).
-        // Relays only ever handle the encrypted form.
-        MeshMessage outgoing = incoming.withDecrementedTtl();
-        if (outgoing.isRelayable()) {
-            addToRelayBuffer(outgoing);
-            scheduleConnectPass(nextJitterMs());
-        }
-    }
-
-    /**
-     * Applies type-specific handling to a new (non-duplicate) packet.
-     *
-     * @return false if the packet is bogus and must not be relayed
-     */
-    private boolean processByType(MeshMessage message) {
-        switch (message.getType()) {
-            case MeshMessage.TYPE_PUBLIC:
-                dispatchReceived(message);
-                return true;
-
-            case MeshMessage.TYPE_KEY_ANNOUNCE:
-                // Valid only if the key hashes to the claimed sender ID.
-                return crypto.registerAnnouncedKey(message.getSenderId(), message.getText());
-
-            case MeshMessage.TYPE_PRIVATE:
-                if (!localSenderId.equals(message.getTargetId())) {
-                    return true; // not for us: relay it, but never look inside
-                }
-                try {
-                    String plaintext = crypto.decrypt(message);
-                    dispatchReceived(message.withPlaintext(plaintext));
-                    return true;
-                } catch (GeneralSecurityException | IllegalArgumentException e) {
-                    Log.w(TAG, "Dropped undecryptable private message: " + e.getMessage());
-                    return false;
-                }
-
-            default:
-                return false;
+        if (seenCache.hasSeen(incoming.getMessageId())
+                || incoming.getSenderId().equals(localSenderId)) return;
+        try {
+            if (store.dao().containsChat(incoming.getMessageId()) > 0
+                    || store.dao().containsPending(incoming.getMessageId()) > 0) return;
+            MeshMessage display = null;
+            switch (incoming.getType()) {
+                case MeshMessage.TYPE_PUBLIC:
+                    display = incoming;
+                    break;
+                case MeshMessage.TYPE_KEY_ANNOUNCE:
+                    if (!crypto.registerAnnouncedKey(incoming.getSenderId(), incoming.getText())) return;
+                    break;
+                case MeshMessage.TYPE_PRIVATE:
+                    if (localSenderId.equals(incoming.getTargetId())) {
+                        display = incoming.withPlaintext(crypto.decrypt(incoming));
+                    }
+                    break;
+                default: return;
+            }
+            MeshMessage outgoing = incoming.withDecrementedTtl();
+            if (!persistAndBuffer(incoming, display, false,
+                    outgoing.isRelayable() ? outgoing : null)) return;
+            seenCache.markSeen(incoming.getMessageId());
+            Peer source = peers.get(sourceAddress);
+            if (source != null) source.remember(incoming.getMessageId());
+            if (display != null) dispatchReceived(display);
+            if (outgoing.isRelayable()) scheduleConnectPass(nextJitterMs());
+        } catch (GeneralSecurityException | IllegalArgumentException e) {
+            Log.w(TAG, "Dropped invalid or undecryptable packet", e);
+        } catch (RuntimeException e) {
+            reportError("Could not read message storage; packet was not accepted");
         }
     }
 
@@ -733,9 +731,10 @@ public class MeshService extends Service {
         lastKeyAnnounceMs = SystemClock.elapsedRealtime();
         MeshMessage announce = MeshMessage.createKeyAnnounce(
                 localSenderId, crypto.getPublicKeyBase64(), KEY_ANNOUNCE_TTL);
-        seenCache.markSeen(announce.getMessageId());
-        addToRelayBuffer(announce);
-        scheduleConnectPass(nextJitterMs());
+        if (persistAndBuffer(announce, null, false, announce)) {
+            seenCache.markSeen(announce.getMessageId());
+            scheduleConnectPass(nextJitterMs());
+        }
     }
 
     // ------------------------------------------------------------------
@@ -936,9 +935,55 @@ public class MeshService extends Service {
     // Relay buffer + outbound connection scheduling
     // ------------------------------------------------------------------
 
-    private void addToRelayBuffer(MeshMessage message) {
-        relayBuffer.put(message.getMessageId(),
-                new BufferedMessage(message, SystemClock.elapsedRealtime()));
+    private void restorePending() {
+        try {
+            long wallNow = System.currentTimeMillis();
+            long elapsedNow = SystemClock.elapsedRealtime();
+            store.expire(wallNow);
+            for (PendingRecord row : store.dao().pending()) {
+                MeshMessage message = store.decodePending(row);
+                long remaining = Math.min(RELAY_BUFFER_TTL_MS, row.expiresAtMs - wallNow);
+                if (remaining <= 0) continue;
+                BufferedMessage buffered = new BufferedMessage(message,
+                        elapsedNow - (RELAY_BUFFER_TTL_MS - remaining));
+                buffered.forwardCount = row.forwardCount;
+                relayBuffer.put(message.getMessageId(), buffered);
+                seenCache.markSeen(message.getMessageId());
+            }
+            trimRelayBuffer();
+            storageReady = true;
+        } catch (Exception e) {
+            Log.e(TAG, "Could not restore pending messages", e);
+            reportError("Saved messages could not be restored; original data was kept");
+        }
+    }
+
+    private boolean persistAndBuffer(MeshMessage wire, @Nullable MeshMessage display,
+                                     boolean outgoing, @Nullable MeshMessage relay) {
+        if (!storageReady) {
+            reportError("Message storage unavailable; message was not queued");
+            if (outgoing) store.outgoingFailed(wire.getMessageId());
+            return false;
+        }
+        try {
+            long now = System.currentTimeMillis();
+            store.save(wire, display, outgoing, outgoing ? wire.getTimestamp() : now,
+                    relay, now, now + RELAY_BUFFER_TTL_MS);
+            if (relay != null) {
+                relayBuffer.put(relay.getMessageId(),
+                        new BufferedMessage(relay, SystemClock.elapsedRealtime()));
+                trimRelayBuffer();
+            }
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Could not persist message", e);
+            reportError("Could not update saved messages; check message status before retrying");
+            if (outgoing) store.outgoingFailed(wire.getMessageId());
+            return false;
+        }
+    }
+
+    private void trimRelayBuffer() {
         // When full, evict a key announcement first (cheap to resend), else the oldest entry.
         while (relayBuffer.size() > RELAY_BUFFER_MAX) {
             String victim = null;
@@ -950,6 +995,7 @@ public class MeshService extends Service {
                 }
             }
             if (victim == null) break;
+            store.removePending(victim, "EVICTED");
             relayBuffer.remove(victim);
         }
     }
@@ -958,6 +1004,7 @@ public class MeshService extends Service {
         List<MeshMessage> out = new ArrayList<>();
         for (BufferedMessage b : relayBuffer.values()) {
             if (out.size() >= limit) break;
+            if (SystemClock.elapsedRealtime() - b.storedAtMs >= RELAY_BUFFER_TTL_MS) continue;
             if (b.forwardCount >= MAX_FORWARDS_PER_MESSAGE) continue;
             if (peer.deliveredIds.contains(b.message.getMessageId())) continue;
             out.add(b.message);
@@ -1164,7 +1211,14 @@ public class MeshService extends Service {
             delivered++;
             peer.remember(message.getMessageId());
             BufferedMessage buffered = relayBuffer.get(message.getMessageId());
-            if (buffered != null) buffered.forwardCount++;
+            if (buffered != null) {
+                try {
+                    store.forwarded(message.getMessageId(), buffered.forwardCount + 1);
+                    buffered.forwardCount++;
+                } catch (RuntimeException e) {
+                    reportError("Could not save forwarding progress");
+                }
+            }
         }
 
         private void armTimeout() {

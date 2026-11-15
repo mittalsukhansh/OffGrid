@@ -56,13 +56,13 @@ import java.util.Locale;
  */
 public class MainActivity extends AppCompatActivity {
 
-    private static final int MAX_HISTORY = 500;
-
     /** Keeps chat history and the selected recipient across configuration changes. */
     public static class ChatViewModel extends ViewModel {
         final List<ChatAdapter.ChatEntry> entries = new ArrayList<>();
         /** Device ID of the selected private recipient, or null for "Everyone". */
         @Nullable String recipientId;
+        @Nullable String pendingMessageId;
+        @Nullable String pendingText;
     }
 
     // Views
@@ -78,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private ChatAdapter adapter;
     private ChatViewModel chatViewModel;
     private BlePermissionHelper permissionHelper;
+    private int historyVersion;
 
     // Service connection state (main thread only)
     private MeshService mesh;      // non-null == service is running and connected
@@ -109,6 +110,21 @@ public class MainActivity extends AppCompatActivity {
         layoutManager.setStackFromEnd(true);
         chatRecycler.setLayoutManager(layoutManager);
         chatRecycler.setAdapter(adapter);
+        MessageStore store = MessageStore.get(this);
+        store.outgoingFailures().observe(this, messageId -> {
+            if (messageId.equals(chatViewModel.pendingMessageId)) {
+                chatViewModel.pendingMessageId = null;
+                chatViewModel.pendingText = null;
+                updateUi(); // leave the draft available, even if failure happened off-screen
+            }
+        });
+        store.dao().observeHistory().observe(this, rows -> {
+            int version = ++historyVersion;
+            store.loadHistory(rows, (entries, unreadable) -> {
+                if (isDestroyed() || version != historyVersion) return;
+                showStoredHistory(entries, unreadable);
+            });
+        });
 
         messageInput.setFilters(new InputFilter[]{
                 new InputFilter.LengthFilter(MeshMessage.MAX_TEXT_LENGTH)});
@@ -134,6 +150,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        MessageStore.get(this).refreshExpiration(() -> {
+            if (!isDestroyed()) Toast.makeText(this,
+                    "Could not refresh saved message status", Toast.LENGTH_LONG).show();
+        });
         // flags = 0: connect if/when the service is running, never create or keep it alive.
         bound = bindService(new Intent(this, MeshService.class), serviceConnection, 0);
     }
@@ -176,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onMessageReceived(@NonNull MeshMessage message) {
             // Public messages, and private messages already decrypted by the service.
-            addEntry(new ChatAdapter.ChatEntry(message, false, System.currentTimeMillis()));
+            // Room updates the screen, including messages received while it was closed.
         }
 
         @Override
@@ -249,6 +269,7 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------------
 
     private void sendCurrentMessage() {
+        if (chatViewModel.pendingMessageId != null) return;
         String text = messageInput.getText().toString().trim();
         if (text.isEmpty()) return;
         if (mesh == null) {
@@ -272,8 +293,10 @@ public class MainActivity extends AppCompatActivity {
             }
             sent = result.message;
         }
-        addEntry(new ChatAdapter.ChatEntry(sent, true, sent.getTimestamp()));
-        messageInput.setText("");
+        // Display only after the service has committed the message and pending packet to Room.
+        chatViewModel.pendingMessageId = sent.getMessageId();
+        chatViewModel.pendingText = text;
+        updateUi();
     }
 
     private static String describeFailure(MeshService.SendStatus status) {
@@ -415,19 +438,25 @@ public class MainActivity extends AppCompatActivity {
     // Chat list
     // ------------------------------------------------------------------
 
-    private void addEntry(ChatAdapter.ChatEntry entry) {
-        List<ChatAdapter.ChatEntry> list = chatViewModel.entries;
-        boolean wasNearBottom = isNearBottom();
-
-        list.add(entry);
-        adapter.notifyItemInserted(list.size() - 1);
-        if (list.size() > MAX_HISTORY) {
-            list.remove(0);
-            adapter.notifyItemRemoved(0);
+    private void showStoredHistory(List<ChatAdapter.ChatEntry> entries, boolean unreadable) {
+        boolean nearBottom = isNearBottom();
+        chatViewModel.entries.clear();
+        chatViewModel.entries.addAll(entries);
+        adapter.notifyDataSetChanged();
+        for (ChatAdapter.ChatEntry entry : entries) {
+            if (entry.message.getMessageId().equals(chatViewModel.pendingMessageId)) {
+                if (messageInput.getText().toString().trim().equals(chatViewModel.pendingText)) {
+                    messageInput.setText("");
+                }
+                chatViewModel.pendingMessageId = null;
+                chatViewModel.pendingText = null;
+                updateUi();
+            }
         }
-        if (entry.outgoing || wasNearBottom) {
-            chatRecycler.scrollToPosition(list.size() - 1);
-        }
+        if (nearBottom && !entries.isEmpty()) chatRecycler.scrollToPosition(entries.size() - 1);
+        if (unreadable) Toast.makeText(this,
+                "Some saved messages could not be decrypted. Original data was kept.",
+                Toast.LENGTH_LONG).show();
     }
 
     private boolean isNearBottom() {
@@ -442,7 +471,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateUi() {
         boolean running = mesh != null;
         toggleButton.setText(running ? "Stop Mesh" : "Start Mesh");
-        sendButton.setEnabled(running);
+        sendButton.setEnabled(running && chatViewModel.pendingMessageId == null);
 
         if (!running) {
             statusText.setText("Mesh stopped");

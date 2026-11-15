@@ -31,11 +31,18 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         public final boolean outgoing;
         /** Time shown in the bubble (send time for own messages, receive time for peers'). */
         public final long displayTimeMs;
+        public final String status;
 
         public ChatEntry(@NonNull MeshMessage message, boolean outgoing, long displayTimeMs) {
+            this(message, outgoing, displayTimeMs, outgoing ? "QUEUED" : "RECEIVED");
+        }
+
+        public ChatEntry(@NonNull MeshMessage message, boolean outgoing, long displayTimeMs,
+                         @NonNull String status) {
             this.message = message;
             this.outgoing = outgoing;
             this.displayTimeMs = displayTimeMs;
+            this.status = status;
         }
     }
 
@@ -70,7 +77,8 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         holder.senderText.setText(senderLabel(entry));
         holder.messageText.setText(entry.message.getText());
         holder.timeText.setText(
-                DateFormat.getTimeFormat(context).format(new Date(entry.displayTimeMs)));
+                DateFormat.getTimeFormat(context).format(new Date(entry.displayTimeMs))
+                        + (entry.outgoing ? " · " + statusLabel(entry.status) : ""));
 
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(CORNER_RADIUS_DP * context.getResources().getDisplayMetrics().density);
@@ -99,6 +107,15 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
             return m.isPrivate() ? "You \u2192 " + shortId(m.getTargetId()) + LOCK : "You";
         }
         return "Peer " + shortId(m.getSenderId()) + (m.isPrivate() ? " \u00B7 private" + LOCK : "");
+    }
+
+    private static String statusLabel(String status) {
+        switch (status) {
+            case "FORWARDED": return "Forwarded";
+            case "EXPIRED": return "Expired";
+            case "EVICTED": return "Queue full";
+            default: return "Queued";
+        }
     }
 
     private static String shortId(String id) {
