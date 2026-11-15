@@ -84,7 +84,7 @@ public class MessageStoreTest {
     @Test public void expirationRemovesQueueButKeepsHistoryAndStatus() throws Exception {
         MeshMessage message = MeshMessage.create(sender, "Offline");
         store.save(message, message, true, 100, message, 100, 200);
-        store.expire(200);
+        store.expire(100 + MessageStore.DELIVERY_TIMEOUT_MS);
         reopen();
         assertTrue(store.dao().pending().isEmpty());
         assertEquals("EXPIRED", store.dao().history().get(0).status);

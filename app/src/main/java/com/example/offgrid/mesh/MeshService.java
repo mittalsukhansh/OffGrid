@@ -166,7 +166,7 @@ public class MeshService extends Service {
     private static final int MAX_MESSAGES_PER_SESSION = 20;
     private static final int MAX_FORWARDS_PER_MESSAGE = 6;     // gossip fan-out per node
     private static final int RELAY_BUFFER_MAX = 200;
-    private static final long RELAY_BUFFER_TTL_MS = 10 * 60_000L;
+    private static final long RELAY_BUFFER_TTL_MS = MessageStore.DELIVERY_TIMEOUT_MS;
     private static final int MAX_PEERS = 200;
     private static final int MAX_REMEMBERED_IDS_PER_PEER = 500;
     private static final long PEER_TIMEOUT_MS = 30_000L;       // forget peers unseen this long
@@ -362,7 +362,8 @@ public class MeshService extends Service {
     }
 
     public enum SendStatus {
-        SENT,
+        /** Accepted for asynchronous persistence. Room, not this result, confirms QUEUED. */
+        ACCEPTED,
         /** Bad recipient ID, sending to yourself, or empty/too long text. */
         INVALID_MESSAGE,
         /** We do not have the recipient's public key yet. */
@@ -372,7 +373,7 @@ public class MeshService extends Service {
 
     public static final class SendResult {
         @NonNull public final SendStatus status;
-        /** Plaintext view of the sent message for the local UI; non-null only when SENT. */
+        /** Plaintext view of the sent message for the local UI; non-null only when ACCEPTED. */
         @Nullable public final MeshMessage message;
 
         SendResult(@NonNull SendStatus status, @Nullable MeshMessage message) {
@@ -407,7 +408,7 @@ public class MeshService extends Service {
                     scheduleConnectPass(nextJitterMs());
                 }
             });
-            return new SendResult(SendStatus.SENT, view);
+            return new SendResult(SendStatus.ACCEPTED, view);
         } catch (IllegalArgumentException e) {
             Log.w(TAG, "Rejected private message: " + e.getMessage());
             return new SendResult(SendStatus.INVALID_MESSAGE, null);
@@ -523,6 +524,9 @@ public class MeshService extends Service {
             }
             if (peersChanged) updatePeerCount();
 
+            // Receipt deadlines also apply after a private packet left the relay queue.
+            try { store.expire(System.currentTimeMillis()); }
+            catch (RuntimeException e) { reportError("Could not refresh delivery deadlines"); }
             // Expire old relay entries and seen-ids.
             Iterator<BufferedMessage> bit = relayBuffer.values().iterator();
             while (bit.hasNext()) {
@@ -691,12 +695,32 @@ public class MeshService extends Service {
             return;
         }
 
-        if (seenCache.hasSeen(incoming.getMessageId())
-                || incoming.getSenderId().equals(localSenderId)) return;
+        if (incoming.getSenderId().equals(localSenderId)) return;
         try {
-            if (store.dao().containsChat(incoming.getMessageId()) > 0
+            // ACKs addressed to us must be authenticated before any status mutation.
+            if (incoming.isAcknowledgement() && localSenderId.equals(incoming.getTargetId())) {
+                String payload = crypto.decryptAcknowledgement(incoming);
+                String originalId = store.confirmDelivery(incoming, payload);
+                if (originalId != null) {
+                    relayBuffer.remove(originalId);
+                    seenCache.markSeen(incoming.getMessageId());
+                }
+                return;
+            }
+            if (incoming.isPrivate() && localSenderId.equals(incoming.getTargetId())
+                    && store.dao().containsChat(incoming.getMessageId()) > 0) {
+                MeshMessage ack = store.cachedReceipt(incoming, System.currentTimeMillis());
+                if (ack != null && persistAndBuffer(incoming, null, false, ack)) {
+                    scheduleConnectPass(nextJitterMs());
+                }
+                return;
+            }
+            if (seenCache.hasSeen(incoming.getMessageId())
+                    || store.dao().containsChat(incoming.getMessageId()) > 0
                     || store.dao().containsPending(incoming.getMessageId()) > 0) return;
             MeshMessage display = null;
+            MeshMessage relay = incoming.withDecrementedTtl();
+            if (!relay.isRelayable()) relay = null;
             switch (incoming.getType()) {
                 case MeshMessage.TYPE_PUBLIC:
                     display = incoming;
@@ -707,22 +731,26 @@ public class MeshService extends Service {
                 case MeshMessage.TYPE_PRIVATE:
                     if (localSenderId.equals(incoming.getTargetId())) {
                         display = incoming.withPlaintext(crypto.decrypt(incoming));
+                        // The recipient atomically saves the message and receipt outbox entry.
+                        // It need not flood the original packet any further.
+                        relay = crypto.createAcknowledgement(incoming);
                     }
                     break;
+                case MeshMessage.TYPE_ACK:
+                    break; // opaque receipt for another device: relay, never display
                 default: return;
             }
-            MeshMessage outgoing = incoming.withDecrementedTtl();
-            if (!persistAndBuffer(incoming, display, false,
-                    outgoing.isRelayable() ? outgoing : null)) return;
+            if (!persistAndBuffer(incoming, display, false, relay)) return;
             seenCache.markSeen(incoming.getMessageId());
             Peer source = peers.get(sourceAddress);
             if (source != null) source.remember(incoming.getMessageId());
             if (display != null) dispatchReceived(display);
-            if (outgoing.isRelayable()) scheduleConnectPass(nextJitterMs());
+            if (relay != null) scheduleConnectPass(nextJitterMs());
         } catch (GeneralSecurityException | IllegalArgumentException e) {
-            Log.w(TAG, "Dropped invalid or undecryptable packet", e);
-        } catch (RuntimeException e) {
-            reportError("Could not read message storage; packet was not accepted");
+            Log.w(TAG, "Dropped invalid or unauthenticated packet", e);
+        } catch (Exception e) {
+            Log.e(TAG, "Could not accept packet or receipt", e);
+            reportError("Could not read or update message storage; packet was not accepted");
         }
     }
 
@@ -944,10 +972,7 @@ public class MeshService extends Service {
                 MeshMessage message = store.decodePending(row);
                 long remaining = Math.min(RELAY_BUFFER_TTL_MS, row.expiresAtMs - wallNow);
                 if (remaining <= 0) continue;
-                BufferedMessage buffered = new BufferedMessage(message,
-                        elapsedNow - (RELAY_BUFFER_TTL_MS - remaining));
-                buffered.forwardCount = row.forwardCount;
-                relayBuffer.put(message.getMessageId(), buffered);
+                cachePending(row, message, elapsedNow, wallNow);
                 seenCache.markSeen(message.getMessageId());
             }
             trimRelayBuffer();
@@ -956,6 +981,15 @@ public class MeshService extends Service {
             Log.e(TAG, "Could not restore pending messages", e);
             reportError("Saved messages could not be restored; original data was kept");
         }
+    }
+
+    private void cachePending(PendingRecord row, MeshMessage message, long elapsedNow, long wallNow) {
+        long remaining = Math.min(RELAY_BUFFER_TTL_MS, row.expiresAtMs - wallNow);
+        if (remaining <= 0 || relayBuffer.containsKey(message.getMessageId())) return;
+        BufferedMessage buffered = new BufferedMessage(message,
+                elapsedNow - (RELAY_BUFFER_TTL_MS - remaining));
+        buffered.forwardCount = row.forwardCount;
+        relayBuffer.put(message.getMessageId(), buffered);
     }
 
     private boolean persistAndBuffer(MeshMessage wire, @Nullable MeshMessage display,
@@ -970,8 +1004,8 @@ public class MeshService extends Service {
             store.save(wire, display, outgoing, outgoing ? wire.getTimestamp() : now,
                     relay, now, now + RELAY_BUFFER_TTL_MS);
             if (relay != null) {
-                relayBuffer.put(relay.getMessageId(),
-                        new BufferedMessage(relay, SystemClock.elapsedRealtime()));
+                PendingRecord row = store.dao().pendingById(relay.getMessageId());
+                if (row != null) cachePending(row, relay, SystemClock.elapsedRealtime(), now);
                 trimRelayBuffer();
             }
             return true;
@@ -995,7 +1029,7 @@ public class MeshService extends Service {
                 }
             }
             if (victim == null) break;
-            store.removePending(victim, "EVICTED");
+            store.removePending(victim, "FAILED");
             relayBuffer.remove(victim);
         }
     }
@@ -1168,7 +1202,7 @@ public class MeshService extends Service {
                 if (frameIndex < frames.size()) {
                     writeCurrentFrame();
                 } else {
-                    onMessageDelivered(batch.get(messageIndex));
+                    onMessageForwarded(batch.get(messageIndex));
                     messageIndex++;
                     startNextMessage();
                 }
@@ -1180,7 +1214,14 @@ public class MeshService extends Service {
                 finish(null);
                 return;
             }
-            frames = buildFrames(batch.get(messageIndex).toBytes(), mtu);
+            MeshMessage next = batch.get(messageIndex);
+            BufferedMessage pending = relayBuffer.get(next.getMessageId());
+            if (pending == null || SystemClock.elapsedRealtime() - pending.storedAtMs >= RELAY_BUFFER_TTL_MS) {
+                messageIndex++;
+                startNextMessage();
+                return;
+            }
+            frames = buildFrames(next.toBytes(), mtu);
             frameIndex = 0;
             writeCurrentFrame();
         }
@@ -1207,7 +1248,7 @@ public class MeshService extends Service {
             }
         }
 
-        private void onMessageDelivered(MeshMessage message) {
+        private void onMessageForwarded(MeshMessage message) {
             delivered++;
             peer.remember(message.getMessageId());
             BufferedMessage buffered = relayBuffer.get(message.getMessageId());

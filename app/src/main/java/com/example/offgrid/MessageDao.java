@@ -17,17 +17,23 @@ public interface MessageDao {
     List<ChatRecord> history();
     @Query("SELECT * FROM pending_messages ORDER BY storedAtMs, id")
     List<PendingRecord> pending();
+    @Query("SELECT * FROM messages WHERE id = :id") ChatRecord chat(String id);
+    @Query("SELECT * FROM pending_messages WHERE id = :id") PendingRecord pendingById(String id);
     @Query("SELECT COUNT(*) FROM messages WHERE id = :id") int containsChat(String id);
     @Query("SELECT COUNT(*) FROM pending_messages WHERE id = :id") int containsPending(String id);
-    @Query("UPDATE messages SET status = :status WHERE id = :id AND outgoing = 1")
-    void setStatus(String id, String status);
-    @Query("UPDATE messages SET status = :status WHERE id = :id AND status = 'QUEUED'")
+    @Query("UPDATE messages SET status = 'FORWARDED' WHERE id = :id AND outgoing = 1 AND status = 'QUEUED'")
+    void markForwarded(String id);
+    @Query("UPDATE messages SET status = 'DELIVERED' WHERE id = :id AND outgoing = 1")
+    void markDelivered(String id);
+    @Query("UPDATE messages SET status = :status WHERE id = :id AND outgoing = 1 "
+            + "AND (status = 'QUEUED' OR (status = 'FORWARDED' AND conversationId != 'public'))")
     void finishQueued(String id, String status);
     @Query("UPDATE pending_messages SET forwardCount = :count WHERE id = :id")
     void setForwardCount(String id, int count);
     @Query("DELETE FROM pending_messages WHERE id = :id") void deletePending(String id);
-    @Query("UPDATE messages SET status = 'EXPIRED' WHERE status = 'QUEUED' AND id IN "
-            + "(SELECT id FROM pending_messages WHERE expiresAtMs <= :now)")
-    void expireStatuses(long now);
+    @Query("UPDATE messages SET status = 'EXPIRED' WHERE outgoing = 1 "
+            + "AND status IN ('QUEUED', 'FORWARDED') AND (conversationId != 'public' OR status = 'QUEUED') "
+            + "AND displayTimeMs <= :cutoff")
+    void expireStatuses(long cutoff);
     @Query("DELETE FROM pending_messages WHERE expiresAtMs <= :now") void deleteExpired(long now);
 }

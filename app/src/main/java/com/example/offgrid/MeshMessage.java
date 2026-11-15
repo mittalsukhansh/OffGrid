@@ -46,6 +46,7 @@ public final class MeshMessage {
     public static final int TYPE_PUBLIC = 0;
     public static final int TYPE_PRIVATE = 1;
     public static final int TYPE_KEY_ANNOUNCE = 2;
+    public static final int TYPE_ACK = 3;
 
     /** Optional explicit marker for "everyone"; equivalent to a null target. */
     public static final String BROADCAST = "BROADCAST";
@@ -116,6 +117,7 @@ public final class MeshMessage {
                 break;
 
             case TYPE_PRIVATE:
+            case TYPE_ACK:
                 if (targetId == null || !TARGET_ID.matcher(targetId).matches()) {
                     throw new IllegalArgumentException("private message needs a valid targetId");
                 }
@@ -190,6 +192,14 @@ public final class MeshMessage {
         return new MeshMessage(UUID.randomUUID().toString(), senderId, null, TYPE_KEY_ANNOUNCE,
                 publicKey, null, false, ttl, System.currentTimeMillis());
     }
+
+    public static MeshMessage createAcknowledgement(String id, String senderId, String targetId,
+                                                     String ciphertext, String senderKey, long timestamp) {
+        return new MeshMessage(id, senderId, targetId, TYPE_ACK, ciphertext, senderKey, true,
+                DEFAULT_TTL, timestamp);
+    }
+
+    public boolean isAcknowledgement() { return type == TYPE_ACK; }
 
     // ------------------------------------------------------------------
     // Accessors
@@ -380,7 +390,7 @@ public final class MeshMessage {
                     type,
                     json.getString(K_TEXT),
                     json.isNull(K_SENDER_KEY) ? null : json.getString(K_SENDER_KEY),
-                    type == TYPE_PRIVATE, // private text on the wire is always ciphertext
+                    type == TYPE_PRIVATE || type == TYPE_ACK,
                     json.getInt(K_TTL),
                     json.getLong(K_TIMESTAMP));
         } catch (JSONException e) {

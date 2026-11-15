@@ -61,15 +61,55 @@ existing 10-minute expiry and forwarding limit. Recovery uses the persisted wall
 expiry, so changing the device clock can affect expiration. Private relay packets
 retain their end-to-end ciphertext; decrypted display copies are never transmitted.
 
-Outgoing bubbles show **Queued**, **Forwarded**, **Expired**, or **Queue full**.
-“Forwarded” means a GATT write to a nearby peer succeeded; it is not confirmation
-that the final recipient received the message. The existing 200-packet queue limit
+Outgoing bubbles show **Queued**, **Forwarded**, **Delivered**, **Expired**, or **Failed**.
+“Forwarded” means a GATT write to a nearby peer succeeded. For a private message,
+“Delivered” requires an authenticated receipt from its intended recipient after
+the recipient committed the message to Room. It does not mean the person read it.
+The existing 200-packet queue limit
 still applies, with key announcements evicted first. Restarting does not reset
 persisted forwarding counts, but per-peer connection history remains in memory.
 
 `MessageStoreTest` exercises database reopening, private-content encryption, deduplication,
 forwarding progress, expiration, transactional rollback, and ciphertext authentication
 on an Android device with `./gradlew connectedDebugAndroidTest`.
+
+### Delivery acknowledgements
+
+`sendPrivateMessage` returns `ACCEPTED` for an asynchronous persistence request;
+only the committed database row confirms **Queued**. It never returns `SENT`.
+Storage failures preserve the composer's draft and show an error. Queue eviction
+records **Failed**. Transient Bluetooth failures keep retrying within the existing
+relay scheduling limits rather than claiming delivery or immediately failing.
+
+Private recipients generate an encrypted ACK (packet type 3) using ECDH,
+HKDF-SHA256 with a separate `offgrid-ack-v1` purpose, and AES-GCM. The receipt
+references the original message ID and SHA-256 fingerprint of its immutable wire
+fields. The sender authenticates/decrypts the ACK, checks both endpoints and the
+fingerprint against the saved outgoing message, then atomically marks it
+**Delivered** and deletes its pending packet. Relays cannot forge receipts;
+changing a private chat packet's type into an ACK fails authentication.
+
+The recipient atomically saves the incoming message and receipt outbox entry.
+Its encrypted history also caches the receipt so a duplicate original packet can
+requeue the same receipt after a restart without duplicating the conversation,
+resetting its expiry, or resetting its forwarding budget. ACKs are relayed as
+ciphertext and never appear as chat bubbles. Delivery does not automatically imply
+a read receipt.
+
+Unconfirmed private messages become **Expired** after ten minutes, including ones
+already forwarded or removed from the pending queue. A late valid receipt can
+confirm an expired/failed message; a subsequent GATT callback, timeout, or duplicate
+receipt cannot downgrade **Delivered**. Expiration means confirmation did not arrive
+in time, not proof that the recipient never received the message. Public broadcasts
+have no single intended recipient, so they never claim **Delivered** and remain
+**Forwarded** after a successful peer write.
+
+ACK is an additive extension to protocol version 2. Upgrade both endpoints for
+delivery confirmation; older clients ignore the new type and cannot confirm
+delivery. Existing encrypted history remains readable without a schema migration.
+`DeliveryReceiptTest` runs on the JVM; `AuthenticatedDeliveryTest` exercises three
+independent identities, real crypto, Room, replay protection, and terminal states
+in the CI emulator. Real multi-hop Bluetooth behavior still requires physical phones.
 
 * **Peer-to-Peer Mesh Networking**: Relays messages across multi-hop BLE connections to extend communication range beyond point-to-point hardware limits.
 * **Store & Forward Architecture**: Buffers outgoing packets locally until a route or recipient becomes reachable.

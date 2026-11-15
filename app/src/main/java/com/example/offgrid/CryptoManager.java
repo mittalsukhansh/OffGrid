@@ -141,7 +141,7 @@ public final class CryptoManager {
     private String publicKeyB64;
     private String localId;
 
-    private CryptoManager(Context appContext) {
+    CryptoManager(Context appContext) {
         prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         try {
             loadOrCreateIdentity();
@@ -256,12 +256,29 @@ public final class CryptoManager {
     @NonNull
     public String encrypt(@NonNull String messageId, @NonNull String targetId, long timestamp,
                           @NonNull String plaintext) throws GeneralSecurityException {
+        return encryptForPurpose(messageId, targetId, timestamp, plaintext, false);
+    }
+
+    public MeshMessage createAcknowledgement(MeshMessage original) throws GeneralSecurityException {
+        if (!original.isPrivate() || !localId.equals(original.getTargetId())) {
+            throw new GeneralSecurityException("Cannot acknowledge another device's message");
+        }
+        String id = java.util.UUID.randomUUID().toString();
+        long timestamp = System.currentTimeMillis();
+        String payload = DeliveryReceipt.payloadFor(original);
+        return MeshMessage.createAcknowledgement(id, localId, original.getSenderId(),
+                encryptForPurpose(id, original.getSenderId(), timestamp, payload, true),
+                publicKeyB64, timestamp);
+    }
+
+    private String encryptForPurpose(String messageId, String targetId, long timestamp,
+                                     String plaintext, boolean receipt) throws GeneralSecurityException {
         byte[] pt = plaintext.getBytes(StandardCharsets.UTF_8);
         if (pt.length == 0 || pt.length > MeshMessage.MAX_PRIVATE_PLAINTEXT_BYTES) {
             throw new IllegalArgumentException("plaintext size out of range");
         }
         ECPublicKey targetKey = getContactKey(targetId);
-        byte[] key = deriveKey(targetKey, localId, targetId);
+        byte[] key = deriveKey(targetKey, localId, targetId, receipt);
         try {
             byte[] iv = new byte[GCM_IV_BYTES];
             secureRandom.nextBytes(iv);
@@ -289,7 +306,15 @@ public final class CryptoManager {
      */
     @NonNull
     public String decrypt(@NonNull MeshMessage message) throws GeneralSecurityException {
-        if (!message.isPrivate() || !message.isPayloadEncrypted()
+        return decryptForPurpose(message, false);
+    }
+
+    public String decryptAcknowledgement(MeshMessage message) throws GeneralSecurityException {
+        return decryptForPurpose(message, true);
+    }
+
+    private String decryptForPurpose(MeshMessage message, boolean receipt) throws GeneralSecurityException {
+        if (!(receipt ? message.isAcknowledgement() : message.isPrivate()) || !message.isPayloadEncrypted()
                 || !localId.equals(message.getTargetId())) {
             throw new GeneralSecurityException("not a private message for this device");
         }
@@ -313,7 +338,7 @@ public final class CryptoManager {
         }
 
         ECPublicKey senderKey = decodePublicKey(senderKeyRaw);
-        byte[] key = deriveKey(senderKey, message.getSenderId(), localId);
+        byte[] key = deriveKey(senderKey, message.getSenderId(), localId, receipt);
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"),
@@ -333,14 +358,14 @@ public final class CryptoManager {
     // Key derivation
     // ------------------------------------------------------------------
 
-    private byte[] deriveKey(ECPublicKey peer, String senderId, String targetId)
+    private byte[] deriveKey(ECPublicKey peer, String senderId, String targetId, boolean receipt)
             throws GeneralSecurityException {
         KeyAgreement agreement = KeyAgreement.getInstance("ECDH");
         agreement.init(privateKey);
         agreement.doPhase(peer, true);
         byte[] shared = agreement.generateSecret();
         try {
-            byte[] info = ("offgrid-e2ee-v1|" + senderId + ">" + targetId)
+            byte[] info = ((receipt ? "offgrid-ack-v1|" : "offgrid-e2ee-v1|") + senderId + ">" + targetId)
                     .getBytes(StandardCharsets.UTF_8);
             return hkdfSha256(shared, info);
         } finally {

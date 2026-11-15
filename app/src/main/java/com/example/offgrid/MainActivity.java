@@ -287,7 +287,7 @@ public class MainActivity extends AppCompatActivity {
             }
         } else {
             MeshService.SendResult result = mesh.sendPrivateMessage(recipient, text);
-            if (result.status != MeshService.SendStatus.SENT || result.message == null) {
+            if (result.status != MeshService.SendStatus.ACCEPTED || result.message == null) {
                 Toast.makeText(this, describeFailure(result.status), Toast.LENGTH_LONG).show();
                 return;
             }

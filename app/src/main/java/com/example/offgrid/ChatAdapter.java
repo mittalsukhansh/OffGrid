@@ -112,8 +112,10 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
     private static String statusLabel(String status) {
         switch (status) {
             case "FORWARDED": return "Forwarded";
+            case "DELIVERED": return "Delivered";
             case "EXPIRED": return "Expired";
-            case "EVICTED": return "Queue full";
+            case "FAILED":
+            case "EVICTED": return "Failed · queue full";
             default: return "Queued";
         }
     }

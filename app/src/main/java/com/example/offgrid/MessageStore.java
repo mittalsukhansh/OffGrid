@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 
 /** Database operations run on the mesh thread or the history executor, never the UI thread. */
 public final class MessageStore {
+    public static final long DELIVERY_TIMEOUT_MS = 10 * 60_000L;
     private static volatile MessageStore instance;
     final MessageDatabase database;
     final StorageCipher cipher;
@@ -69,6 +70,9 @@ public final class MessageStore {
             chat.status = outgoing ? "QUEUED" : "RECEIVED";
             JSONObject body = new JSONObject().put("wire", wire.toJson())
                     .put("text", display.getText());
+            if (!outgoing && relay != null && relay.isAcknowledgement()) {
+                body.put("receipt", relay.toJson());
+            }
             chat.content = cipher.encrypt("history:" + chat.id,
                     body.toString().getBytes(StandardCharsets.UTF_8));
         }
@@ -95,12 +99,42 @@ public final class MessageStore {
     }
 
     public ChatAdapter.ChatEntry decodeChat(ChatRecord row) throws Exception {
-        JSONObject body = new JSONObject(new String(cipher.decrypt("history:" + row.id, row.content),
-                StandardCharsets.UTF_8));
+        JSONObject body = historyBody(row);
         MeshMessage wire = MeshMessage.fromJson(body.getJSONObject("wire"));
         if (!row.id.equals(wire.getMessageId())) throw new IllegalStateException("Message ID mismatch");
         MeshMessage display = wire.isPrivate() ? wire.withPlaintext(body.getString("text")) : wire;
         return new ChatAdapter.ChatEntry(display, row.outgoing, row.displayTimeMs, row.status);
+    }
+
+    private JSONObject historyBody(ChatRecord row) throws Exception {
+        return new JSONObject(new String(cipher.decrypt("history:" + row.id, row.content),
+                StandardCharsets.UTF_8));
+    }
+
+    /** Accepts only already-authenticated ACK plaintext, bound to the exact outgoing packet. */
+    public String confirmDelivery(MeshMessage ack, String authenticatedPayload) throws Exception {
+        DeliveryReceipt receipt = DeliveryReceipt.parse(authenticatedPayload);
+        ChatRecord row = dao().chat(receipt.originalId);
+        if (row == null || !row.outgoing) return null;
+        MeshMessage original = MeshMessage.fromJson(historyBody(row).getJSONObject("wire"));
+        if (!receipt.matches(ack, original)) return null;
+        database.runInTransaction(() -> {
+            dao().markDelivered(original.getMessageId());
+            dao().deletePending(original.getMessageId());
+        });
+        return original.getMessageId();
+    }
+
+    /** A duplicate can requeue the same cached ACK without displaying the chat again. */
+    public MeshMessage cachedReceipt(MeshMessage incoming, long now) throws Exception {
+        ChatRecord row = dao().chat(incoming.getMessageId());
+        if (row == null || row.outgoing) return null;
+        JSONObject body = historyBody(row);
+        MeshMessage original = MeshMessage.fromJson(body.getJSONObject("wire"));
+        if (!DeliveryReceipt.fingerprint(incoming).equals(DeliveryReceipt.fingerprint(original))
+                || !body.has("receipt")) return null;
+        MeshMessage ack = MeshMessage.fromJson(body.getJSONObject("receipt"));
+        return now - ack.getTimestamp() < DELIVERY_TIMEOUT_MS ? ack : null;
     }
 
     public interface HistoryCallback {
@@ -124,7 +158,7 @@ public final class MessageStore {
     public void forwarded(String id, int count) {
         database.runInTransaction(() -> {
             dao().setForwardCount(id, count);
-            dao().setStatus(id, "FORWARDED"); // GATT write is not an end-to-end delivery receipt
+            dao().markForwarded(id); // Never downgrade DELIVERED after a late GATT callback.
         });
     }
 
@@ -138,7 +172,7 @@ public final class MessageStore {
 
     public void expire(long now) {
         database.runInTransaction(() -> {
-            dao().expireStatuses(now);
+            dao().expireStatuses(now - DELIVERY_TIMEOUT_MS);
             dao().deleteExpired(now);
         });
     }
