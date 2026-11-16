@@ -16,7 +16,7 @@ Upstream consent and physical-phone reliability/throughput are still pending.
 
 ## Next build and physical-test gate
 
-The next source build is **1.0.1-experimental**, version code **101**. The published v1.0 APK is unchanged. This source update adds a real process-kill/restart identity regression and explicit experimental labeling; protocol changes are deferred until the two-phone BLE/Direct photo test. See [review follow-up](docs/REVIEW_FOLLOWUP.md) and [private signing-key custody](KEY_CUSTODY.md). The key is verified in this environment; owner-machine/offline backup is still pending.
+The next source build is **1.0.1-experimental**, version code **101**. The published v1.0 APK is unchanged. This source update adds a real process-kill/restart identity regression and explicit experimental labeling; protocol changes are deferred until the two-phone BLE/Direct photo test. See [review follow-up](docs/REVIEW_FOLLOWUP.md) and [private signing-key custody](KEY_CUSTODY.md). The key is verified in this environment and the owner confirmed the Windows copy; offline-media restore verification is pending.
 
 ## Wi-Fi Direct without a router
 

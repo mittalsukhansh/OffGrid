@@ -328,10 +328,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Await hosted current/historical crash results and the owner's age1 public recipient, then transfer encrypted backup and confirm PC/offline custody. The S23 FE is eligible; the owner's Mi/Redmi 4A is Android 7.1.2/API25, below minSdk26, so a second compatible phone is needed. Actual radio tests, licensing permission and admin-only repo/signing setup remain open. No protocol-risk mitigation is claimed completed.
 - **Sources:** This change; [follow-up](docs/REVIEW_FOLLOWUP.md); [investigation](docs/UPGRADE_IDENTITY_INVESTIGATION.md); [custody](KEY_CUSTODY.md); [host KDF probe](docs/audits/backup-kdf-host.json)
 
+## D035 — 2026-11-16 UTC — Reproduced legacy identity loss and confirmed owner PC handoff
+
+- **Status:** Hosted regression passed; private backup delivered/PC verified; offline-media restore confirmation pending
+- **Work:** Consolidated the tested experimental-label/regression source into main with ten historical losses and ten current passes under real process death, public-only summaries, a sample failure and the updated investigation. The old persisted public key is absent before loading in every failed historical trial; no upgrade occurs between those trial phases. Encrypted a minimal verified signing archive to the owner's age public recipient; sent only recipient-encrypted ciphertext. The owner confirmed its decrypted Windows archive hash and created a locally passphrase-encrypted backup. Prepared offline-copy/restore instructions without requesting private keys/passwords.
+- **Decision / reason:** This proves an abrupt-death persistence failure independent of migration; the first upgrade event's exact cause remains unproven because its pre-load state was not captured. Keep known replay/inventory/backup-format changes behind the owner's physical-test gate. Distinguish a passphrase-encrypted file on the PC from a verified disconnected-media backup.
+- **Validation / evidence:** Source 3c8770e passed GitHub build/lint/66 JVM tests, the API-30 historical/current SIGKILL experiment and the ordinary Android suite. All ten old reopen traces report a missing saved public key before constructor loading; all ten current attempts use different PIDs and verify the recovered signing key. Private key/archive/certificate challenge checks passed locally; the owner reported the expected archive hash on Windows. No private key, password, transfer secret or handoff payload is committed to GitHub. No physical phone results claimed.
+- **Open items:** Confirm restore from the separate offline drive and safe ejection. Obtain a second Android8+ handset (Android10+ for CoC comparison), then run the no-router photo test before further protocol changes. Upstream written permission, repo admin metadata and permanent signing-path choice remain owner actions; published v1.0 is unchanged.
+- **Sources:** This change; [CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43932121974); [evidence](docs/audits/identity-process-death/README.md); [custody](KEY_CUSTODY.md)
+
 ## Template for the next work set
 
 ```markdown
-## D035 — YYYY-MM-DD HH:MM UTC — Short title
+## D036 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

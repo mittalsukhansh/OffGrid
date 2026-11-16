@@ -1,0 +1,70 @@
+{
+  "scope": "API emulator OS-process death, not physical radio testing or proof of the historical failure cause",
+  "package": "io.github.mittalsukhansh.offgrid.debug",
+  "expectedProtocol": 4,
+  "historical": true,
+  "observedLosses": 10,
+  "runs": [
+    {
+      "run": 1,
+      "identity": "a0e2f25324c7fdfe83ea3ba2dfcf4d82",
+      "creationPid": "2160",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 2,
+      "identity": "f76a85f9a8857c3945aa20b0ea2e3a04",
+      "creationPid": "2361",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 3,
+      "identity": "a316e0495405213d96a9ab92290ca175",
+      "creationPid": "2444",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 4,
+      "identity": "09bb1b4881ac463e52917ac51d10681c",
+      "creationPid": "2524",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 5,
+      "identity": "9a7b4b5aaa5104646f5fdf2441567fdb",
+      "creationPid": "2605",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 6,
+      "identity": "fe3ee2d5dfae29bc00c472687ddb7e2c",
+      "creationPid": "2683",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 7,
+      "identity": "6eb7212744594f7173bd1adb521906b2",
+      "creationPid": "2763",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 8,
+      "identity": "e285d49aab3e1636953a3486e6c1212a",
+      "creationPid": "2841",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 9,
+      "identity": "1e37e7d67b5b304727145ded75a0b5c4",
+      "creationPid": "2921",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    },
+    {
+      "run": 10,
+      "identity": "ce55ddaaca32ef42c27cd1661f57dd5a",
+      "creationPid": "3000",
+      "result": "OBSERVED_PERSISTENCE_LOSS"
+    }
+  ],
+  "result": "OBSERVED_PERSISTENCE_LOSS"
+}

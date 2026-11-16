@@ -4,7 +4,7 @@ The environment private release key and its local handoff archive have been chec
 
 `cc5455152701c5ef521e5a08dc4cbc7795c6897cf09eff375740391e4da2cf27`
 
-**This does not establish owner custody.** A copy on the owner's Windows machine and a separate offline backup must be confirmed. The archive contains the private signing keystore and its passwords. Keep it out of repositories, public links, messages and Actions artifacts.
+**Owner PC copy confirmed:** the owner reported the matching decrypted archive hash and successful creation of a passphrase-encrypted copy on Windows. A separate offline-media restore/ejection is still pending confirmation. Environment possession alone did not establish owner custody. The archive contains the private signing keystore and its passwords. Keep it out of repositories, public links, messages and Actions artifacts.
 
 ## Recipient-encrypted Windows handoff
 

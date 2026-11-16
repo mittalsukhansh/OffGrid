@@ -1,0 +1,44 @@
+INSTRUMENTATION_STATUS: class=com.example.offgrid.IdentityProcessDeathTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.example.offgrid.IdentityProcessDeathTest:
+INSTRUMENTATION_STATUS: test=verifyAfterKill
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.example.offgrid.IdentityProcessDeathTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=java.lang.AssertionError: Persisted signing public key expected:<BKtH_bH5oAoIpJOlvBt9jk_ebVMvOx2i4l5aIBX3aFsw5-wfUxe9mgb3tN8US4ApNWDO1M2gPwldR29T7SJyPlk> but was:<null>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at com.example.offgrid.IdentityProcessDeathTest.verifyAfterKill(IdentityProcessDeathTest.java:64)
+
+INSTRUMENTATION_STATUS: stream=
+Error in verifyAfterKill(com.example.offgrid.IdentityProcessDeathTest):
+java.lang.AssertionError: Persisted signing public key expected:<BKtH_bH5oAoIpJOlvBt9jk_ebVMvOx2i4l5aIBX3aFsw5-wfUxe9mgb3tN8US4ApNWDO1M2gPwldR29T7SJyPlk> but was:<null>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at com.example.offgrid.IdentityProcessDeathTest.verifyAfterKill(IdentityProcessDeathTest.java:64)
+
+INSTRUMENTATION_STATUS: test=verifyAfterKill
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 0.008
+There was 1 failure:
+1) verifyAfterKill(com.example.offgrid.IdentityProcessDeathTest)
+java.lang.AssertionError: Persisted signing public key expected:<BKtH_bH5oAoIpJOlvBt9jk_ebVMvOx2i4l5aIBX3aFsw5-wfUxe9mgb3tN8US4ApNWDO1M2gPwldR29T7SJyPlk> but was:<null>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at com.example.offgrid.IdentityProcessDeathTest.verifyAfterKill(IdentityProcessDeathTest.java:64)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

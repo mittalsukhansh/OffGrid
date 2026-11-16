@@ -13,3 +13,12 @@ The host requires the instrumentation crash report and disappearance of the crea
 The CI experiment first builds untouched production source at `6fc4ee19f784b396d3f5e5bd746b564ba541afa5`, adding only this test-only fixture. It records ten historical attempts without relabelling observed loss as PASS. After upgrading to the current debug build, ten current attempts must all pass before the ordinary Android suite runs. Historical harness/transport failures remain failures rather than being labelled persistence loss. Raw public-only transcripts and summaries are uploaded.
 
 No live packet, replay policy, inventory policy or backup format is changed by this test. Actual outcomes are recorded in DECISIONS.md and this report after CI. A legacy reproduction can show that process death causes loss independently of migration; it cannot supply evidence missing from the original upgrade run.
+
+
+## Observed result
+
+[CI run 43932121974](https://github.com/mittalsukhansh/OffGrid/actions/runs/43932121974) reproduced **10/10 losses** on untouched protocol-4 production code: all ten reopen transcripts found the saved public key absent before loading, consistent with the constructor returning after asynchronous `apply()` and the process dying before disk persistence. No version upgrade occurs between these creation/reopen phases, so migration is not required for this failure mechanism.
+
+Current code passed **10/10** SIGKILL/new-process trials with the same public identity, fingerprint and sender epoch, and proof that the reloaded private signing key matches. The ordinary Android suite and 66 JVM tests passed too. [Committed summaries and sample failure](audits/identity-process-death/README.md).
+
+The concrete process-death persistence failure is now reproduced and regression-covered. The original upgrade run still lacks sufficient pre-load state to prove its exact historical cause. Preserve that distinction; no emulator result establishes physical radio behavior.

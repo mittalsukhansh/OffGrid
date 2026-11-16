@@ -141,4 +141,4 @@ The [1.0 workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/439236
 
 ## Owner-machine custody gate
 
-See [KEY_CUSTODY.md](KEY_CUSTODY.md) for the recipient-encrypted handoff and offline-copy verification. Environment possession and a locally matching archive have been verified; owner-machine custody must not be inferred from that check. The next source version uses code 101/name 1.0.1-experimental; it does not overwrite published v1.0 assets.
+See [KEY_CUSTODY.md](KEY_CUSTODY.md) for the recipient-encrypted handoff and offline-copy verification. Environment possession and a matching archive have been verified. The owner subsequently confirmed the decrypted Windows archive hash and created a passphrase-encrypted copy; separate offline-media restore verification remains pending. The next source version uses code 101/name 1.0.1-experimental; it does not overwrite published v1.0 assets.

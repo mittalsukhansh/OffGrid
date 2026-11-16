@@ -1,0 +1,80 @@
+{
+  "scope": "API emulator OS-process death, not physical radio testing or proof of the historical failure cause",
+  "package": "io.github.mittalsukhansh.offgrid.debug",
+  "expectedProtocol": 5,
+  "historical": false,
+  "observedLosses": 0,
+  "runs": [
+    {
+      "run": 1,
+      "identity": "ee4060081d6f8db2bcb091007f31e974",
+      "creationPid": "3113",
+      "reopenedPid": "3156",
+      "result": "PASS"
+    },
+    {
+      "run": 2,
+      "identity": "e5e05a443361a93706a35f1eac4e38c6",
+      "creationPid": "3197",
+      "reopenedPid": "3238",
+      "result": "PASS"
+    },
+    {
+      "run": 3,
+      "identity": "0457185dcb42532319bb63c3744c0cc2",
+      "creationPid": "3277",
+      "reopenedPid": "3318",
+      "result": "PASS"
+    },
+    {
+      "run": 4,
+      "identity": "67e815ba7c2ed4c2faf805949049e6e1",
+      "creationPid": "3357",
+      "reopenedPid": "3398",
+      "result": "PASS"
+    },
+    {
+      "run": 5,
+      "identity": "7da666623ac1307e0bab15f5cdbd5e8d",
+      "creationPid": "3438",
+      "reopenedPid": "3480",
+      "result": "PASS"
+    },
+    {
+      "run": 6,
+      "identity": "6e1f6fd034bd9bf1e357534d719fbd36",
+      "creationPid": "3520",
+      "reopenedPid": "3564",
+      "result": "PASS"
+    },
+    {
+      "run": 7,
+      "identity": "63f8e84506933c35aa507ae648d23a26",
+      "creationPid": "3605",
+      "reopenedPid": "3648",
+      "result": "PASS"
+    },
+    {
+      "run": 8,
+      "identity": "7ef0ab948f8d1291affbbbfeeca16421",
+      "creationPid": "3688",
+      "reopenedPid": "3729",
+      "result": "PASS"
+    },
+    {
+      "run": 9,
+      "identity": "cbd10769533079e1cd7c6c0fcec9b7aa",
+      "creationPid": "3768",
+      "reopenedPid": "3811",
+      "result": "PASS"
+    },
+    {
+      "run": 10,
+      "identity": "329abd937ea16db2959c9ed156493a02",
+      "creationPid": "3850",
+      "reopenedPid": "3892",
+      "result": "PASS"
+    }
+  ],
+  "result": "PASS"
+}
