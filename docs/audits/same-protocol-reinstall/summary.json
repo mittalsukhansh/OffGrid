@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "scope": "Same-protocol, same-build Android APK reinstall on emulator; not an N-to-N+1 or radio claim",
+  "checks": [
+    "same identity/signing key",
+    "same verified two-key contact fingerprint",
+    "verification preserved",
+    "contact nickname preserved",
+    "encrypted history readable"
+  ],
+  "package": "io.github.mittalsukhansh.offgrid.debug",
+  "uninstallPerformed": false
+}

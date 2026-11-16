@@ -189,3 +189,6 @@ This is an OS-process/Keystore persistence test, not a radio test. Do not confus
 The opt-in upgrade fixture records whether the baseline contact bundle includes an agreement key and its full fingerprint. Protocol-5→protocol-5 continuity must preserve that verified binding. Protocol-4→5 migration must clear single-key verification; it is a different expectation.
 
 After the ordinary emulator suite, CI seeds current debug state, reinstalls the exact same debug app/test APKs with `adb install -r`, then verifies identity, signing key, verified contact fingerprint/nickname and encrypted history. `scripts/check-same-protocol-reinstall.py` refuses real phones and uploads its transcripts/summary. It is a same-build reinstall regression, not proof of a new release version's upgrade or physical-radio behavior. The original signed version-transition evidence remains separate.
+
+
+The same-protocol reinstall check passed on API-30 in [run 43940312162](https://github.com/mittalsukhansh/OffGrid/actions/runs/43940312162); [raw evidence](docs/audits/same-protocol-reinstall/README.md). This does not change the physical-device NOT RUN entries above.

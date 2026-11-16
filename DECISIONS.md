@@ -364,10 +364,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Pass the actual emulator reinstall stage before merging this release-test work. Existing owner-deferred offline backup, phone testing and security follow-ups remain.
 - **Sources:** This change; [first harness run](https://github.com/mittalsukhansh/OffGrid/actions/runs/43939144742)
 
+## D039 — 2026-11-16 UTC — Verify and consolidate same-protocol reinstall checks
+
+- **Status:** Hosted checks passed; release-test maintenance consolidated
+- **Work:** Recorded actual seed/install-r/verify output proving same-protocol contact-trust continuity. Consolidated the corrected fixture and self-contained host runner into main and cleaned the merged feature branch. The runner now installs both app/test APKs before seeding and preserves ADB diagnostics. App/wire protocol behavior and published release assets are unchanged.
+- **Decision / reason:** Keep ordinary verified dual-key updates distinct from legacy single-key migration. A missing instrumentation setup is not an app data-loss result. Report this precisely as a same-build reinstall regression, with the earlier signed release version-transition proof kept separate.
+- **Validation / evidence:** Source 0bef999 passed both GitHub jobs: build/lint/66 JVM tests, two host harness tests, ten current SIGKILL trials, ordinary Android suites and actual same-protocol APK reinstallation. The raw seed and verification each report OK (1 test); both install-r operations report Success. Immutable old-code trials reproduced ten persistence losses again. Public-only reports, document links and diff formatting checked before this evidence commit.
+- **Open items:** Owner offline-media backup remains deferred; real two-phone/radio tests and replay/inventory/backup-format follow-ups remain behind the previously requested gate unless the owner changes priority. Repo licensing/admin actions remain open. No 1.0.1 APK release has been published.
+- **Sources:** This change; [CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43940312162); [reinstall evidence](docs/audits/same-protocol-reinstall/README.md)
+
 ## Template for the next work set
 
 ```markdown
-## D039 — YYYY-MM-DD HH:MM UTC — Short title
+## D040 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
