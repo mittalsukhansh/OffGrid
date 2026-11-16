@@ -6,6 +6,16 @@ This report describes implemented code, recorded validation, known limitations a
 proposals. It is not an independent security audit or evidence of physical mesh
 reliability. Proposed work is explicitly separated from completed work.
 
+## Subsequent AP-free Wi-Fi Direct update
+
+Current development adds Wi-Fi Direct discovery/pairing and P2P-interface TCP;
+shared-LAN Wi-Fi is no longer the only Wi-Fi option. It is an Android owner/client
+group with independent availability/metrics, explicit permission/pairing controls,
+and ownership-aware recovery/cleanup. See WIFI_DIRECT.md. The historical snapshot
+and “No Wi-Fi Direct” limitation in the table below predate this work. Physical
+pairing, interoperability and off-grid throughput still require device evidence;
+Wi-Fi Aware is not implemented.
+
 ## Subsequent transport throughput update
 
 Later development adds API 29+ LE L2CAP CoC, negotiated encrypted ranges, separate

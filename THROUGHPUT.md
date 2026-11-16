@@ -13,6 +13,7 @@ blocks into one signed encrypted `media_range` control packet:
 | GATT / legacy peer / unknown route | 640 B | 2,500 ms | 4 per transfer |
 | BLE L2CAP CoC | 2,560 B (4 blocks) | 500 ms | 16 per transfer |
 | Local Wi-Fi TCP | 7,680 B (12 blocks) | 200 ms | 48 per transfer |
+| Wi-Fi Direct TCP | 7,680 B (12 blocks) | 200 ms | 48 per transfer |
 
 These are conservative initial limits, **not measured radio speeds**. GATT keeps
 the previous nominal preparation ceiling of 256 payload B/s. The two stream paths
@@ -100,9 +101,13 @@ must be justified by CPU/memory/latency measurements and physical tests.
 
 ## Measurements available in the app
 
+Wi-Fi Direct now supplies the AP-free Wi-Fi path; see WIFI_DIRECT.md. Same-LAN
+Wi-Fi remains optional. Each path has its own counters/profile; all stream paths
+share bounded pre-crypto and authenticated-control budgets.
+
 Open **Network** while the mesh runs:
 
-- Per GATT/CoC/Wi-Fi serialized TX/RX packet bytes and packet counts.
+- Per GATT/CoC/same-LAN/WIFI_DIRECT serialized TX/RX packet bytes and packet counts.
 - TX wall-time average since reset, session completions/failures and last-session
   duration, including connect/transfer/confirmation time.
 - Active media's receiver-confirmed block progress and wall-age payload average.
@@ -139,20 +144,26 @@ protocol before tuning the initial limits:
    signal, Wi-Fi access point, power/battery settings and whether screens are on.
 2. Use the same non-sensitive compressed image or MP4 within existing size limits.
    Exchange contacts first; wait for idle queues; reset measurements on both phones.
-3. **GATT baseline:** disable Wi-Fi and BLE bulk streams on both. Send the file.
+3. **GATT baseline:** disconnect Direct groups, disable Wi-Fi Direct, same-LAN
+   sharing and BLE bulk streams on both. Send the file.
    Record time from accepted send to authenticated Delivered, confirmed file bytes,
    session/error/retry counters, receiver hash and any failures.
 4. **CoC:** keep Wi-Fi off, enable BLE bulk on both API 29+ phones, verify discovery
    and CoC counters actually advance. Repeat the same file and measurements.
-5. **Wi-Fi:** enable sharing on both phones on the same access point, verify Wi-Fi
+5. **Same-LAN Wi-Fi:** keep Direct disabled and enable LAN sharing on both phones
+   on the same access point, verify Wi-Fi
    counters advance, and repeat. Keep media limits and measurement definitions fixed.
-6. Run at least three trials per path, alternating order to reduce warm-up bias.
+6. **Wi-Fi Direct:** turn same-LAN sharing off, disconnect infrastructure Wi-Fi,
+   enable Direct and pair supported phones with mobile data/Bluetooth off. Verify
+   WIFI_DIRECT counters move and authenticated Delivered is received. Record
+   Android's negotiated group roles and repeat the same file/measurements.
+7. Run at least three trials per path, alternating order to reduce warm-up bias.
    Separate discovery/setup time, completion latency and sustained file goodput.
    Report median and range, including failures; do not silently discard timeouts.
-7. Repeat with screen off, bidirectional files, Bluetooth/Wi-Fi toggles, movement,
+8. Repeat with screen off, bidirectional files, Bluetooth/Wi-Fi toggles, movement,
    service/process restart, and a three-phone A–B–C route. Verify file hashes,
    cancellation/unsend, authenticated receipts and progress across fallback.
-8. Capture CPU, memory and energy evidence before increasing quotas/windows or
+9. Capture CPU, memory and energy evidence before increasing quotas/windows or
    introducing persistent channels. Label unsupported/failed CoC trials as GATT
    fallback, not CoC results.
 

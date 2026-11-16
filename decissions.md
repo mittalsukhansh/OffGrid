@@ -193,10 +193,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Future work must append its decisions, evidence and remaining actions. Resolve prior pending items by a new linked entry rather than silently rewriting historical status.
 - **Sources:** This change; [AGENTS.md](AGENTS.md); [README.md](README.md)
 
+## D020 — 2026-11-16 11:25 UTC — AP-free Wi-Fi Direct transport
+
+- **Status:** Implemented and locally checked; Android runtime CI pending at this commit
+- **Work:** Added optional WifiP2pManager DNS-SD discovery and explicit group pairing, P2P-interface-bound TCP with bidirectional hello discovery, a Direct pairing screen and Android discovery/local-network permission flow. Added independent Direct availability, stream admission, media profile and metrics. Version code advanced to 7. Documented router-free setup and hardware tests in WIFI_DIRECT.md; updated the README/review report.
+- **Decision / reason:** Supersedes D014's same-access-point-only Wi-Fi scope. Prefer Wi-Fi Direct for broad AP-free Android pairing; Wi-Fi Aware is not added. Keep same-LAN Wi-Fi as an optional path. Do not hardcode group IPs or require Bluetooth/internet. Device names/transport pairing do not verify contact identities. Do not automatically remove unknown startup groups, passively joined groups or process-restored groups; guard accepted-connect cleanup with matching fingerprints and generation/lease checks.
+- **Validation / evidence:** Local APK build, lint, 52 JVM tests and instrumentation compilation passed. Added ownership/hello/multiplexer tests, Android real-loopback endpoint discovery/full-stream/cancellation tests, Direct-prefixed encrypted-media regression and pairing-screen UI checks. Runtime CI results will be appended after completion; no physical Wi-Fi Direct negotiation or throughput has been measured.
+- **Open items:** Run the two-phone no-router/Bluetooth-off checklist, permission/OEM/role-reversal/process-restart tests and three-phone group tests. Direct is an owner/client group, not unrestricted multi-group Wi-Fi mesh; private group messaging remains deferred. Existing licensing permission and signing-secret owner actions from D017 are still outstanding.
+- **Sources:** This change; [WIFI_DIRECT.md](WIFI_DIRECT.md); [THROUGHPUT.md](THROUGHPUT.md); [TESTING.md](TESTING.md)
+
 ## Template for the next work set
 
 ```markdown
-## D020 — YYYY-MM-DD HH:MM UTC — Short title
+## D021 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

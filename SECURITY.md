@@ -192,3 +192,22 @@ second global, 20 burst/10 per second per peer) and authenticated-control identi
 quotas (20 burst/10 per second). Ordinary/GATT sender quotas remain unchanged.
 These higher CPU budgets require physical resource/abuse testing before further
 increases. Mutable TTL is only a performance hint, not cryptographic route evidence.
+
+## Wi-Fi Direct off-grid path
+
+Direct discovery/pairing does not authenticate an OffGrid contact. Service names,
+device labels/MACs and the TCP hello are untrusted transport metadata; encrypted
+message signatures/target binding and fingerprint verification retain their roles.
+No P2P group password is read or logged. TCP binds only the actual private P2P
+interface, with source/subnet checks, bounded endpoints/IO and existing stream
+admission limits. Private content remains end-to-end encrypted; public content
+and network metadata remain observable. No TLS, anonymity or forward secrecy is
+introduced by Wi-Fi Direct.
+
+Protected Android P2P/Location broadcasts trigger fresh platform queries; extras
+are not trusted as group state. Generation/query tokens and a shared cleanup lease
+limit stale callback effects. Groups unknown at startup are left alone. Restored
+and passively joined groups do not gain automatic deletion authority; only a
+matching group from a currently accepted OffGrid connect operation can be removed
+automatically. Explicit user disconnect is limited to an adopted group. Physical
+OEM behavior and cross-app/kill/restart cases still require device testing.

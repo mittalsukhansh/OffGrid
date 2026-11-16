@@ -144,3 +144,15 @@ changes, unsupported channels, Bluetooth-off while Wi-Fi remains active, socket
 cancellation, malformed stream headers, stalled sockets and 45-second smaller-chunk
 fallback. All paths must retain private encryption, whole-file integrity and final
 authenticated receipts. Host loopback results are not radio benchmarks.
+
+## Wi-Fi Direct without infrastructure
+
+Follow WIFI_DIRECT.md: leave Wi-Fi radio on but disconnect access points, disable
+mobile data, same-LAN sharing and Bluetooth; pair supported phones through Network
+→ Wi-Fi Direct. Verify group-owner/client state, WIFI_DIRECT packet counts,
+private file integrity and authenticated Delivered. Repeat role reversal, incoming
+pairing, rejected/expired permissions, Location-mode requirements, busy/timeout,
+rapid stop/start, process kill, screen off, unrelated existing groups and a
+three-phone group. Separate actual physical results from the loopback socket,
+pure ownership/hello, UI and logical encrypted-range tests. Wi-Fi Aware and
+unrestricted multi-group Wi-Fi mesh are not implemented.

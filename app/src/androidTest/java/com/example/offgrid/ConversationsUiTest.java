@@ -61,6 +61,9 @@ public class ConversationsUiTest {
             eventually(() ->
                     onView(withText(containsString("Mesh stopped. Start the mesh to inspect")))
                             .check(matches(isDisplayed())));
+            onView(withText("Wi-Fi Direct · no access point")).perform(click());
+            eventually(() -> onView(withText("Enable Wi-Fi Direct")).check(matches(isDisplayed())));
+            onView(withText("Find nearby OffGrid phones")).check(matches(isDisplayed()));
             onView(withText("Close")).perform(click());
         } finally {
             store.database

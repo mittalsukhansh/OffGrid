@@ -31,6 +31,7 @@ import com.example.offgrid.mesh.transport.BleTransport;
 import com.example.offgrid.mesh.transport.CombinedTransport;
 import com.example.offgrid.mesh.transport.LanTransport;
 import com.example.offgrid.mesh.transport.TransportMetrics;
+import com.example.offgrid.mesh.transport.WifiDirectTransport;
 
 import java.util.Set;
 import java.util.UUID;
@@ -84,6 +85,7 @@ public class MeshService extends Service {
     private Handler main;
     private MeshNode node;
     private LanTransport wifi;
+    private WifiDirectTransport direct;
     private BleTransport ble;
     private TransportMetrics measurements;
     private volatile boolean destroyed;
@@ -117,10 +119,12 @@ public class MeshService extends Service {
         ble.setCocEnabled(cocEnabled(this));
         wifi = new LanTransport(this, worker, flood, measurements);
         wifi.enabled(wifiEnabled(this));
+        direct = new WifiDirectTransport(this, worker, flood, measurements);
+        direct.enabled(directEnabled(this));
         node =
                 new MeshNode(
                         worker,
-                        new CombinedTransport(ble, wifi),
+                        new CombinedTransport(ble, wifi, direct),
                         storage,
                         protocol,
                         actions,
@@ -199,7 +203,8 @@ public class MeshService extends Service {
         destroyed = true;
         listeners.clear();
         node.shutdown();
-        thread.quitSafely();
+        // Keep the worker alive briefly for WifiP2pManager group-removal/channel callbacks.
+        worker.postDelayed(thread::quitSafely, 5500);
         super.onDestroy();
     }
 
@@ -239,6 +244,44 @@ public class MeshService extends Service {
         worker.post(() -> wifi.enabled(value));
     }
 
+    public static boolean directEnabled(Context context) {
+        return context.getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .getBoolean("direct", false);
+    }
+
+    public static boolean hasWifiTransportEnabled(Context context) {
+        return wifiEnabled(context) || directEnabled(context);
+    }
+
+    public void setDirectEnabled(boolean enabled) {
+        getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .edit()
+                .putBoolean("direct", enabled)
+                .apply();
+        worker.post(() -> direct.enabled(enabled));
+    }
+
+    public void discoverDirectPeers() {
+        worker.post(direct::discover);
+    }
+
+    public void connectDirectPeer(String address) {
+        worker.post(() -> direct.connect(address));
+    }
+
+    public void disconnectDirectGroup() {
+        worker.post(direct::disconnect);
+    }
+
+    public void directSnapshot(java.util.function.Consumer<WifiDirectTransport.Snapshot> callback) {
+        worker.post(() -> {
+            WifiDirectTransport.Snapshot snapshot = direct.snapshot();
+            main.post(() -> {
+                if (!destroyed) callback.accept(snapshot);
+            });
+        });
+    }
+
     public static boolean cocEnabled(Context context) {
         return context.getSharedPreferences("offgrid-network", MODE_PRIVATE)
                 .getBoolean("coc", true);
@@ -264,6 +307,8 @@ public class MeshService extends Service {
                             + wifi.status()
                             + "\nWi-Fi discovered endpoints: "
                             + wifi.peerCount()
+                            + "\n\nWi-Fi Direct (no access point): "
+                            + direct.snapshot().status
                             + "\n\n"
                             + detail
                             + "\n\n"
@@ -273,11 +318,12 @@ public class MeshService extends Service {
                             + " may appear on both transports. Forwarded means transferred to a"
                             + " peer; only an authenticated recipient acknowledgement means"
                             + " Delivered.\n\n"
-                            + "Wi-Fi needs the same local network with peer traffic and multicast"
-                            + " discovery allowed. Guest isolation, VPNs or hotspot settings may"
-                            + " block it. Internet is not required. Media keeps its existing size"
-                            + " limits; pacing follows the last authenticated direct-ingress hint"
-                            + " and recipient range capability.";
+                            + "Wi-Fi Direct forms a phone-to-phone group without a router. Pair in"
+                            + " Network > Wi-Fi Direct. Same-LAN Wi-Fi remains an optional path and"
+                            + " requires a shared network. Device labels are not verified contact"
+                            + " identities. Media keeps its existing size limits; pacing follows"
+                            + " the last authenticated direct-ingress hint and recipient range"
+                            + " capability.";
             main.post(() -> {
                 if (!destroyed) callback.accept(snapshot);
             });

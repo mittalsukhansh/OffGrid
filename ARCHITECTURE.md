@@ -26,6 +26,9 @@ flowchart TD
   Node --> Combined[CombinedTransport]
   Combined --> BLE[BleTransport]
   Combined --> LAN[LanTransport]
+  Combined --> Direct[WifiDirectTransport]
+  Direct --> GroupPolicy[DirectGroupPolicy]
+  Direct --> DirectTCP[DirectTcpLink]
   LAN --> LANCodec[LanFrames]
   Relay --> Transport[MeshTransport interface]
   BLE -. implements .-> Transport
@@ -182,3 +185,19 @@ framing as TCP; worker admission and deadline/cancellation rules remain explicit
 CoC failures followed by GATT are counted on their actual paths. Counters expose
 serialized packet throughput and timing, not a Delivered or unique-goodput claim.
 See THROUGHPUT.md for resource bounds and the physical benchmark protocol.
+
+## AP-free Wi-Fi Direct
+
+CombinedTransport now multiplexes BLE, same-LAN Wi-Fi and Direct as independent
+namespaces/availability signals. WifiDirectTransport handles WifiP2pManager,
+P2P DNS-SD, explicit connect, permissions and group/interface recovery.
+DirectGroupPolicy isolates ownership decisions; DirectTcpLink owns bounded TCP
+sessions on the reported P2P interface, not the default/infrastructure network.
+The owner/client hello provides reverse endpoint discovery without a router or
+NSD on a shared access point. WIFI_DIRECT has its own media/measurement profile.
+
+Only matching groups initiated by the current controller are eligible for automatic
+removal. Unknown initial groups are not adopted; passively joined/restored groups
+can be disconnected explicitly but are not automatically removed. Generation/query
+checks, a cross-instance cleanup lease and a bounded worker shutdown grace protect
+asynchronous control cleanup. See WIFI_DIRECT.md for limits and test boundaries.

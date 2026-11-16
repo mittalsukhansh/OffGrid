@@ -235,3 +235,17 @@ these large envelopes. Direct-ingress hints select profiles; unknown/relayed pat
 stay conservative, and missing range blocks can be regenerated as smaller packets
 on retry. Details and limits are in THROUGHPUT.md. CoC service-data advertisements
 are `4f 01 psmHi psmLo` in a scan response; PSM is a dynamic LE value 128–255.
+
+## AP-free Wi-Fi Direct link
+
+WifiP2p DNS-SD advertises `OffGrid` / `_offgrid._tcp` with link revision 1 before
+pairing. Android forms the group. TCP binds the group's actual private IPv4 address
+at port 39997; no owner IP is hardcoded. The client sends an 8-byte discovery hello:
+32-bit big-endian magic `0x4f475031` and version `1`. The owner replies identically,
+learning the client's TCP source address for reverse sessions. This hello is
+unauthenticated link discovery, not an identity, key exchange or Delivered receipt.
+
+Data sessions use existing OGL1 framing and unchanged signed version-4 packets,
+control/range caps, crypto domains, TTL/replay and final-receipt rules. Groups use
+an owner/client star: the owner can relay between clients, and evidently relayed
+routes can retain conservative media pacing. See WIFI_DIRECT.md.

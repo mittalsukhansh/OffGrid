@@ -153,7 +153,10 @@ public final class MeshProtocol {
     }
 
     public Incoming receive(String peer, byte[] bytes, long now) throws Exception {
-        boolean stream = peer.startsWith("wifi:") || peer.startsWith("ble:coc:");
+        boolean stream =
+                peer.startsWith("wifi:")
+                        || peer.startsWith("direct:")
+                        || peer.startsWith("ble:coc:");
         if (!flood.allowPacket(peer, stream)) return Incoming.IGNORED;
         final MeshMessage packet;
         try {

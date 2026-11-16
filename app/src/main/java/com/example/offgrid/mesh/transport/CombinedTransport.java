@@ -1,44 +1,56 @@
 package com.example.offgrid.mesh.transport;
 
-import java.util.List;
+import java.util.*;
 
-/** Namespaced peer addresses keep radio discovery state independent of cryptographic identity. */
+/**
+ * Independent transport lifecycle and namespaced peer addresses; contacts remain key identities.
+ */
 public final class CombinedTransport implements MeshTransport {
-    private final MeshTransport ble, wifi;
+    private final Map<String, MeshTransport> children = new LinkedHashMap<>();
+    private final Set<String> active = new HashSet<>();
     private Listener listener;
-    private boolean bleActive, wifiActive;
     private Boolean reported;
+    private boolean running;
 
     public CombinedTransport(MeshTransport ble, MeshTransport wifi) {
-        this.ble = ble;
-        this.wifi = wifi;
+        this(ble, wifi, null);
+    }
+
+    public CombinedTransport(MeshTransport ble, MeshTransport wifi, MeshTransport direct) {
+        children.put("ble:", ble);
+        children.put("wifi:", wifi);
+        if (direct != null) children.put("direct:", direct);
     }
 
     @Override
     public void start(Listener listener) {
+        if (running) return;
         this.listener = listener;
+        running = true;
         reported = null;
-        ble.start(child("ble:"));
-        wifi.start(child("wifi:"));
+        active.clear();
+        for (Map.Entry<String, MeshTransport> child : children.entrySet())
+            child.getValue().start(child(child.getKey()));
     }
 
     private Listener child(String prefix) {
         return new Listener() {
             @Override
             public void onPacket(String peer, byte[] packet) {
-                listener.onPacket(prefix + peer, packet);
+                if (running) listener.onPacket(prefix + peer, packet);
             }
 
             @Override
             public void onPeerSeen(String peer, int rssi) {
-                listener.onPeerSeen(prefix + peer, rssi);
+                if (running) listener.onPeerSeen(prefix + peer, rssi);
             }
 
             @Override
-            public void onRadioState(boolean active) {
-                if (prefix.equals("ble:")) bleActive = active;
-                else wifiActive = active;
-                boolean any = bleActive || wifiActive;
+            public void onRadioState(boolean enabled) {
+                if (!running) return;
+                if (enabled) active.add(prefix);
+                else active.remove(prefix);
+                boolean any = !active.isEmpty();
                 if (reported == null || reported != any) {
                     reported = any;
                     listener.onRadioState(any);
@@ -47,41 +59,47 @@ public final class CombinedTransport implements MeshTransport {
 
             @Override
             public void onError(String error) {
-                listener.onError(prefix + " " + error);
+                if (running) listener.onError(prefix + " " + error);
             }
         };
     }
 
     @Override
     public void send(String peer, List<Packet> packets, SendListener callbacks) {
-        if (peer.startsWith("wifi:")) wifi.send(peer.substring(5), packets, callbacks);
-        else if (peer.startsWith("ble:")) ble.send(peer.substring(4), packets, callbacks);
-        else callbacks.onComplete("Unknown transport", true);
+        if (running)
+            for (Map.Entry<String, MeshTransport> child : children.entrySet())
+                if (peer.startsWith(child.getKey())) {
+                    child.getValue()
+                            .send(peer.substring(child.getKey().length()), packets, callbacks);
+                    return;
+                }
+        callbacks.onComplete("Transport unavailable", false);
     }
 
     @Override
     public TransferProfile profile(String peer) {
-        if (peer.startsWith("wifi:")) return wifi.profile(peer.substring(5));
-        if (peer.startsWith("ble:")) return ble.profile(peer.substring(4));
+        if (running)
+            for (Map.Entry<String, MeshTransport> child : children.entrySet())
+                if (peer.startsWith(child.getKey()))
+                    return child.getValue().profile(peer.substring(child.getKey().length()));
         return TransferProfile.GATT;
     }
 
     @Override
     public void maintain() {
-        ble.maintain();
-        wifi.maintain();
+        for (MeshTransport child : children.values()) child.maintain();
     }
 
     @Override
     public void cancelSends() {
-        ble.cancelSends();
-        wifi.cancelSends();
+        for (MeshTransport child : children.values()) child.cancelSends();
     }
 
     @Override
     public void stop() {
-        ble.stop();
-        wifi.stop();
-        bleActive = wifiActive = false;
+        running = false;
+        for (MeshTransport child : children.values()) child.stop();
+        active.clear();
+        reported = false;
     }
 }

@@ -40,6 +40,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.offgrid.mesh.transport.WifiDirectTransport;
 import com.journeyapps.barcodescanner.ScanContract;
 import com.journeyapps.barcodescanner.ScanOptions;
 
@@ -108,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<String> mediaPicker;
     private ActivityResultLauncher<String> localNetworkPermission;
     private ActivityResultLauncher<String> notificationPermission;
+    private ActivityResultLauncher<String[]> directPermissions;
     private final java.util.concurrent.ExecutorService mediaWorker =
             java.util.concurrent.Executors.newSingleThreadExecutor();
 
@@ -122,6 +124,35 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        directPermissions =
+                registerForActivityResult(
+                        new ActivityResultContracts.RequestMultiplePermissions(),
+                        results -> {
+                            boolean allowed = true;
+                            for (String permission : WifiDirectTransport.permissions())
+                                allowed &=
+                                        androidx.core.content.ContextCompat.checkSelfPermission(
+                                                        this, permission)
+                                                == android.content.pm.PackageManager
+                                                        .PERMISSION_GRANTED;
+                            if (allowed) {
+                                setDirectEnabled(true);
+                                showWifiDirectDialog();
+                            } else
+                                new AlertDialog.Builder(this)
+                                        .setTitle("Wi-Fi Direct access needed")
+                                        .setMessage(
+                                                "Allow Nearby Wi-Fi devices on Android 13+, or"
+                                                        + " discovery Location permission on older"
+                                                        + " Android. Android 17 also needs"
+                                                        + " local-network access. Bluetooth and"
+                                                        + " same-LAN sharing are separate options.")
+                                        .setPositiveButton(
+                                                "App settings",
+                                                (d, w) -> BlePermissionHelper.openAppSettings(this))
+                                        .setNegativeButton(android.R.string.cancel, null)
+                                        .show();
+                        });
         notificationPermission =
                 registerForActivityResult(
                         new ActivityResultContracts.RequestPermission(),
@@ -443,7 +474,7 @@ public class MainActivity extends AppCompatActivity {
     private void onToggleClicked() {
         if (mesh != null) {
             stopMeshService();
-        } else if (MeshService.wifiEnabled(this)) {
+        } else if (MeshService.hasWifiTransportEnabled(this)) {
             if (Build.VERSION.SDK_INT >= 33
                     && androidx.core.content.ContextCompat.checkSelfPermission(
                                     this, android.Manifest.permission.POST_NOTIFICATIONS)
@@ -459,7 +490,7 @@ public class MainActivity extends AppCompatActivity {
             new BlePermissionHelper.Callback() {
                 @Override
                 public void onAllGranted() {
-                    if (MeshService.wifiEnabled(MainActivity.this)) startMeshService();
+                    if (MeshService.hasWifiTransportEnabled(MainActivity.this)) startMeshService();
                     else permissionHelper.requestEnableBluetooth(); // -> onBluetoothEnabled
                 }
 
@@ -1048,6 +1079,180 @@ public class MainActivity extends AppCompatActivity {
                     .show();
     }
 
+    private void setDirectEnabled(boolean enabled) {
+        getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .edit()
+                .putBoolean("direct", enabled)
+                .apply();
+        if (mesh != null) mesh.setDirectEnabled(enabled);
+        else
+            Toast.makeText(
+                            this,
+                            enabled
+                                    ? "Wi-Fi Direct enabled. Start the mesh, then find nearby"
+                                            + " phones."
+                                    : "Wi-Fi Direct disabled",
+                            Toast.LENGTH_LONG)
+                    .show();
+        if (enabled && Build.VERSION.SDK_INT <= 32) {
+            android.location.LocationManager location =
+                    getSystemService(android.location.LocationManager.class);
+            if (location != null
+                    && !androidx.core.location.LocationManagerCompat.isLocationEnabled(location))
+                new AlertDialog.Builder(this)
+                        .setTitle("Discovery needs Location services")
+                        .setMessage(
+                                "This Android version requires Location services for Wi-Fi Direct"
+                                        + " discovery. OffGrid does not read GPS coordinates.")
+                        .setPositiveButton(
+                                "Location settings",
+                                (d, w) -> BlePermissionHelper.openLocationSettings(this))
+                        .setNegativeButton("Later", null)
+                        .show();
+        }
+    }
+
+    private void showWifiDirectDialog() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        panel.setPadding(pad, pad / 2, pad, 0);
+        TextView state = new TextView(this);
+        state.setText(
+                "No router or internet required. Enable on both phones, start both meshes, find a"
+                    + " phone and accept Android's pairing prompt. Device names are not verified"
+                    + " contact identities.");
+        androidx.appcompat.widget.SwitchCompat enable =
+                new androidx.appcompat.widget.SwitchCompat(this);
+        enable.setText("Enable Wi-Fi Direct");
+        enable.setChecked(MeshService.directEnabled(this));
+        enable.setEnabled(WifiDirectTransport.supported(this));
+        Button find = new Button(this);
+        find.setText("Find nearby OffGrid phones");
+        Button leave = new Button(this);
+        leave.setText("Disconnect OffGrid group");
+        leave.setEnabled(false);
+        ListView list = new ListView(this);
+        List<WifiDirectTransport.Peer> peers = new ArrayList<>();
+        panel.addView(state);
+        panel.addView(enable);
+        panel.addView(find);
+        panel.addView(leave);
+        panel.addView(
+                list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        AlertDialog dialog =
+                new AlertDialog.Builder(this)
+                        .setTitle("Wi-Fi Direct · no access point")
+                        .setView(panel)
+                        .setPositiveButton("Close", null)
+                        .setNeutralButton(
+                                "Wi-Fi settings",
+                                (d, w) ->
+                                        startActivity(
+                                                new Intent(
+                                                        android.provider.Settings
+                                                                .ACTION_WIFI_SETTINGS)))
+                        .create();
+        enable.setOnCheckedChangeListener((button, checked) -> {
+            if (checked) {
+                List<String> missing = new ArrayList<>();
+                for (String permission : WifiDirectTransport.permissions())
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(this, permission)
+                            != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        missing.add(permission);
+                if (!missing.isEmpty()) {
+                    dialog.dismiss();
+                    directPermissions.launch(missing.toArray(new String[0]));
+                    return;
+                }
+            }
+            setDirectEnabled(checked);
+        });
+        find.setOnClickListener(v -> {
+            if (!MeshService.directEnabled(this))
+                Toast.makeText(this, "Enable Wi-Fi Direct first", Toast.LENGTH_SHORT).show();
+            else {
+                List<String> missing = new ArrayList<>();
+                for (String permission : WifiDirectTransport.permissions())
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(this, permission)
+                            != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        missing.add(permission);
+                if (!missing.isEmpty()) {
+                    dialog.dismiss();
+                    directPermissions.launch(missing.toArray(new String[0]));
+                } else if (mesh == null) onToggleClicked();
+                else mesh.discoverDirectPeers();
+            }
+        });
+        leave.setOnClickListener(v -> {
+            if (mesh != null) mesh.disconnectDirectGroup();
+        });
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            if (position >= peers.size() || mesh == null) return;
+            WifiDirectTransport.Peer selected = peers.get(position);
+            new AlertDialog.Builder(this)
+                    .setTitle("Connect over Wi-Fi Direct?")
+                    .setMessage(
+                            selected.label()
+                                    + "\n\n"
+                                    + "Android may request approval on the other phone. Device"
+                                    + " labels are unverified; compare your contact fingerprints"
+                                    + " for private messaging.")
+                    .setPositiveButton(
+                            "Connect",
+                            (d, w) -> {
+                                if (mesh != null) mesh.connectDirectPeer(selected.address);
+                            })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+        });
+        android.os.Handler refresh = new android.os.Handler(android.os.Looper.getMainLooper());
+        Runnable update =
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!dialog.isShowing() || isDestroyed() || !resumed) return;
+                        MeshService current = mesh;
+                        if (!WifiDirectTransport.supported(MainActivity.this))
+                            state.setText(
+                                    "Wi-Fi Direct is unsupported on this phone. Bluetooth and"
+                                            + " same-LAN sharing remain available.");
+                        else if (current == null)
+                            state.setText(
+                                    "No router or internet required. Enable on both phones and tap"
+                                        + " Find nearby OffGrid phones to start the mesh. Device"
+                                        + " labels do not verify contacts.");
+                        else
+                            current.directSnapshot(snapshot -> {
+                                if (!dialog.isShowing() || mesh != current) return;
+                                state.setText(
+                                        snapshot.status
+                                                + "\n"
+                                                + "No access point/internet needed. Device names"
+                                                + " are unverified; use contact fingerprints.");
+                                peers.clear();
+                                peers.addAll(snapshot.peers);
+                                List<String> labels = new ArrayList<>();
+                                for (WifiDirectTransport.Peer peer : peers)
+                                    labels.add(peer.label());
+                                list.setAdapter(
+                                        new ArrayAdapter<>(
+                                                MainActivity.this,
+                                                android.R.layout.simple_list_item_1,
+                                                labels));
+                                leave.setEnabled(snapshot.connected);
+                            });
+                        refresh.postDelayed(this, 2000);
+                    }
+                };
+        dialog.setOnDismissListener(d -> refresh.removeCallbacks(update));
+        dialog.show();
+        panel.getLayoutParams().height =
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.6);
+        panel.requestLayout();
+        refresh.post(update);
+    }
+
     private void showDiagnostics() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -1055,7 +1260,7 @@ public class MainActivity extends AppCompatActivity {
         panel.setPadding(padding, padding / 2, padding, 0);
         androidx.appcompat.widget.SwitchCompat toggle =
                 new androidx.appcompat.widget.SwitchCompat(this);
-        toggle.setText("Local Wi-Fi sharing");
+        toggle.setText("Same-LAN Wi-Fi (optional shared network)");
         toggle.setMinHeight((int) (48 * getResources().getDisplayMetrics().density));
         toggle.setChecked(MeshService.wifiEnabled(this));
         androidx.appcompat.widget.SwitchCompat coc =
@@ -1079,6 +1284,9 @@ public class MainActivity extends AppCompatActivity {
         details.setTextIsSelectable(true);
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.addView(details);
+        Button directButton = new Button(this);
+        directButton.setText("Wi-Fi Direct · no access point");
+        panel.addView(directButton);
         panel.addView(toggle);
         panel.addView(coc);
         panel.addView(reset);
@@ -1111,9 +1319,9 @@ public class MainActivity extends AppCompatActivity {
                             details.setText(
                                     "Mesh stopped. Start the mesh to inspect live peers, queues and"
                                         + " errors.\n\n"
-                                        + "Connect both phones to the same Wi-Fi network or"
-                                        + " hotspot. Enable local Wi-Fi sharing on each phone. No"
-                                        + " internet is required. Wi-Fi Direct is not included.");
+                                        + "Use Wi-Fi Direct pairing above without an access point."
+                                        + " Same-LAN Wi-Fi is optional when a shared network"
+                                        + " exists. Internet is not required.");
                         else
                             current.diagnostics(text -> {
                                 if (dialog.isShowing() && mesh == current) details.setText(text);
@@ -1121,6 +1329,10 @@ public class MainActivity extends AppCompatActivity {
                         refresh.postDelayed(this, 2_000);
                     }
                 };
+        directButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            showWifiDirectDialog();
+        });
         dialog.setOnDismissListener(d -> refresh.removeCallbacks(update));
         dialog.show();
         panel.getLayoutParams().height =

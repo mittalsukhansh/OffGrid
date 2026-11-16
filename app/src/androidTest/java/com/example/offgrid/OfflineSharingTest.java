@@ -389,9 +389,21 @@ public class OfflineSharingTest {
     @Test
     public void wifiRangesResumeAsGattBlocksAfterRestartAndStillRequireFinalReceipt()
             throws Exception {
+        rangesResume(com.example.offgrid.mesh.transport.TransferProfile.WIFI, "wifi:");
+    }
+
+    @Test
+    public void wifiDirectRangesPreserveEncryptedIntegrityAndAuthenticatedDelivery()
+            throws Exception {
+        rangesResume(com.example.offgrid.mesh.transport.TransferProfile.WIFI_DIRECT, "direct:");
+    }
+
+    private void rangesResume(
+            com.example.offgrid.mesh.transport.TransferProfile profile, String prefix)
+            throws Exception {
         byte[] image = largePhoto();
         MediaRecord row = offer(image, "image/jpeg");
-        a.actions.transferProfiles(id -> com.example.offgrid.mesh.transport.TransferProfile.WIFI);
+        a.actions.transferProfiles(id -> profile);
         elapsed.addAndGet(5000);
         a.actions.pump(System.currentTimeMillis(), elapsed.get());
         MeshMessage bulk = null;
@@ -405,9 +417,9 @@ public class OfflineSharingTest {
         assertNotNull(bulk);
         assertTrue(bulk.toBytes().length > MeshMessage.MAX_SERIALIZED_BYTES);
         MeshProtocol.Incoming accepted =
-                c.protocol.receive("wifi:A", bulk.toBytes(), System.currentTimeMillis());
+                c.protocol.receive(prefix + "A", bulk.toBytes(), System.currentTimeMillis());
         assertNotNull(accepted.relay);
-        a.protocol.receive("wifi:C", accepted.relay.toBytes(), System.currentTimeMillis());
+        a.protocol.receive(prefix + "C", accepted.relay.toBytes(), System.currentTimeMillis());
         assertEquals(12, BitSet.valueOf(c.store.dao().media(row.id).received).cardinality());
         assertNotEquals("DELIVERED", a.store.dao().chat(row.id).status);
         c.reopen();

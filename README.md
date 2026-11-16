@@ -10,6 +10,22 @@ Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
 Development continues from `main` on short feature branches; the published v0.2 APK
 is an immutable earlier snapshot, not every later commit.
 
+## Wi-Fi Direct without a router
+
+Current development builds include **Wi-Fi Direct** for the off-grid case.
+Open **Network → Wi-Fi Direct · no access point** on both phones, enable it,
+start the meshes, find nearby OffGrid phones and select one to pair. Accept
+Android's connection prompt. Phones form their own group; no shared access point,
+internet, mobile data or manual IP setup is required. Bluetooth is optional.
+
+The existing shared-LAN option is a separate convenience path. Direct discovery
+uses Android's Nearby Wi-Fi permission (or discovery Location on API 26–32);
+Android 17 also requests local-network access. Hardware/OEM support varies.
+Device labels are unverified; verify contact keys for private messaging.
+See [WIFI_DIRECT.md](WIFI_DIRECT.md) for pairing, group ownership, permission,
+recovery and physical-test details. **Physical pairing and off-grid throughput
+have not yet been verified on phones.** Wi-Fi Aware remains unimplemented.
+
 ## Transport throughput development
 
 Current source adds **BLE L2CAP CoC on API 29+**, with GATT fallback, plus separate
@@ -58,8 +74,9 @@ identity, contacts and history. Preserve needed information before changing buil
   Private attachments notify after completion, not just the initial offer.
 - Open **Network → Local Wi-Fi sharing** on each phone, then start the mesh. Connect
   phones as clients of the same Wi-Fi network or hotspot; internet is unnecessary.
-  Android 17+ requests local-network permission. This is shared-network transport,
-  not Wi-Fi Direct, hotspot creation, or support for every hotspot host interface.
+  Android 17+ requests local-network permission. This switch is the shared-network
+  path. Use the separate Wi-Fi Direct pairing screen above when no access point
+  exists. The app does not create a normal hotspot or support every hotspot host interface.
 - Wi-Fi uses local DNS-SD discovery and bounded IPv4 TCP sessions. Guest/client
   isolation, blocked multicast, VPNs and IPv6-only networks can prevent discovery
   or connections. Bluetooth continues independently; Wi-Fi can remain active when
@@ -131,6 +148,7 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 | Background operation | Connected-device foreground service, radio-state handling and maintenance | Component tests and compilation; no physical screen-off evidence | Screen off, battery optimization and Bluetooth toggling await the checklist |
 | Offline sharing | Local nicknames, private withdrawals, encrypted image/short-video transfers | Emulator regression tests for authorization, tombstones, integrity, resumption and size/duration bounds | Camera/gallery/player UI and real media throughput need phones |
 | Conversations and unread notifications | Per-contact/public histories, durable unread flags, generic notification routing | SQLite filtering/read/migration regressions and Espresso conversation/navigation checks | Notification permissions and OEM background behavior need phones |
+| Wi-Fi Direct | AP-free OffGrid DNS-SD discovery, explicit Android pairing, P2P-interface TCP and lifecycle recovery | Ownership/hello and transport tests; Android loopback socket and encrypted-media regressions | Physical pairing, permission/OEM behavior, group limits and throughput unverified |
 | Local Wi-Fi and diagnostics | Opt-in DNS-SD/IPv4 TCP alongside BLE, bounded sessions, live queue/endpoint/error diagnostics | Real TCP framing tests and transport selection/radio-state regressions | Physical NSD, access-point compatibility, network changes and throughput unverified |
 | Forward secrecy | **Not implemented**; private messages still use static ECDH | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
 
