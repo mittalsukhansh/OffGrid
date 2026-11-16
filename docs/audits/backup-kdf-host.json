@@ -1,0 +1,2 @@
+{"scope":"Host JVM only; not Android or radio performance","capturedUtc":"2026-11-16T18:41:45.468124633Z","javaVersion":"25.0.5","format":"OGB1","N":32768,"r":8,"p":1,"derivedKeyBytes":32,"coreMemoryBytes":33554432,"samples":[
+{"encryptMs":165,"decryptMs":155},{"encryptMs":178,"decryptMs":197},{"encryptMs":190,"decryptMs":214}]}

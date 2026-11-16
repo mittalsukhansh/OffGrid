@@ -137,3 +137,8 @@ The `publish-pre-signed.yml` workflow verifies APK hashes, installed identity, p
 ## Published 1.0 evidence
 
 The [1.0 workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923646455) passed actual API-30 emulator baseline reopening and signed install-without-uninstall identity/contact/history assertions. The [release](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0) includes APK, pinned public certificate, signature output, checksums and upgrade report. Its immutable application source is `061e5fa8cdf27f8dddd87d83c3313333894c1886`. The initial failed attempt was not published. Physical-device upgrade validation, private-key owner backup/custody and optional Actions-secret provisioning remain separate owner responsibilities.
+
+
+## Owner-machine custody gate
+
+See [KEY_CUSTODY.md](KEY_CUSTODY.md) for the recipient-encrypted handoff and offline-copy verification. Environment possession and a locally matching archive have been verified; owner-machine custody must not be inferred from that check. The next source version uses code 101/name 1.0.1-experimental; it does not overwrite published v1.0 assets.

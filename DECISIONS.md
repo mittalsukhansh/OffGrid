@@ -319,10 +319,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner must obtain written upstream consent (request was blocked/not delivered), perform actual three-phone/radio/upgrade testing, apply admin-only metadata/secrets as needed and preserve private signing-key custody. Full forward secrecy/ratchets remain unimplemented; the reviewed-library direction is documented. Identity backup excludes history/media and inbound replay evidence. Only main remains as a GitHub branch; local scratch worktrees retain intermediate build evidence.
 - **Sources:** This change; [source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923057763); [upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923646455); [release](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0); [first blocked attempt](https://github.com/mittalsukhansh/OffGrid/actions/runs/43921168068)
 
+## D034 — 2026-11-16 UTC — Explicit experimental version and real process-death regression
+
+- **Status:** Implemented/locally validated; hosted crash experiment and owner handoff pending
+- **Work:** Set next source version to 1.0.1-experimental/code 101 while retaining the immutable v1.0 release. Added an emulator-only host-driven SIGKILL/new-PID identity/private-key persistence regression and an immutable protocol-4 reference experiment. Added minimum-passphrase API coverage and a host-only production KDF benchmark. Verified the private release key can sign a challenge matching the pin and that its local archive matches; prepared a recipient-encrypted Windows handoff without exposing secrets. Documented owner handset compatibility and open review findings.
+- **Decision / reason:** Honour the owner's physical-test-first gate: do not change wire protocol, replay admission, inventory semantics or backup format before real radio evidence. Actual KDF cost is N=32768/r=8/p=1, not the RFC test vector; future explicit authenticated parameter fields remain planned. Use code 101 for later update ordering; versionName now states experimental. Distinguish a controlled legacy persistence reproduction from the unknown exact cause of the first upgrade incident.
+- **Validation / evidence:** Local debug build/lint/JVM suite and instrumentation compilation; historical fixture compiled against untouched 6fc4ee1 production code. Private-key sign/verify, pinned certificate, matching backup/archive CRC checks passed without exposing key/password values. New hosted SIGKILL outcomes will be appended after execution. KDF probe calls the production backup API and explicitly reports host-only timings.
+- **Open items:** Await hosted current/historical crash results and the owner's age1 public recipient, then transfer encrypted backup and confirm PC/offline custody. The S23 FE is eligible; the owner's Mi/Redmi 4A is Android 7.1.2/API25, below minSdk26, so a second compatible phone is needed. Actual radio tests, licensing permission and admin-only repo/signing setup remain open. No protocol-risk mitigation is claimed completed.
+- **Sources:** This change; [follow-up](docs/REVIEW_FOLLOWUP.md); [investigation](docs/UPGRADE_IDENTITY_INVESTIGATION.md); [custody](KEY_CUSTODY.md); [host KDF probe](docs/audits/backup-kdf-host.json)
+
 ## Template for the next work set
 
 ```markdown
-## D034 — YYYY-MM-DD HH:MM UTC — Short title
+## D035 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

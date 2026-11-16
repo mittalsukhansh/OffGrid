@@ -172,3 +172,13 @@ Record A/B/C roles, exact APK hash, transport selection, distance/obstacles, pay
 | Screen off, Bluetooth toggles, movement, process restart | Not available to automated environment | NOT RUN | Observations and timing needed |
 
 Never substitute JVM simulation, loopback sockets or emulator networking for these radio results. Publish measured numbers in THROUGHPUT.md only after attaching actual evidence.
+
+## Immediate identity process-death regression
+
+The emulator CI now builds the immutable protocol-4 reference with a test-only crash fixture, records ten historical attempts, then installs current debug APKs and requires ten current SIGKILL/restart passes. See [investigation](docs/UPGRADE_IDENTITY_INVESTIGATION.md). The fixture reports only public expected state to the host and kills the process immediately after identity construction; it does not flush preferences, sign a packet or stop an Activity first. Reopening must use a different PID and the same signing/agreement fingerprint, with a verified private-key signing proof.
+
+Standalone host command, after installing matching debug/test APKs on an emulator:
+
+`python3 scripts/check-identity-process-death.py --runs 10 --expected-protocol 5 --output work/identity-process-death`
+
+This is an OS-process/Keystore persistence test, not a radio test. Do not confuse a reference-code reproduction with proof of the exact first upgrade incident's cause. Phone work is gated by the [follow-up checklist](docs/REVIEW_FOLLOWUP.md); the owner's Android-7.1.2 phone is below minSdk 26.
