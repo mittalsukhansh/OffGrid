@@ -37,7 +37,12 @@ fingerprint. Explicit transport pairing is independent of contact verification.
   same-LAN options. Wi-Fi Aware is not implemented by this change.
 - API 26–32: fine/coarse Location permission and Android Location services are
   needed for Direct discovery. OffGrid does not read GPS coordinates for it.
-- API 33+: Nearby Wi-Fi devices permission, declared `neverForLocation`.
+- API 33+: Nearby Wi-Fi devices permission, declared `neverForLocation`; fine/coarse
+  Location permission is not requested for these versions.
+- Android Location **services/mode** must also be on for P2P discovery, including
+  newer versions using Nearby Wi-Fi permission. This is a platform discovery gate,
+  separate from permission to read coordinates; OffGrid does not read GPS. The
+  pairing dialog provides a Location settings shortcut.
 - API 37+: local-network access is also requested for this target SDK.
 - Notification permission remains optional. Direct startup does not require
   Bluetooth permissions or enabling Bluetooth.

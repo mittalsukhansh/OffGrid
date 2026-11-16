@@ -202,10 +202,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Run the two-phone no-router/Bluetooth-off checklist, permission/OEM/role-reversal/process-restart tests and three-phone group tests. Direct is an owner/client group, not unrestricted multi-group Wi-Fi mesh; private group messaging remains deferred. Existing licensing permission and signing-secret owner actions from D017 are still outstanding.
 - **Sources:** This change; [WIFI_DIRECT.md](WIFI_DIRECT.md); [THROUGHPUT.md](THROUGHPUT.md); [TESTING.md](TESTING.md)
 
+## D021 — 2026-11-16 11:31 UTC — Direct discovery permissions and pairing-screen resume
+
+- **Status:** Initial Direct runtime CI passed; final compatibility changes locally validated
+- **Work:** Separated the SDK-specific permission matrix from the Android Location-services discovery gate, required the discovery mode on newer Android too, added a Location settings shortcut, and kept dialog polling resumable while the activity is paused for system prompts. Added permission-contract tests for API 26–32, 33–36 and 37+.
+- **Decision / reason:** Nearby Wi-Fi permission does not remove Android's separate discovery Location-mode requirement. Avoid asking modern Android for fine/coarse coordinate permission, and do not leave the pairing view frozen after Activity Result callbacks delivered before onResume. No GPS coordinates are read.
+- **Validation / evidence:** The D020 source commit passed both GitHub build and Android emulator jobs, including actual loopback TCP hello/full-size transfer/cancellation, Direct-prefixed encrypted-media and pairing-screen tests. This compatibility update passed local build/lint, 54 JVM tests and instrumentation compilation; its final runtime CI result will be appended separately.
+- **Open items:** Physical Wi-Fi Direct discovery/pairing, permission/OEM behavior and off-grid throughput remain unverified; the emulator socket tests are not a radio test.
+- **Sources:** This change; [`89fcec2`](https://github.com/mittalsukhansh/OffGrid/commit/89fcec2f223c9c8751020a7a01d44d53f7d3e4c7); [initial Direct CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43857686933); [WIFI_DIRECT.md](WIFI_DIRECT.md)
+
 ## Template for the next work set
 
 ```markdown
-## D021 — YYYY-MM-DD HH:MM UTC — Short title
+## D022 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

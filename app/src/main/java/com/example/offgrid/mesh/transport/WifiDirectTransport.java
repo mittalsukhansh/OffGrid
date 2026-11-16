@@ -94,13 +94,17 @@ public final class WifiDirectTransport implements MeshTransport {
     }
 
     public static String[] permissions() {
+        return permissions(Build.VERSION.SDK_INT);
+    }
+
+    static String[] permissions(int sdk) {
         List<String> required = new ArrayList<>();
-        if (Build.VERSION.SDK_INT >= 33) required.add(Manifest.permission.NEARBY_WIFI_DEVICES);
+        if (sdk >= 33) required.add(Manifest.permission.NEARBY_WIFI_DEVICES);
         else {
             required.add(Manifest.permission.ACCESS_FINE_LOCATION);
             required.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
-        if (Build.VERSION.SDK_INT >= 37) required.add(Manifest.permission.ACCESS_LOCAL_NETWORK);
+        if (sdk >= 37) required.add(Manifest.permission.ACCESS_LOCAL_NETWORK);
         return required.toArray(new String[0]);
     }
 
@@ -112,7 +116,6 @@ public final class WifiDirectTransport implements MeshTransport {
     }
 
     private boolean locationReady() {
-        if (Build.VERSION.SDK_INT >= 33) return true;
         LocationManager location = context.getSystemService(LocationManager.class);
         return location != null && LocationManagerCompat.isLocationEnabled(location);
     }

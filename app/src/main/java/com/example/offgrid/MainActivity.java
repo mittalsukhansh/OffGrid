@@ -1094,22 +1094,6 @@ public class MainActivity extends AppCompatActivity {
                                     : "Wi-Fi Direct disabled",
                             Toast.LENGTH_LONG)
                     .show();
-        if (enabled && Build.VERSION.SDK_INT <= 32) {
-            android.location.LocationManager location =
-                    getSystemService(android.location.LocationManager.class);
-            if (location != null
-                    && !androidx.core.location.LocationManagerCompat.isLocationEnabled(location))
-                new AlertDialog.Builder(this)
-                        .setTitle("Discovery needs Location services")
-                        .setMessage(
-                                "This Android version requires Location services for Wi-Fi Direct"
-                                        + " discovery. OffGrid does not read GPS coordinates.")
-                        .setPositiveButton(
-                                "Location settings",
-                                (d, w) -> BlePermissionHelper.openLocationSettings(this))
-                        .setNegativeButton("Later", null)
-                        .show();
-        }
     }
 
     private void showWifiDirectDialog() {
@@ -1145,6 +1129,9 @@ public class MainActivity extends AppCompatActivity {
                         .setTitle("Wi-Fi Direct · no access point")
                         .setView(panel)
                         .setPositiveButton("Close", null)
+                        .setNegativeButton(
+                                "Location settings",
+                                (d, w) -> BlePermissionHelper.openLocationSettings(this))
                         .setNeutralButton(
                                 "Wi-Fi settings",
                                 (d, w) ->
@@ -1211,7 +1198,11 @@ public class MainActivity extends AppCompatActivity {
                 new Runnable() {
                     @Override
                     public void run() {
-                        if (!dialog.isShowing() || isDestroyed() || !resumed) return;
+                        if (!dialog.isShowing() || isDestroyed()) return;
+                        if (!resumed) {
+                            refresh.postDelayed(this, 1000);
+                            return;
+                        }
                         MeshService current = mesh;
                         if (!WifiDirectTransport.supported(MainActivity.this))
                             state.setText(
@@ -1313,7 +1304,11 @@ public class MainActivity extends AppCompatActivity {
                 new Runnable() {
                     @Override
                     public void run() {
-                        if (!dialog.isShowing() || isDestroyed() || !resumed) return;
+                        if (!dialog.isShowing() || isDestroyed()) return;
+                        if (!resumed) {
+                            refresh.postDelayed(this, 1000);
+                            return;
+                        }
                         MeshService current = mesh;
                         if (current == null)
                             details.setText(

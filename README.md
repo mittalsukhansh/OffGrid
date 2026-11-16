@@ -20,7 +20,8 @@ internet, mobile data or manual IP setup is required. Bluetooth is optional.
 
 The existing shared-LAN option is a separate convenience path. Direct discovery
 uses Android's Nearby Wi-Fi permission (or discovery Location on API 26–32);
-Android 17 also requests local-network access. Hardware/OEM support varies.
+Android 17 also requests local-network access. Android Location services must be
+on for Direct discovery; OffGrid does not read GPS coordinates. Hardware/OEM support varies.
 Device labels are unverified; verify contact keys for private messaging.
 See [WIFI_DIRECT.md](WIFI_DIRECT.md) for pairing, group ownership, permission,
 recovery and physical-test details. **Physical pairing and off-grid throughput
