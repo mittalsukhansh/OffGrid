@@ -103,6 +103,9 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 
 ## Components and documentation
 
+- [REVIEW_REPORT.md](REVIEW_REPORT.md): project status, stack, architecture, limitations,
+  proposed roadmap and a copy-ready independent review request for Claude.
+
 The Android service is a lifecycle/binding adapter; it no longer owns the GATT
 callbacks, relay peer table, packet acceptance policy, or database queries.
 
