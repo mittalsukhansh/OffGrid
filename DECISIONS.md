@@ -346,10 +346,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner offline restore/ejection, compatible second test phone, pending protocol mitigations behind the physical gate unless the owner changes priority, upstream licensing and admin-only setup. No new release has been published or existing APK overwritten.
 - **Sources:** This change; [custody](KEY_CUSTODY.md); [review follow-up](docs/REVIEW_FOLLOWUP.md)
 
+## D037 — 2026-11-16 UTC — Preserve verified-contact expectations in same-protocol upgrade tests
+
+- **Status:** Implemented and locally validated; hosted runtime validation pending
+- **Work:** Corrected the upgrade fixture's unconditional protocol-5 trust-clearing assertion. Seed now records the baseline contact binding/fingerprint and fixture version. Verify requires unchanged dual-key contact trust to remain verified while legacy single-key migration requires reverification. Added an emulator-only actual APK reinstall check after the normal suite, preserving identity, verified contact fingerprint/nickname and encrypted history.
+- **Decision / reason:** Continue independent release-test hardening while maintaining the owner's physical-test gate for protocol changes. Same-protocol updates must not be mistaken for the earlier key-separation migration. This test is explicitly a same-build reinstall, not a signed N-to-N+1 version-upgrade or physical-radio claim. App protocol/storage behavior is unchanged.
+- **Validation / evidence:** Local debug build/lint/66 JVM tests and instrumentation compilation passed; hosted runtime results recorded separately once complete. The updated fixture also compiled against the immutable protocol-4 baseline. Host script rejects non-emulator execution and requires actual installer success and continuity assertions.
+- **Open items:** Run hosted reinstall and ordinary suites, then consolidate. Owner offline backup is deferred; second compatible phone and protocol/security follow-ups remain open. No new APK release is published.
+- **Sources:** This change; [testing](TESTING.md); [signing](SIGNING.md)
+
 ## Template for the next work set
 
 ```markdown
-## D037 — YYYY-MM-DD HH:MM UTC — Short title
+## D038 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

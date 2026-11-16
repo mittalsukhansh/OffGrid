@@ -71,6 +71,7 @@ jobs:
             app/build/reports/
             app/build/outputs/androidTest-results/
             app/build/outputs/identity-process-death/
+            app/build/outputs/same-protocol-reinstall/
           if-no-files-found: ignore
 
   storage-tests:
@@ -112,6 +113,7 @@ jobs:
             adb install -t -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             python3 scripts/check-identity-process-death.py --runs 10 --expected-protocol 5 --output app/build/outputs/identity-process-death/current
             ./gradlew --no-daemon connectedDebugAndroidTest
+            python3 scripts/check-same-protocol-reinstall.py
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -121,4 +123,5 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
             app/build/outputs/identity-process-death/
+            app/build/outputs/same-protocol-reinstall/
           if-no-files-found: ignore

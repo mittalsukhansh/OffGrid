@@ -52,6 +52,11 @@ public class UpgradeContinuityTest {
                         .putString("publicKey", crypto.getPublicKeyBase64())
                         .putString("message", packet.getMessageId())
                         .putString("fingerprint", crypto.getOwnFingerprint())
+                        .putInt("fixtureVersion", 2)
+                        .putString("friendFingerprint", crypto.contactFingerprint(friendId))
+                        .putBoolean(
+                                "friendUsesAgreementKey",
+                                friend.getContactString().startsWith("offgrid5:"))
                         .commit());
         assertTrue(context.getSharedPreferences("offgrid_identity", 0).edit().commit());
         assertTrue(
@@ -84,9 +89,19 @@ public class UpgradeContinuityTest {
         String friend = marker.getString("friend", null);
         assertEquals("Upgrade friend", crypto.nickname(friend));
         assertTrue(crypto.getContacts().stream().anyMatch(c -> c.id.equals(friend)));
-        // Protocol-4 verification covered one key; the upgraded two-key fingerprint needs
-        // comparison again.
-        if (MeshMessage.PROTOCOL_VERSION >= 5) assertFalse(crypto.isVerified(friend));
+        assertEquals("Use a matching baseline fixture", 2, marker.getInt("fixtureVersion", 0));
+        if (marker.getBoolean("friendUsesAgreementKey", false)) {
+            // An ordinary protocol-5 update must preserve the verified two-key binding.
+            assertEquals(
+                    marker.getString("friendFingerprint", null), crypto.contactFingerprint(friend));
+            assertTrue("Unchanged verified binding must survive update", crypto.isVerified(friend));
+        } else if (MeshMessage.PROTOCOL_VERSION >= 5) {
+            // Protocol-4 verification covered one key and cannot verify a new agreement key.
+            assertFalse(
+                    "Legacy single-key trust requires reverification", crypto.isVerified(friend));
+        } else {
+            assertTrue(crypto.isVerified(friend));
+        }
         String id = marker.getString("message", null);
         assertEquals(
                 "Upgrade continuity sentinel",
