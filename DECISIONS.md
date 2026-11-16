@@ -164,7 +164,7 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Decision / reason:** Current app uses key identities/local nicknames without hosting or SMS. iOS needs separate platform implementation/build/signing work; do not imply the Android APK supplies iOS support.
 - **Validation / evidence:** Owner instructions and the explicit status/roadmap in REVIEW_REPORT.md. No code for those deferred features was added.
 - **Open items:** Groups need reviewed membership/key management; SOS needs explicit consent and honest uncertainty; forward-secret sessions and encrypted backups are separate future projects.
-- **Sources:** Owner instructions; [review roadmap](REVIEW_REPORT.md#8-what-is-left-and-recommended-proposal)
+- **Sources:** Owner instructions; [review roadmap](docs/REVIEW_REPORT.md#8-what-is-left-and-recommended-proposal)
 
 ## D017 — 2026-11-16 09:55 UTC — Application ID, persistent release signing and upstream attribution
 
@@ -229,10 +229,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner must send/obtain the upstream written permission and apply admin-only metadata/secrets or grant suitable integration permissions. Continue the authorized 1.0 technical changes, automated signing/upgrade evidence and truthful release preparation. A later release version is not proof of physical reliability or licensing resolution.
 - **Sources:** This change; [audit](docs/audits/signing-history.json); [permission request](UPSTREAM_PERMISSION.md); [agent guide](docs/AGENTS.md)
 
+## D024 — 2026-11-16 11:49 UTC — Validate relocated documentation links
+
+- **Status:** Corrected and validated
+- **Work:** Fixed the historical roadmap link containing a fragment after the review report moved to docs, and checked root/moved Markdown references.
+- **Decision / reason:** Preserve historical prose while keeping document destinations usable after the owner-requested renames.
+- **Validation / evidence:** Relative document paths and script syntax checked; no application behavior changed. The initial path check caught this fragment reference before the follow-up correction.
+- **Open items:** Continue 1.0 implementation and automated release evidence; external and physical blockers from D023 remain.
+- **Sources:** This change; [review report](docs/REVIEW_REPORT.md)
+
 ## Template for the next work set
 
 ```markdown
-## D024 — YYYY-MM-DD HH:MM UTC — Short title
+## D025 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
