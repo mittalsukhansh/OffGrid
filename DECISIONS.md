@@ -274,10 +274,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Complete final exact-source CI, signed in-place emulator upgrade and experimental v1.0 publication. Physical devices, licensing consent and admin-only setup remain open.
 - **Sources:** This change; [preparation CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43919119774)
 
+## D029 — 2026-11-16 — Carry inventory knowledge into newly authenticated radio aliases
+
+- **Status:** Implemented and locally validated
+- **Work:** Unioned bounded known-packet sets when a second transport endpoint authenticates as an already known identity. Clear inherited endpoint hints if its authenticated identity changes. Strengthened the alias regression so Wi-Fi advertises an empty page while BLE already knows a queued ID.
+- **Decision / reason:** An alias must inherit earlier inventory/forwarding knowledge even when its own rotating page differs; otherwise duplicate forwarding can consume relay budget despite logical identity coalescing.
+- **Validation / evidence:** Local debug build/lint/65 JVM tests/instrumentation compilation passed, including the empty-page cross-radio regression and deterministic relay simulator. Final source will be signed and checked again before release.
+- **Open items:** Final hosted checks, actual signed emulator upgrade and publication; physical devices and external permission/admin blockers remain.
+- **Sources:** This change; [protocol inventory](PACKET_FORMAT.md)
+
 ## Template for the next work set
 
 ```markdown
-## D029 — YYYY-MM-DD HH:MM UTC — Short title
+## D030 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

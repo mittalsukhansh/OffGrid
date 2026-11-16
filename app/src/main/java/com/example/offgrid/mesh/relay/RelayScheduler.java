@@ -147,13 +147,22 @@ public final class RelayScheduler {
     public void inventory(String address, String identity, java.util.Collection<String> ids) {
         Peer peer = peers.get(address);
         if (peer == null) return;
+        if (peer.identity != null && !identity.equals(peer.identity)) peer.deliveredIds.clear();
         peer.identity = identity;
-        for (String id : ids) peer.remember(id);
-        for (Peer sibling : peers.values()) {
-            if (identity.equals(sibling.identity)) {
-                for (String id : ids) sibling.remember(id);
-            }
+        Set<String> shared = new LinkedHashSet<>();
+        for (Peer sibling : peers.values())
+            if (identity.equals(sibling.identity)) shared.addAll(sibling.deliveredIds);
+        shared.addAll(ids);
+        while (shared.size() > MAX_PEER_IDS) {
+            Iterator<String> oldest = shared.iterator();
+            oldest.next();
+            oldest.remove();
         }
+        for (Peer sibling : peers.values())
+            if (identity.equals(sibling.identity)) {
+                sibling.deliveredIds.clear();
+                sibling.deliveredIds.addAll(shared);
+            }
         publishPeerCount();
     }
 

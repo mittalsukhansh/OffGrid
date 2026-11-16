@@ -224,8 +224,7 @@ public class RelaySchedulerTest {
         peer("wifi:phone", -40);
         scheduler.inventory(
                 "ble:phone", sender, java.util.Collections.singletonList(known.getMessageId()));
-        scheduler.inventory(
-                "wifi:phone", sender, java.util.Collections.singletonList(known.getMessageId()));
+        scheduler.inventory("wifi:phone", sender, java.util.Collections.emptyList());
         scheduler.start();
         time.runDue();
         assertEquals(1, transport.calls.size());
