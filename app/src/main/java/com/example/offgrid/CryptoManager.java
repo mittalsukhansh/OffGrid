@@ -51,31 +51,12 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * Device identity, contact keys and end-to-end encryption for private mesh messages.
- *
- * <h3>Identity</h3>
- *
- * Each install owns a long-term P-256 key pair. The <b>device ID</b> is the first 16 bytes of
- * SHA-256(public key) as 32 hex characters. Because the ID is derived from the key, nobody can
- * publish a different key for somebody else's ID: a key is accepted for an ID only if its hash
- * matches. If you obtain someone's ID out-of-band (in person, QR, another app), a key heard over
- * the mesh for that ID is therefore automatically authentic.
- *
- * <p>The private key never leaves the device unencrypted: it is wrapped with an AES-256-GCM key
- * stored in the Android Keystore before being saved.
- *
- * <h3>Encryption (per message)</h3>
- *
- * <pre>
- *   shared = ECDH(myPrivate, theirPublic)
- *   key    = HKDF-SHA256(shared, info = "offgrid-e2ee-v5|" + senderId + ">" + targetId)
- *   wire   = Base64url( iv(12) || AES-256-GCM(key, iv, plaintext, aad) )
- *   aad    = messageId | senderId | targetId | timestamp
- * </pre>
- *
- * The key is direction-specific, and the AAD binds the ciphertext to the packet's routing fields,
- * so a relay cannot re-address or re-label a message without breaking authentication. Relays never
- * need (and never have) any key.
+ * Protocol-5 identity and private-message cryptography. The retained P-256 signing identity
+ * determines the device ID; a separate wrapped P-256 agreement key receives private traffic. Each
+ * encryption uses fresh ephemeral-static ECDH, purpose-separated HKDF and AES-256-GCM. The signed
+ * envelope binds routing, sequence/epoch, both public keys and ciphertext. This construction does
+ * not provide full forward secrecy after recipient agreement-key compromise. See PACKET_FORMAT.md
+ * and SECURITY.md for canonical bytes and backup/restore limitations.
  */
 public final class CryptoManager {
 
@@ -416,7 +397,8 @@ public final class CryptoManager {
     /**
      * Encrypts {@code plaintext} for {@code targetId}.
      *
-     * @return Base64url(iv || ciphertext || tag) to put in a private {@link MeshMessage}
+     * @return Base64url(ephemeral public point || iv || ciphertext || tag) to put in a private
+     *     {@link MeshMessage}
      * @throws IllegalArgumentException if the plaintext is empty or too large
      * @throws GeneralSecurityException if we have no key for the target or encryption fails
      */

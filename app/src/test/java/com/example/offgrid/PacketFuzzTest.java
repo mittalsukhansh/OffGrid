@@ -53,6 +53,17 @@ public class PacketFuzzTest {
                 () -> JsonBounds.object(text.toString(), IdentityBackup.MAX_BYTES));
     }
 
+    @Test
+    public void lenientQuotesAndCommentsCannotHideRecursiveNesting() {
+        String hidden = "{\"x\":" + "[' ]',".repeat(2000) + "0" + "]".repeat(2000) + "}";
+        assertThrows(org.json.JSONException.class, () -> JsonBounds.object(hidden, 32768));
+        assertThrows(
+                org.json.JSONException.class,
+                () -> JsonBounds.object("{/* comment */ \"x\":1}", 32768));
+        assertThrows(
+                org.json.JSONException.class, () -> JsonBounds.object("{\"x\":[1,2]}}", 32768));
+    }
+
     private static DataInputStream input(byte[] data) {
         return new DataInputStream(new ByteArrayInputStream(data));
     }

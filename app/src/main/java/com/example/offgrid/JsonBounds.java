@@ -23,9 +23,15 @@ public final class JsonBounds {
                 else if (c == '\\') escape = true;
                 else if (c == '"') quoted = false;
             } else if (c == '"') quoted = true;
-            else if (c == '{' || c == '[') {
+            else if (c == '\'' || c == '/') {
+                // Android's JSONTokener accepts nonstandard quotes/comments; reject those
+                // so their contents cannot disagree with this pre-parser's depth accounting.
+                throw new JSONException("Nonstandard JSON quoting/comment");
+            } else if (c == '{' || c == '[') {
                 if (++depth > 16) throw new JSONException("JSON nesting exceeds bound");
-            } else if (c == '}' || c == ']') depth--;
+            } else if (c == '}' || c == ']') {
+                if (--depth < 0) throw new JSONException("Unbalanced JSON nesting");
+            }
         }
         return new JSONObject(json);
     }

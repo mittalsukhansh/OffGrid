@@ -265,10 +265,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Execute final-source hosted checks, locally sign/verify exact-source APK, stage only public artifacts, run actual emulator upgrade, publish/verify v1.0 and integrate/delete merged branches. Physical runs and written licensing consent remain owner actions; repository metadata/signing secret admin access remains blocked.
 - **Sources:** This change; [D026 CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43918236795); [release notes](RELEASE_NOTES_1.0.md); [signing](SIGNING.md)
 
+## D028 — 2026-11-16 — Reject lenient-JSON depth bypass before publication
+
+- **Status:** Implemented and locally validated; final hosted/source artifact checks pending
+- **Work:** Rejected nonstandard single quotes/comments and unbalanced nesting in the shared bounded JSON pre-parser. Added a crafted regression where single-quoted brackets hide actual recursive nesting. Updated stale source comments and bundled Bouncy Castle's own license text in APK assets.
+- **Decision / reason:** Android JSONTokener accepts syntax beyond standard JSON; the pre-parser must reject syntax that can disagree with its quote/depth accounting. Preserve the dependency's notice while upstream application licensing remains unresolved.
+- **Validation / evidence:** Local build/lint/65 JVM tests/instrumentation compilation passed for the guard regression; comment/license-asset-only delta checked with the final signed build. Previous preparation commit a3fd223 passed both GitHub build and Android emulator jobs and its locally signed 1.0 APK matched the pinned certificate. Rebuild the final source before publishing rather than distributing the earlier parser version.
+- **Open items:** Complete final exact-source CI, signed in-place emulator upgrade and experimental v1.0 publication. Physical devices, licensing consent and admin-only setup remain open.
+- **Sources:** This change; [preparation CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43919119774)
+
 ## Template for the next work set
 
 ```markdown
-## D028 — YYYY-MM-DD HH:MM UTC — Short title
+## D029 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

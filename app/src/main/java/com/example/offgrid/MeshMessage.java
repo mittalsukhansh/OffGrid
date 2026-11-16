@@ -36,15 +36,12 @@ import java.util.regex.Pattern;
  * A node delivers a message locally, then relays {@link #withDecrementedTtl()} only while {@link
  * #isRelayable()} (ttl &gt; 0 after the decrement).
  *
- * <h3>Wire format (protocol version 3)</h3>
+ * <h3>Wire format</h3>
  *
- * <pre>
- * {"v":2,"id":"..","sid":"..","typ":1,"tid":"..","txt":"..","spk":"..","ttl":7,"ts":1760000000000}
- * </pre>
- *
- * {@code tid} and {@code spk} (sender public key) appear only on private messages. The target ID is
- * visible to relays (they need it to know the packet is not for them); only the content is
- * confidential.
+ * Protocol 5 uses signed JSON with separate signing/agreement public keys and a durable sender
+ * epoch/sequence. See PACKET_FORMAT.md for field types, canonical signing bytes and limits. Routing
+ * identities and private targets are visible to relays; private payloads remain encrypted. Saved
+ * versions 2/3/4 are readable but fail live network admission.
  */
 public final class MeshMessage {
 
