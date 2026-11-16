@@ -18,6 +18,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Audit public signing material and Git history
+        run: python3 scripts/audit-signing-history.py --output "$RUNNER_TEMP/signing-audit.json"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -23,3 +23,6 @@ keystore.properties
 signing.properties
 .env.signing
 /signing/private/
+
+# IDE machine-specific configuration
+/.idea/

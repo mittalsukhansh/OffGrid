@@ -30,7 +30,7 @@ or CoC interoperability result has been established.
 After the application snapshot below, release application ID changed to
 `io.github.mittalsukhansh.offgrid`, debug builds gained a `.debug` suffix and a
 persistent release keystore/public-certificate verification workflow was added.
-See [SIGNING.md](SIGNING.md) for custody and GitHub-secret provisioning, which is
+See [SIGNING.md](../SIGNING.md) for custody and GitHub-secret provisioning, which is
 blocked for the integration by GitHub HTTP 403. A connected-device upgrade test
 and production signing custody confirmation remain outstanding.
 
@@ -311,31 +311,31 @@ selected chat usability features. Groups, SOS and battery modes remain deferred.
 
 Read the report together with the code; this document must not substitute for it.
 
-1. [README](README.md), [architecture](ARCHITECTURE.md), [packet format](PACKET_FORMAT.md),
-   [security model](SECURITY.md), and [device testing checklist](TESTING.md).
-2. [Manifest](app/src/main/AndroidManifest.xml), [app build configuration](app/build.gradle.kts),
-   [dependencies](gradle/libs.versions.toml) and [CI](.github/workflows/android.yml).
-3. [Service](app/src/main/java/com/example/offgrid/MeshService.java),
-   [node](app/src/main/java/com/example/offgrid/mesh/MeshNode.java),
-   [relay scheduler](app/src/main/java/com/example/offgrid/mesh/relay/RelayScheduler.java),
-   [combined transport](app/src/main/java/com/example/offgrid/mesh/transport/CombinedTransport.java),
-   [LAN transport](app/src/main/java/com/example/offgrid/mesh/transport/LanTransport.java)
-   and [BLE transport](app/src/main/java/com/example/offgrid/mesh/transport/BleTransport.java).
-4. [Packet model](app/src/main/java/com/example/offgrid/MeshMessage.java),
-   [protocol](app/src/main/java/com/example/offgrid/mesh/protocol/MeshProtocol.java),
-   [crypto](app/src/main/java/com/example/offgrid/CryptoManager.java),
-   [packet security](app/src/main/java/com/example/offgrid/PacketSecurity.java),
-   [private actions](app/src/main/java/com/example/offgrid/PrivateActions.java)
-   and [media transfers](app/src/main/java/com/example/offgrid/MediaTransfers.java).
-5. [Message store](app/src/main/java/com/example/offgrid/MessageStore.java),
-   [DAO](app/src/main/java/com/example/offgrid/MessageDao.java),
-   [database/migrations](app/src/main/java/com/example/offgrid/MessageDatabase.java),
-   [storage encryption](app/src/main/java/com/example/offgrid/StorageCipher.java),
-   [activity](app/src/main/java/com/example/offgrid/MainActivity.java)
-   and [notifications](app/src/main/java/com/example/offgrid/ChatNotifications.java).
-6. [JVM tests](app/src/test/java/com/example/offgrid),
-   [instrumentation tests](app/src/androidTest/java/com/example/offgrid)
-   and [test-release workflow](.github/workflows/test-release.yml).
+1. [README](../README.md), [architecture](../ARCHITECTURE.md), [packet format](../PACKET_FORMAT.md),
+   [security model](../SECURITY.md), and [device testing checklist](../TESTING.md).
+2. [Manifest](../app/src/main/AndroidManifest.xml), [app build configuration](../app/build.gradle.kts),
+   [dependencies](../gradle/libs.versions.toml) and [CI](../.github/workflows/android.yml).
+3. [Service](../app/src/main/java/com/example/offgrid/MeshService.java),
+   [node](../app/src/main/java/com/example/offgrid/mesh/MeshNode.java),
+   [relay scheduler](../app/src/main/java/com/example/offgrid/mesh/relay/RelayScheduler.java),
+   [combined transport](../app/src/main/java/com/example/offgrid/mesh/transport/CombinedTransport.java),
+   [LAN transport](../app/src/main/java/com/example/offgrid/mesh/transport/LanTransport.java)
+   and [BLE transport](../app/src/main/java/com/example/offgrid/mesh/transport/BleTransport.java).
+4. [Packet model](../app/src/main/java/com/example/offgrid/MeshMessage.java),
+   [protocol](../app/src/main/java/com/example/offgrid/mesh/protocol/MeshProtocol.java),
+   [crypto](../app/src/main/java/com/example/offgrid/CryptoManager.java),
+   [packet security](../app/src/main/java/com/example/offgrid/PacketSecurity.java),
+   [private actions](../app/src/main/java/com/example/offgrid/PrivateActions.java)
+   and [media transfers](../app/src/main/java/com/example/offgrid/MediaTransfers.java).
+5. [Message store](../app/src/main/java/com/example/offgrid/MessageStore.java),
+   [DAO](../app/src/main/java/com/example/offgrid/MessageDao.java),
+   [database/migrations](../app/src/main/java/com/example/offgrid/MessageDatabase.java),
+   [storage encryption](../app/src/main/java/com/example/offgrid/StorageCipher.java),
+   [activity](../app/src/main/java/com/example/offgrid/MainActivity.java)
+   and [notifications](../app/src/main/java/com/example/offgrid/ChatNotifications.java).
+6. [JVM tests](../app/src/test/java/com/example/offgrid),
+   [instrumentation tests](../app/src/androidTest/java/com/example/offgrid)
+   and [test-release workflow](../.github/workflows/test-release.yml).
 
 Build prerequisites: JDK 25, SDK platform `android-37.0`, Build Tools `36.0.0`,
 accepted Android SDK licenses, and a configured SDK path. Use an isolated checkout

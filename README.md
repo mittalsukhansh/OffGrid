@@ -1,9 +1,10 @@
 # OffGrid
 
-OffGrid is an Android prototype for offline messaging over Bluetooth Low
-Energy/GATT and optional local Wi-Fi TCP transports. Phones discover peers, exchange signed packets, and
-retain messages for later forwarding. It is not an implementation of the Bluetooth
-SIG Mesh standard.
+OffGrid is an Android offline-messaging prototype that bridges **BLE and Wi-Fi
+Direct**, with **authenticated delivery receipts** and **resumable encrypted
+media**. Phones exchange signed packets without a messaging server or shared
+access point. It uses a custom store-and-forward protocol; field reliability and
+radio throughput still require physical-device evidence.
 
 [Download the v0.2 test prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v0.2).
 Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
@@ -155,10 +156,10 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 
 ## Components and documentation
 
-- [decissions.md](decissions.md): continuing work history, decisions, validation and
+- [DECISIONS.md](DECISIONS.md): continuing work history, decisions, validation and
   unresolved actions; updated after each work set under [AGENTS.md](AGENTS.md).
 
-- [REVIEW_REPORT.md](REVIEW_REPORT.md): project status, stack, architecture, limitations,
+- [REVIEW_REPORT.md](docs/REVIEW_REPORT.md): project status, stack, architecture, limitations,
   proposed roadmap and a copy-ready independent review request for Claude.
 
 The Android service is a lifecycle/binding adapter; it no longer owns the GATT

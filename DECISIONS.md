@@ -1,6 +1,6 @@
 # OffGrid work and decision log
 
-Canonical file: **decissions.md** (the filename requested by the repository owner).
+Canonical file: **DECISIONS.md** (the filename requested by the repository owner).
 Created 16 November 2026. This is both a work history and a decision record.
 No existing decision log was found when this file was created.
 
@@ -10,7 +10,7 @@ Append an entry after each completed logical set of work, before committing/push
 that work. Keep one canonical log. Use the next D-number and UTC dates. Include
 what changed, why, actual validation, source commit/PR/release references when
 available, and open/blocked/deferred items. For the commit being created, write
-“this change” rather than inventing its future SHA. See AGENTS.md for the durable
+“this change” rather than inventing its future SHA. See docs/AGENTS.md for the durable
 repository instruction and the template at the end of this file.
 
 The backfill below is based on retained Git commits, verified release/CI records
@@ -155,7 +155,7 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Decision / reason:** Pin the reviewed application snapshot and distinguish subsequent updates from historical findings. Ask reviewers to verify claims against source rather than treat the report as an audit.
 - **Validation / evidence:** Checked referenced repository paths and report links. This documentation change did not require rerunning application tests.
 - **Open items:** An independent Claude/human/security review is not established merely by creating the report.
-- **Sources:** [`0395eea`](https://github.com/mittalsukhansh/OffGrid/commit/0395eea01263d452481021011bb6edc75d1f8df0); [REVIEW_REPORT.md](REVIEW_REPORT.md)
+- **Sources:** [`0395eea`](https://github.com/mittalsukhansh/OffGrid/commit/0395eea01263d452481021011bb6edc75d1f8df0); [REVIEW_REPORT.md](docs/REVIEW_REPORT.md)
 
 ## D016 — 2026-11-16 (owner-directed scope decisions) — Deferred features and offline identity policy
 
@@ -220,10 +220,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Physical AP-free pairing, group formation, permission/OEM interactions, radio throughput and rapid process/connection recovery still need phones under WIFI_DIRECT.md. Loopback and emulator tests do not establish those outcomes. Wi-Fi Aware and private group chats remain unimplemented.
 - **Sources:** This change; [`2d6205d`](https://github.com/mittalsukhansh/OffGrid/commit/2d6205d3484c8eeb601700ce82a0059b4c07c462); [final Direct CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43858481086); [WIFI_DIRECT.md](WIFI_DIRECT.md)
 
+## D023 — 2026-11-16 11:48 UTC — 1.0 hygiene, provenance audit and blocked external setup
+
+- **Status:** Repository cleanup implemented; external permission operations blocked
+- **Work:** Removed tracked .idea files while preserving local IDE settings; ignored the directory. Renamed the canonical log to DECISIONS.md and moved the full agent guide/review report to docs. Kept a minimal root AGENTS.md discovery pointer. Added a signing/history audit, requested metadata values and an owner-operated metadata script; updated README positioning.
+- **Decision / reason:** Supersedes D019's filename and D015's report location while preserving historical entries. Retain automatic agent discovery so future work keeps logging. Only public certificate/identity metadata belongs in signing/. Do not apply MIT without upstream consent or claim blocked messages were delivered.
+- **Validation / evidence:** Audited 302 reachable Git blobs, current signing files and known local private signing values: no findings in that scope. The upstream issue request, repo description/topics and signing-secret access each returned GitHub HTTP 403. No email connector is available, so the prepared licensing request was not delivered. No physical-device results were generated.
+- **Open items:** Owner must send/obtain the upstream written permission and apply admin-only metadata/secrets or grant suitable integration permissions. Continue the authorized 1.0 technical changes, automated signing/upgrade evidence and truthful release preparation. A later release version is not proof of physical reliability or licensing resolution.
+- **Sources:** This change; [audit](docs/audits/signing-history.json); [permission request](UPSTREAM_PERMISSION.md); [agent guide](docs/AGENTS.md)
+
 ## Template for the next work set
 
 ```markdown
-## D023 — YYYY-MM-DD HH:MM UTC — Short title
+## D024 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

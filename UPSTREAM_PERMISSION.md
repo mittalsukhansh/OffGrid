@@ -1,8 +1,11 @@
 # Upstream licensing permission: pending
 
-Status: the repository owner confirmed that no upstream licensing permission has
-been confirmed. No request has been sent automatically. No MIT license has been
-applied to the inherited application.
+Status: upstream permission is still unconfirmed. On 16 November 2026 the owner
+authorized sending the request. An attempt to create an upstream GitHub issue was
+rejected with HTTP 403, “Resource not accessible by integration”; no issue/message
+was delivered. No email connector is available in this session. No MIT grant has
+been applied to inherited code. The owner can submit the prepared request below
+at https://github.com/vikramaditya19/OffGrid/issues/new or contact upstream directly.
 
 ## What is needed
 
@@ -40,4 +43,4 @@ code rather than declaring it licensed by assumption.
 > intended, or any portions have different ownership/terms, please identify them
 > so we can preserve the correct notices and comply with those terms.
 
-This is a draft for the owner, not evidence of consent or a message already sent.
+This remains a prepared request, not evidence of consent or a delivered message.

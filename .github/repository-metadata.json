@@ -1,0 +1,4 @@
+{
+  "description": "Offline Android messaging bridging BLE and Wi-Fi Direct, with authenticated delivery receipts and resumable encrypted media.",
+  "topics": ["android", "ble", "offline-messaging", "mesh", "wifi-direct", "end-to-end-encryption"]
+}
