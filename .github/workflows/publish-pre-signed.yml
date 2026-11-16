@@ -1,7 +1,7 @@
 name: Verify and publish pre-signed 1.0
 on:
   push:
-    branches: ['release-assets/v1.0']
+    branches: ['release-assets/v1.0*']
 permissions:
   contents: read
   actions: read

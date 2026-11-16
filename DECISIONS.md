@@ -283,10 +283,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Final hosted checks, actual signed emulator upgrade and publication; physical devices and external permission/admin blockers remain.
 - **Sources:** This change; [protocol inventory](PACKET_FORMAT.md)
 
+## D030 — 2026-11-16 — Public signed artifact staging for 1.0
+
+- **Status:** Prepared for verified publication; signed upgrade/publishing pending at staging
+- **Work:** Staged only the public signed 1.0 APK and signed baseline/upgrade test APKs with SHA-256 manifest. Main APK version 1.0/code 100 embeds exact source 3668e621e59d43f14e1a8abdcaf9e7f675eb4fc6 and matches the pinned release certificate. No private keystore, passwords, credential JSON, identity backups or private handoff ZIPs are staged.
+- **Decision / reason:** Use the authorized public-artifact Actions route from D027 because GitHub admin-secret provisioning is unavailable. Require exact-source CI and actual in-place emulator upgrade before publication. The staging commit is based on the exact application source and is not merged into main.
+- **Validation / evidence:** Local signed release build, release lint, release-instrumentation build, app ID/version/non-debuggable/certificate and embedded-source checks passed. Public fixture hashes recorded in the manifest. Hosted source CI and upgrade outcome are recorded separately after completion; no physical result is claimed.
+- **Open items:** Await exact-source checks, integrate tested source, execute publication workflow and verify release downloads, then remove temporary branches. External consent/admin/physical items remain open.
+- **Sources:** This staging change; [source](https://github.com/mittalsukhansh/OffGrid/commit/3668e621e59d43f14e1a8abdcaf9e7f675eb4fc6); [release notes](RELEASE_NOTES_1.0.md)
+
+## D031 — 2026-11-16 — Stop publication after signed-upgrade identity mismatch
+
+- **Status:** Upgrade failure detected; diagnostic/durability changes implemented; root cause under investigation
+- **Work:** The first real signed baseline→1.0 test installed both APKs but found a different loaded identity, so publication was automatically skipped. Made new identity preferences durable before use and preserved existing identity records on load errors instead of silently overwriting them. Added a corrupt-record preservation regression. The upgrade fixture now flushes seed preferences, verifies persisted public/wrapped records before loading and reopens the baseline in a separate instrumentation run before upgrading. Capture filtered crypto/runtime error logs for diagnosis. Allow fresh attempt branches rather than rewriting failed staging history.
+- **Decision / reason:** Installer/signature success is insufficient evidence of data continuity. Keep v1.0 unpublished until identity/contact/history assertions actually pass. Distinguish fixture seed durability, baseline process-reopen behavior and true version-upgrade failures before assigning a cause.
+- **Validation / evidence:** Earlier source 3668e62 passed build/lint/65 JVM tests and Android runtime checks, but the first signed upgrade run 43921168068 failed the identity assertion and skipped publish. Local checks run for this diagnostic/fail-closed change; new runtime/upgrade results will be recorded separately. The original failed APK is not a published release.
+- **Open items:** Determine the key-loading failure from baseline-reopen/filtered logs, fix it and repeat exact-source CI and signed upgrade. No physical results or licensing permission exist; admin settings remain blocked.
+- **Sources:** This change; [failed upgrade](https://github.com/mittalsukhansh/OffGrid/actions/runs/43921168068)
+
 ## Template for the next work set
 
 ```markdown
-## D030 — YYYY-MM-DD HH:MM UTC — Short title
+## D032 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

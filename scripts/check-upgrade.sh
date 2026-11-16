@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p release-evidence
+trap 'adb logcat -d -s OffGridCrypto:W AndroidRuntime:E | tee release-evidence/key-loading.txt' EXIT
 {
     echo 'OffGrid signed in-place upgrade: emulator evidence (not a physical radio test)'
     date -u +%FT%TZ
@@ -12,6 +13,9 @@ mkdir -p release-evidence
     adb shell am instrument -w -e class com.example.offgrid.UpgradeContinuityTest#seed -e upgrade seed io.github.mittalsukhansh.offgrid.test/androidx.test.runner.AndroidJUnitRunner > release-evidence/seed.txt
     cat release-evidence/seed.txt
     grep -F 'OK (1 test)' release-evidence/seed.txt
+    adb shell am instrument -w -e class com.example.offgrid.UpgradeContinuityTest#verify -e upgrade verify io.github.mittalsukhansh.offgrid.test/androidx.test.runner.AndroidJUnitRunner > release-evidence/baseline-reopen.txt
+    cat release-evidence/baseline-reopen.txt
+    grep -F 'OK (1 test)' release-evidence/baseline-reopen.txt
     adb install -r release-staging/offgrid-1.0.apk
     adb install -r release-staging/upgrade-test.apk
     adb shell am instrument -w -e class com.example.offgrid.UpgradeContinuityTest#verify -e upgrade verify io.github.mittalsukhansh.offgrid.test/androidx.test.runner.AndroidJUnitRunner > release-evidence/verify.txt

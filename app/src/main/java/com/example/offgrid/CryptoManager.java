@@ -943,11 +943,16 @@ public final class CryptoManager {
                 setIdentity(priv, pub);
                 return;
             } catch (GeneralSecurityException | IllegalArgumentException e) {
-                // e.g. Keystore key lost after a restore; a new identity is the only option.
-                Log.w(TAG, "Stored identity unreadable; generating a new one", e);
+                // Preserve the original records: a failed load must never silently replace
+                // identity.
+                throw new GeneralSecurityException(
+                        "Stored identity could not be opened; original data preserved", e);
             }
         }
 
+        if (wrapped != null || pubB64 != null)
+            throw new GeneralSecurityException(
+                    "Incomplete stored identity; original data preserved");
         KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
         generator.initialize(new ECGenParameterSpec("secp256r1"));
         KeyPair pair = generator.generateKeyPair();
@@ -957,10 +962,10 @@ public final class CryptoManager {
         String wrappedNew = Base64.encodeToString(wrap(pkcs8), B64_FLAGS);
         Arrays.fill(pkcs8, (byte) 0);
 
-        prefs.edit()
+        if (!prefs.edit()
                 .putString(PREF_PRIVATE_WRAPPED, wrappedNew)
                 .putString(PREF_PUBLIC, Base64.encodeToString(pub, B64_FLAGS))
-                .apply();
+                .commit()) throw new GeneralSecurityException("Could not durably save identity");
         setIdentity(pair.getPrivate(), pub);
     }
 
@@ -1006,13 +1011,26 @@ public final class CryptoManager {
         return out;
     }
 
+    private static SecretKey existingWrapKey() throws GeneralSecurityException {
+        try {
+            KeyStore store = KeyStore.getInstance(ANDROID_KEYSTORE);
+            store.load(null);
+            if (!store.containsAlias(WRAP_KEY_ALIAS))
+                throw new GeneralSecurityException(
+                        "Identity wrapping key unavailable; original records preserved");
+            return (SecretKey) store.getKey(WRAP_KEY_ALIAS, null);
+        } catch (IOException failure) {
+            throw new GeneralSecurityException(failure);
+        }
+    }
+
     private static byte[] unwrap(byte[] data) throws GeneralSecurityException {
         if (data.length <= GCM_IV_BYTES)
             throw new GeneralSecurityException("wrapped key too short");
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(
                 Cipher.DECRYPT_MODE,
-                getOrCreateWrapKey(),
+                existingWrapKey(),
                 new GCMParameterSpec(GCM_TAG_BITS, data, 0, GCM_IV_BYTES));
         return cipher.doFinal(data, GCM_IV_BYTES, data.length - GCM_IV_BYTES);
     }

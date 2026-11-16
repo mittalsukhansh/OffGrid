@@ -4,7 +4,7 @@ OffGrid is experimental software, with a custom protocol and no independent secu
 
 ## Identity, keys and contact trust
 
-The signing identity is P-256 ECDSA, retained through upgrades. Version 5 creates a distinct P-256 agreement key. Both software private keys are wrapped with AES-256-GCM under Android Keystore before private preferences storage; this is not non-exportable hardware EC key material. A rooted/unlocked compromised process can expose key material.
+The signing identity is P-256 ECDSA, retained through upgrades. Version 5 creates a distinct P-256 agreement key. Both software private keys are wrapped with AES-256-GCM under Android Keystore before private preferences storage; this is not non-exportable hardware EC key material. A rooted/unlocked compromised process can expose key material. New identity records commit before use. If saved identity records or their wrapping key cannot be opened, loading fails while preserving the original records; it never silently creates a replacement identity or wrapping key. Preserve application data and existing backups when investigating a load failure.
 
 Every live packet binds signing/agreement public keys, sender-derived ID, epoch, sequence, routing fields, timestamp and content with ECDSA. TTL is mutable. Public signatures prevent impersonation under another key; they do not prove a person's name or prevent spam from fresh identities.
 

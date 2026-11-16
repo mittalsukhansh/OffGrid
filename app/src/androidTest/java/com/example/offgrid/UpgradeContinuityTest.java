@@ -53,6 +53,9 @@ public class UpgradeContinuityTest {
                         .putString("message", packet.getMessageId())
                         .putString("fingerprint", crypto.getOwnFingerprint())
                         .commit());
+        assertTrue(context.getSharedPreferences("offgrid_identity", 0).edit().commit());
+        assertTrue(
+                context.getSharedPreferences("upgrade-friend-offgrid_identity", 0).edit().commit());
         assertEquals(
                 "Upgrade continuity sentinel",
                 MessageStore.get(context)
@@ -65,9 +68,17 @@ public class UpgradeContinuityTest {
     public void verify() throws Exception {
         assumeTrue("verify".equals(InstrumentationRegistry.getArguments().getString("upgrade")));
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        CryptoManager crypto = CryptoManager.getInstance(context);
         SharedPreferences marker = context.getSharedPreferences("upgrade-evidence", 0);
         assertNotNull(marker.getString("identity", null));
+        SharedPreferences identity = context.getSharedPreferences("offgrid_identity", 0);
+        assertEquals(
+                "Stored public identity must survive before key loading",
+                marker.getString("publicKey", null),
+                identity.getString("public_key", null));
+        assertTrue(
+                "Wrapped identity must survive before key loading",
+                identity.contains("private_key_wrapped"));
+        CryptoManager crypto = CryptoManager.getInstance(context);
         assertEquals(marker.getString("identity", null), crypto.getLocalId());
         assertEquals(marker.getString("publicKey", null), crypto.getPublicKeyBase64());
         String friend = marker.getString("friend", null);

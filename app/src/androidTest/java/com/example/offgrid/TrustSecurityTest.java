@@ -295,4 +295,21 @@ public class TrustSecurityTest {
         assertTrue(store.dao().history().isEmpty());
         assertTrue(store.dao().pending().isEmpty());
     }
+
+    @Test
+    public void unreadableStoredIdentityNeverSilentlyReplacesItsPublicIdentity() throws Exception {
+        SharedPreferences saved = context.getSharedPreferences(name + "aliceoffgrid_identity", 0);
+        String original = saved.getString("private_key_wrapped", null);
+        assertNotNull(original);
+        assertTrue(saved.edit().putString("private_key_wrapped", "AA").commit());
+        try {
+            peer("alice");
+            fail("Corrupt identity was silently replaced");
+        } catch (IllegalStateException expected) {
+        }
+        assertEquals(alice.getPublicKeyBase64(), saved.getString("public_key", null));
+        assertEquals("AA", saved.getString("private_key_wrapped", null));
+        assertTrue(saved.edit().putString("private_key_wrapped", original).commit());
+        assertEquals(alice.getLocalId(), peer("alice").getLocalId());
+    }
 }
