@@ -337,10 +337,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Confirm restore from the separate offline drive and safe ejection. Obtain a second Android8+ handset (Android10+ for CoC comparison), then run the no-router photo test before further protocol changes. Upstream written permission, repo admin metadata and permanent signing-path choice remain owner actions; published v1.0 is unchanged.
 - **Sources:** This change; [CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43932121974); [evidence](docs/audits/identity-process-death/README.md); [custody](KEY_CUSTODY.md)
 
+## D036 — 2026-11-16 UTC — Owner deferred offline backup; maintenance consolidated
+
+- **Status:** Owner PC custody confirmed; offline backup explicitly deferred; tested changes consolidated
+- **Work:** Recorded the owner's decision to make/verify the offline-media copy later. Retained the confirmed Windows archive hash and locally passphrase-encrypted backup status without claiming a disconnected-media copy exists. Consolidated the tested source/evidence into main and removed the merged maintenance branch.
+- **Decision / reason:** Do not confuse an encrypted second file on one PC with an offline backup or create a reminder from the owner's stated plan. Preserve the earlier physical-test-before-protocol gate while clarifying the next work set requested by the owner.
+- **Validation / evidence:** D034 source passed hosted build/lint/66 JVM tests, the ten-old/ten-current real-process experiment and the ordinary Android suite. D035 contains those results. This custody/cleanup record is documentation-only; relative links, decision numbering and diff formatting checked. Feature head verified as an ancestor of main before deletion; pushes use mittalsukhansh.
+- **Open items:** Owner offline restore/ejection, compatible second test phone, pending protocol mitigations behind the physical gate unless the owner changes priority, upstream licensing and admin-only setup. No new release has been published or existing APK overwritten.
+- **Sources:** This change; [custody](KEY_CUSTODY.md); [review follow-up](docs/REVIEW_FOLLOWUP.md)
+
 ## Template for the next work set
 
 ```markdown
-## D036 — YYYY-MM-DD HH:MM UTC — Short title
+## D037 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

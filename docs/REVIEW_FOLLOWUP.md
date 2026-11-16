@@ -4,7 +4,7 @@ This record distinguishes source changes, automated evidence and owner-only work
 
 | Finding | Current status |
 | --- | --- |
-| Release key custody | Environment private key successfully signs a challenge verified by the pinned certificate; local handoff archive matches. The owner has confirmed the Windows archive hash and created a passphrase-encrypted backup on that PC. Restore verification from separate offline media is pending. See KEY_CUSTODY.md. |
+| Release key custody | Environment private key successfully signs a challenge verified by the pinned certificate; local handoff archive matches. The owner has confirmed the Windows archive hash and created a passphrase-encrypted backup on that PC. The owner deferred separate offline-media copy/restore verification; it remains pending. See KEY_CUSTODY.md. |
 | Stable-looking versionName | Next build explicitly says `1.0.1-experimental`; code 101 allows a later update from published code 100. Existing v1.0 assets are not overwritten. |
 | Identity after sudden process death | Added a host-orchestrated SIGKILL test with public expected identity captured outside the killed process, a new PID on reopening and a reloaded-private-key signing proof. Hosted API-30 outcomes: ten current passes, zero losses; ten losses on the untouched old constructor. See the investigation and committed summaries. |
 | Historical first-upgrade cause | Original transcript does not contain pre-load persisted-key state. The controlled reference reproduced missing persisted public keys before loading in all ten trials; current code passed all ten. Do not present that reproduction as retrospective proof of the exact first event. |
