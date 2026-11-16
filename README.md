@@ -136,6 +136,9 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 
 ## Components and documentation
 
+- [decissions.md](decissions.md): continuing work history, decisions, validation and
+  unresolved actions; updated after each work set under [AGENTS.md](AGENTS.md).
+
 - [REVIEW_REPORT.md](REVIEW_REPORT.md): project status, stack, architecture, limitations,
   proposed roadmap and a copy-ready independent review request for Claude.
 
