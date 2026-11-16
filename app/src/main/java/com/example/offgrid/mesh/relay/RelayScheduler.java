@@ -181,11 +181,16 @@ public final class RelayScheduler {
 
     private List<MeshTransport.Packet> pendingFor(Peer peer, int limit) {
         List<MeshTransport.Packet> result = new ArrayList<>();
+        if (peer.address.startsWith("ble:coc:")
+                && transport.profile(peer.address)
+                        != com.example.offgrid.mesh.transport.TransferProfile.COC) return result;
         for (Buffered buffered : queue.values()) {
             if (result.size() >= limit) break;
             String id = buffered.message.getMessageId();
             if (eligible(id) && !peer.deliveredIds.contains(id)) {
-                result.add(new MeshTransport.Packet(id, encoder.apply(buffered.message)));
+                byte[] bytes = encoder.apply(buffered.message);
+                if (bytes.length <= transport.maxPacketBytes(peer.address))
+                    result.add(new MeshTransport.Packet(id, bytes));
             }
         }
         return result;
@@ -202,7 +207,13 @@ public final class RelayScheduler {
                     && now >= peer.backoffUntil
                     && !pendingFor(peer, 1).isEmpty()) candidates.add(peer);
         }
-        candidates.sort((a, b) -> Integer.compare(b.rssi, a.rssi));
+        candidates.sort((a, b) -> {
+            int profile =
+                    Integer.compare(
+                            transport.profile(b.address).ordinal(),
+                            transport.profile(a.address).ordinal());
+            return profile != 0 ? profile : Integer.compare(b.rssi, a.rssi);
+        });
         for (Peer peer : candidates) {
             if (sessions.size() >= MAX_CONNECTIONS) break;
             List<MeshTransport.Packet> batch = pendingFor(peer, MAX_BATCH);

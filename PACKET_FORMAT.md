@@ -212,3 +212,26 @@ existing encrypted authenticated message receipt, queued in the reverse directio
 Bad lengths, truncated frames, invalid headers and timed-out sessions are closed.
 An unsent or canceled item can terminate a batch; remaining durable items can retry.
 Public message content remains plaintext on Wi-Fi, just as it is over BLE.
+
+## Negotiated range extension (current development)
+
+Normal wire envelopes remain version 4. A new receiver advertises `ranges: true`
+inside its signed encrypted `media_status` control body. Legacy senders ignore the
+extra field; a new sender without that authenticated capability keeps `media_chunk`
+at 640-byte/GATT pacing. The manifest and bitmap still describe 640-byte blocks.
+
+`media_range` is a control kind with `mid`, a starting canonical `index` and Base64url
+`data` for 1–12 adjacent blocks (at most 7,680 file bytes). Non-final ranges must be
+block aligned; an ending partial block must match the exact remaining file length.
+Only the original file author/target may send/accept it. All added blocks, replay
+evidence and progress are committed atomically; failure rolls back the whole range.
+Each range receives a progress response. Full length/hash/media validation and the
+ordinary final authenticated receipt remain mandatory for Delivered.
+
+Only control envelopes can now use up to 12 KiB plaintext / 32 KiB serialized
+packet bounds. Ordinary packet limits stay 2,048 bytes. GATT framing stays capped
+at 2,048; TCP and CoC OGL1 framing permit 32 KiB packets. Older relays cannot carry
+these large envelopes. Direct-ingress hints select profiles; unknown/relayed paths
+stay conservative, and missing range blocks can be regenerated as smaller packets
+on retry. Details and limits are in THROUGHPUT.md. CoC service-data advertisements
+are `4f 01 psmHi psmLo` in a scan response; PSM is a dynamic LE value 128–255.

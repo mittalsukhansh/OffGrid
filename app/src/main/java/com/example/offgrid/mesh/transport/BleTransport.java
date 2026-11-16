@@ -58,6 +58,11 @@ public final class BleTransport implements MeshTransport {
     private final Handler meshHandler;
     private final FloodGuard floodGuard;
     private final FrameCodec codec = new FrameCodec();
+    private final TransportMetrics metrics;
+    private final CocTransport coc;
+    private boolean cocEnabled = true;
+    private int radioGeneration;
+    private int advertisedPsm = -1;
     // Includes finished sessions awaiting delayed close, so stop() cannot leak GATT handles.
     private final Set<GattOutboundSession> liveSessions = new HashSet<>();
     private Listener listener;
@@ -76,10 +81,51 @@ public final class BleTransport implements MeshTransport {
     private long scanBackoffMs, nextScanAttemptAt, advertiseBackoffMs, nextAdvertiseAttemptAt;
     private String lastProblem;
 
-    public BleTransport(Context context, Handler worker, FloodGuard flood) {
+    public BleTransport(
+            Context context, Handler worker, FloodGuard flood, TransportMetrics metrics) {
         this.context = context.getApplicationContext();
         meshHandler = worker;
         floodGuard = flood;
+        this.metrics = metrics;
+        coc =
+                new CocTransport(
+                        worker,
+                        flood,
+                        metrics,
+                        new Listener() {
+                            @Override
+                            public void onPacket(String peer, byte[] bytes) {
+                                if (meshActive) listener.onPacket(peer, bytes);
+                            }
+
+                            @Override
+                            public void onPeerSeen(String peer, int rssi) {
+                                if (meshActive) listener.onPeerSeen(peer, rssi);
+                            }
+
+                            @Override
+                            public void onRadioState(boolean active) {}
+
+                            @Override
+                            public void onError(String error) {
+                                reportError(error);
+                            }
+                        });
+    }
+
+    public void setCocEnabled(boolean enabled) {
+        cocEnabled = enabled;
+        if (!enabled) coc.stop();
+        else if (meshActive) coc.start(adapter);
+        stopAdvertising();
+        if (meshActive && serverReady) startAdvertising();
+    }
+
+    @Override
+    public TransferProfile profile(String peer) {
+        return peer.startsWith("coc:") && cocEnabled && coc.available(peer.substring(4))
+                ? TransferProfile.COC
+                : TransferProfile.GATT;
     }
 
     public String diagnostics() {
@@ -91,6 +137,8 @@ public final class BleTransport implements MeshTransport {
                 + advertising
                 + "\nGATT server ready: "
                 + serverReady
+                + "\nL2CAP CoC: "
+                + (cocEnabled ? coc.status() : "Disabled · GATT baseline")
                 + (lastProblem == null ? "" : "\nBluetooth issue: " + lastProblem);
     }
 
@@ -159,12 +207,15 @@ public final class BleTransport implements MeshTransport {
         if (advertisingUnsupported)
             reportError("This device cannot advertise; running in scan-only mode");
         openGattServer();
+        if (cocEnabled) coc.start(adapter);
         startScanning();
         radioState(true);
     }
 
     private void stopRadios() {
+        radioGeneration++;
         meshActive = false;
+        coc.stop();
         stopScanning();
         stopAdvertising();
         cancelSends();
@@ -181,6 +232,11 @@ public final class BleTransport implements MeshTransport {
             startRadios();
             return;
         }
+        if (cocEnabled) {
+            int before = coc.psm();
+            coc.start(adapter);
+            if (before != coc.psm() || advertisedPsm != coc.psm()) stopAdvertising();
+        }
         if (serverReady && !advertising) startAdvertising();
         if (!scanning) startScanning();
     }
@@ -191,6 +247,80 @@ public final class BleTransport implements MeshTransport {
             listener.onComplete("Bluetooth unavailable", false);
             return;
         }
+        if (peer.startsWith("coc:")) {
+            String address = peer.substring(4);
+            int epoch = radioGeneration;
+            Set<String> forwarded = new HashSet<>();
+            SendListener callbacks =
+                    new SendListener() {
+                        @Override
+                        public boolean shouldSend(String id) {
+                            return listener.shouldSend(id);
+                        }
+
+                        @Override
+                        public void onForwarded(String id) {
+                            forwarded.add(id);
+                            listener.onForwarded(id);
+                        }
+
+                        @Override
+                        public void onComplete(String failure, boolean incompatible) {
+                            if (failure == null || !meshActive || epoch != radioGeneration) {
+                                listener.onComplete(failure, incompatible);
+                                return;
+                            }
+                            fallbackGatt(address, packets, forwarded, listener);
+                        }
+                    };
+            if (cocEnabled && coc.send(address, packets, callbacks)) return;
+            fallbackGatt(address, packets, forwarded, listener);
+            return;
+        }
+        sendGatt(peer, packets, listener);
+    }
+
+    private void fallbackGatt(
+            String address, List<Packet> packets, Set<String> forwarded, SendListener listener) {
+        List<Packet> small = new ArrayList<>();
+        boolean oversized = false;
+        for (Packet packet : packets)
+            if (!forwarded.contains(packet.id)) {
+                if (packet.bytes.length <= FrameCodec.MAX_PACKET_BYTES) small.add(packet);
+                else oversized = true;
+            }
+        final boolean waiting = oversized;
+        if (small.isEmpty()) {
+            listener.onComplete(waiting ? "Bulk ranges awaiting GATT-sized retry" : null, false);
+            return;
+        }
+        sendGatt(
+                address,
+                small,
+                new SendListener() {
+                    @Override
+                    public boolean shouldSend(String id) {
+                        return listener.shouldSend(id);
+                    }
+
+                    @Override
+                    public void onForwarded(String id) {
+                        listener.onForwarded(id);
+                    }
+
+                    @Override
+                    public void onComplete(String failure, boolean incompatible) {
+                        listener.onComplete(
+                                failure == null && waiting
+                                        ? "Bulk ranges awaiting GATT-sized retry"
+                                        : failure,
+                                incompatible);
+                    }
+                });
+    }
+
+    private void sendGatt(String peer, List<Packet> packets, SendListener callbacks) {
+        SendListener listener = metrics.sending(TransferProfile.GATT, packets, callbacks);
         GattOutboundSession session =
                 new GattOutboundSession(
                         context,
@@ -206,6 +336,7 @@ public final class BleTransport implements MeshTransport {
 
     @Override
     public void cancelSends() {
+        coc.cancelSends();
         for (GattOutboundSession session : new ArrayList<>(liveSessions)) session.abort();
         liveSessions.clear();
     }
@@ -356,7 +487,12 @@ public final class BleTransport implements MeshTransport {
                         .build();
         try {
             advertising = true; // optimistic; reverted in onStartFailure
-            advertiser.startAdvertising(settings, data, advertiseCallback);
+            AdvertiseData.Builder response = new AdvertiseData.Builder();
+            if (cocEnabled && coc.psm() > 0)
+                response.addServiceData(
+                        new ParcelUuid(SERVICE_UUID), CocAdvertisement.encode(coc.psm()));
+            advertisedPsm = cocEnabled ? coc.psm() : -1;
+            advertiser.startAdvertising(settings, data, response.build(), advertiseCallback);
         } catch (RuntimeException e) {
             advertising = false;
             Log.w(TAG, "startAdvertising threw", e);
@@ -471,6 +607,13 @@ public final class BleTransport implements MeshTransport {
                         if (!meshActive) return;
                         scanBackoffMs = 0;
                         listener.onPeerSeen(device.getAddress(), rssi);
+                        if (cocEnabled && result.getScanRecord() != null) {
+                            int psm =
+                                    CocAdvertisement.decode(
+                                            result.getScanRecord()
+                                                    .getServiceData(new ParcelUuid(SERVICE_UUID)));
+                            if (psm > 0) coc.discovered(device.getAddress(), psm, rssi);
+                        }
                     });
                 }
 
@@ -487,7 +630,10 @@ public final class BleTransport implements MeshTransport {
     private void acceptFrame(String peer, byte[] frame) {
         if (!meshActive) return;
         byte[] packet = codec.accept(peer, frame, SystemClock.elapsedRealtime());
-        if (packet != null) listener.onPacket(peer, packet);
+        if (packet != null) {
+            metrics.received(TransferProfile.GATT, packet.length);
+            listener.onPacket(peer, packet);
+        }
     }
 
     private void runOnMesh(Runnable task) {

@@ -41,4 +41,12 @@ public interface MeshTransport {
     void send(String peer, List<Packet> packets, SendListener listener);
 
     void cancelSends();
+
+    default TransferProfile profile(String peer) {
+        return TransferProfile.GATT;
+    }
+
+    default int maxPacketBytes(String peer) {
+        return profile(peer) == TransferProfile.GATT ? 2048 : LanFrames.MAX_PACKET_BYTES;
+    }
 }

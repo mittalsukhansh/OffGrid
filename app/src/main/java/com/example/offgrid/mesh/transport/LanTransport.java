@@ -26,6 +26,7 @@ public final class LanTransport implements MeshTransport {
     private final Context context;
     private final Handler worker;
     private final FloodGuard flood;
+    private final TransportMetrics metrics;
     private final ConnectivityManager connectivity;
     private final NsdManager nsd;
     private final String instance = "OffGrid-" + UUID.randomUUID().toString().substring(0, 12);
@@ -48,12 +49,24 @@ public final class LanTransport implements MeshTransport {
     private String status = "Off";
     private long retryAfter, resolveDeadline;
 
-    public LanTransport(Context context, Handler worker, FloodGuard flood) {
+    public LanTransport(
+            Context context, Handler worker, FloodGuard flood, TransportMetrics metrics) {
         this.context = context.getApplicationContext();
         this.worker = worker;
         this.flood = flood;
+        this.metrics = metrics;
         connectivity = context.getSystemService(ConnectivityManager.class);
         nsd = context.getSystemService(NsdManager.class);
+    }
+
+    @Override
+    public TransferProfile profile(String peer) {
+        boolean known =
+                endpoints.values().stream()
+                        .anyMatch(e ->
+                                peer.equals(e.host.getHostAddress())
+                                        || peer.equals(e.host.getHostAddress() + ":" + e.port));
+        return enabled && server != null && known ? TransferProfile.WIFI : TransferProfile.GATT;
     }
 
     public String status() {
@@ -364,6 +377,7 @@ public final class LanTransport implements MeshTransport {
                             if (generation != epoch
                                     || !started
                                     || !flood.allowFrame("wifi:" + peer)) return false;
+                            metrics.received(TransferProfile.WIFI, packet.length);
                             listener.onPacket(peer, packet);
                             return true;
                         });
@@ -394,13 +408,15 @@ public final class LanTransport implements MeshTransport {
             callbacks.onComplete("Wi-Fi peer unavailable", false);
             return;
         }
+        callbacks = metrics.sending(TransferProfile.WIFI, packets, callbacks);
+        final SendListener measured = callbacks;
         final int epoch = generation;
         try {
             Socket socket = network.getSocketFactory().createSocket();
             sockets.add(socket);
             outbound.add(socket);
             try {
-                io.execute(() -> sendBatch(socket, endpoint, packets, callbacks, epoch));
+                io.execute(() -> sendBatch(socket, endpoint, packets, measured, epoch));
             } catch (RejectedExecutionException e) {
                 close(socket);
                 callbacks.onComplete("Wi-Fi connection limit reached", false);

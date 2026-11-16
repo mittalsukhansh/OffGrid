@@ -294,9 +294,53 @@ public final class PrivateActions implements MeshProtocol.Extensions {
         media.offer(target, bytes, mime, now);
     }
 
+    private long lastWithdrawalSweep;
+
     public void pump(long now) throws Exception {
-        dao().expireWithdrawals(now - MessageStore.DELIVERY_TIMEOUT_MS);
-        media.pump(now);
+        pump(now, now);
+    }
+
+    public void transferProfiles(
+            java.util.function.Function<String, com.example.offgrid.mesh.transport.TransferProfile>
+                    profiles) {
+        media.profiles = profiles;
+    }
+
+    public void pump(long now, long elapsed) throws Exception {
+        if (now - lastWithdrawalSweep >= 5000) {
+            dao().expireWithdrawals(now - MessageStore.DELIVERY_TIMEOUT_MS);
+            lastWithdrawalSweep = now;
+        }
+        media.pump(now, elapsed);
+    }
+
+    public long pumpDelay() {
+        return media.pumpDelay();
+    }
+
+    public String transferDiagnostics(long now) {
+        StringBuilder out =
+                new StringBuilder(
+                        "Active media payload progress (signed receiver bitmap; not Delivered):");
+        for (MediaRecord row : dao().activeMedia()) {
+            java.util.BitSet bits = java.util.BitSet.valueOf(row.received);
+            long bytes = (long) bits.cardinality() * 640;
+            if (bits.get(row.chunkCount - 1)) bytes -= (long) row.chunkCount * 640 - row.byteCount;
+            long age = Math.max(1, now - row.createdAt);
+            out.append("\n")
+                    .append(row.outgoing ? "TX " : "RX ")
+                    .append(row.id.substring(0, 8))
+                    .append(" · ")
+                    .append(row.state)
+                    .append(" · ")
+                    .append(bytes)
+                    .append('/')
+                    .append(row.byteCount)
+                    .append(" payload B · wall-age average ")
+                    .append(bytes * 1000 / age)
+                    .append(" B/s");
+        }
+        return out.toString();
     }
 
     public byte[] attachment(String id) throws Exception {

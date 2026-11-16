@@ -1058,11 +1058,30 @@ public class MainActivity extends AppCompatActivity {
         toggle.setText("Local Wi-Fi sharing");
         toggle.setMinHeight((int) (48 * getResources().getDisplayMetrics().density));
         toggle.setChecked(MeshService.wifiEnabled(this));
+        androidx.appcompat.widget.SwitchCompat coc =
+                new androidx.appcompat.widget.SwitchCompat(this);
+        coc.setText("BLE bulk streams (L2CAP, Android 10+)");
+        coc.setChecked(MeshService.cocEnabled(this));
+        coc.setEnabled(Build.VERSION.SDK_INT >= 29);
+        coc.setOnCheckedChangeListener((button, checked) -> {
+            getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("coc", checked)
+                    .apply();
+            if (mesh != null) mesh.setCocEnabled(checked);
+        });
+        Button reset = new Button(this);
+        reset.setText("Reset measurements");
+        reset.setOnClickListener(v -> {
+            if (mesh != null) mesh.resetMeasurements();
+        });
         TextView details = new TextView(this);
         details.setTextIsSelectable(true);
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.addView(details);
         panel.addView(toggle);
+        panel.addView(coc);
+        panel.addView(reset);
         panel.addView(
                 scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         AlertDialog dialog =

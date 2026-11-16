@@ -153,7 +153,8 @@ public final class MeshProtocol {
     }
 
     public Incoming receive(String peer, byte[] bytes, long now) throws Exception {
-        if (!flood.allowPacket(peer)) return Incoming.IGNORED;
+        boolean stream = peer.startsWith("wifi:") || peer.startsWith("ble:coc:");
+        if (!flood.allowPacket(peer, stream)) return Incoming.IGNORED;
         final MeshMessage packet;
         try {
             packet = MeshMessage.fromBytes(bytes);
@@ -164,7 +165,8 @@ public final class MeshProtocol {
                 || !PacketSecurity.namespaced(packet)
                 || !PacketSecurity.fresh(packet, now)
                 || !crypto.verifyPacket(packet)
-                || !flood.allowSender(packet.getSenderId())) return Incoming.IGNORED;
+                || !flood.allowSender(packet.getSenderId(), stream && packet.isControl()))
+            return Incoming.IGNORED;
         if (!storage.clockSafe(now)) {
             String error =
                     clockWarningShown

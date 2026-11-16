@@ -134,3 +134,13 @@ Automated coverage adds real-loopback TCP framing/max-batch and malformed/trunca
 frame tests, combined-transport state/routing tests, Room conversation/unread/read
 race and schema 3→4 migration tests, and Espresso chat switching/diagnostic-screen
 checks. These do not exercise physical NSD discovery or access-point behavior.
+
+## Bulk throughput development
+
+Follow THROUGHPUT.md for controlled GATT/CoC/Wi-Fi measurements, reset semantics,
+legacy/unknown-route behavior, signed range resumption and native-socket limits.
+Check API 26–28 GATT-only behavior and API 29+ CoC with actual phones. Capture PSM
+changes, unsupported channels, Bluetooth-off while Wi-Fi remains active, socket
+cancellation, malformed stream headers, stalled sockets and 45-second smaller-chunk
+fallback. All paths must retain private encryption, whole-file integrity and final
+authenticated receipts. Host loopback results are not radio benchmarks.

@@ -12,7 +12,7 @@ import java.util.concurrent.*;
 public class LanFramesTest {
     @Test
     public void realTcpCarriesMaximumBatchWithoutBluetoothFragmentation() throws Exception {
-        byte[] payload = new byte[FrameCodec.MAX_PACKET_BYTES];
+        byte[] payload = new byte[LanFrames.MAX_PACKET_BYTES];
         Arrays.fill(payload, (byte) 0xa5);
         ExecutorService io = Executors.newSingleThreadExecutor();
         try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
@@ -51,7 +51,7 @@ public class LanFramesTest {
 
     @Test
     public void rejectsUnboundedAllocationsEmptyFramesAndTruncatedPackets() throws Exception {
-        for (int length : new int[] {-1, 0, 2049, Integer.MAX_VALUE}) {
+        for (int length : new int[] {-1, 0, 32769, Integer.MAX_VALUE}) {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             new DataOutputStream(bytes).writeInt(length);
             assertThrows(IOException.class, () -> LanFrames.readPacket(input(bytes.toByteArray())));
@@ -64,7 +64,8 @@ public class LanFramesTest {
                 IOException.class,
                 () ->
                         LanFrames.writePacket(
-                                new DataOutputStream(new ByteArrayOutputStream()), new byte[2049]));
+                                new DataOutputStream(new ByteArrayOutputStream()),
+                                new byte[32769]));
     }
 
     @Test

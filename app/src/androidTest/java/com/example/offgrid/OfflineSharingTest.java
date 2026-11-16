@@ -227,7 +227,7 @@ public class OfflineSharingTest {
         assertEquals(3, BitSet.valueOf(c.store.dao().media(record.id).received).cardinality());
         for (int n = 0; n < 80 && !a.store.dao().chat(record.id).status.equals("DELIVERED"); n++) {
             elapsed.addAndGet(5000);
-            a.actions.pump(System.currentTimeMillis());
+            a.actions.pump(System.currentTimeMillis(), elapsed.get());
             drain(a, c);
         }
         assertEquals("DELIVERED", a.store.dao().chat(record.id).status);
@@ -243,7 +243,7 @@ public class OfflineSharingTest {
         c.reopen();
         for (int n = 0; n < 30 && !a.store.dao().chat(record.id).status.equals("DELIVERED"); n++) {
             elapsed.addAndGet(5000);
-            a.actions.pump(System.currentTimeMillis());
+            a.actions.pump(System.currentTimeMillis(), elapsed.get());
             drain(a, c);
         }
         assertEquals("DELIVERED", a.store.dao().chat(record.id).status);
@@ -323,7 +323,7 @@ public class OfflineSharingTest {
         MediaRecord record = offer(clip, "video/mp4");
         for (int n = 0; n < 40 && !a.store.dao().chat(record.id).status.equals("DELIVERED"); n++) {
             elapsed.addAndGet(5000);
-            a.actions.pump(System.currentTimeMillis());
+            a.actions.pump(System.currentTimeMillis(), elapsed.get());
             drain(a, c);
         }
         assertEquals("DELIVERED", a.store.dao().chat(record.id).status);
@@ -359,6 +359,161 @@ public class OfflineSharingTest {
         assertSame(MeshProtocol.Incoming.IGNORED, c.receive(a, reflected));
         assertNull(c.store.dao().withdrawal(id));
         assertTrue(c.store.dao().history().isEmpty());
+    }
+
+    byte[] largePhoto() {
+        Bitmap bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888);
+        int[] pixels = new int[128 * 128];
+        Random random = new Random(123);
+        for (int i = 0; i < pixels.length; i++) pixels[i] = 0xff000000 | random.nextInt(0x1000000);
+        bitmap.setPixels(pixels, 0, 128, 0, 0, 128, 128);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, output);
+        bitmap.recycle();
+        byte[] bytes = output.toByteArray();
+        assertTrue(bytes.length > 7680 && bytes.length < MediaTransfers.IMAGE_MAX);
+        return bytes;
+    }
+
+    MeshMessage range(MediaRecord row, int index, byte[] data, Peer sender) throws Exception {
+        return sender.crypto.control(
+                c.crypto.getLocalId(),
+                new JSONObject()
+                        .put("kind", "media_range")
+                        .put("mid", row.id)
+                        .put("index", index)
+                        .put("data", Base64.getUrlEncoder().withoutPadding().encodeToString(data))
+                        .toString());
+    }
+
+    @Test
+    public void wifiRangesResumeAsGattBlocksAfterRestartAndStillRequireFinalReceipt()
+            throws Exception {
+        byte[] image = largePhoto();
+        MediaRecord row = offer(image, "image/jpeg");
+        a.actions.transferProfiles(id -> com.example.offgrid.mesh.transport.TransferProfile.WIFI);
+        elapsed.addAndGet(5000);
+        a.actions.pump(System.currentTimeMillis(), elapsed.get());
+        MeshMessage bulk = null;
+        for (PendingRecord pending : a.store.dao().pending()) {
+            MeshMessage packet = a.store.decodePending(pending);
+            if (packet.isControl()
+                    && new JSONObject(c.crypto.decryptControl(packet))
+                            .optString("kind")
+                            .equals("media_range")) bulk = packet;
+        }
+        assertNotNull(bulk);
+        assertTrue(bulk.toBytes().length > MeshMessage.MAX_SERIALIZED_BYTES);
+        MeshProtocol.Incoming accepted =
+                c.protocol.receive("wifi:A", bulk.toBytes(), System.currentTimeMillis());
+        assertNotNull(accepted.relay);
+        a.protocol.receive("wifi:C", accepted.relay.toBytes(), System.currentTimeMillis());
+        assertEquals(12, BitSet.valueOf(c.store.dao().media(row.id).received).cardinality());
+        assertNotEquals("DELIVERED", a.store.dao().chat(row.id).status);
+        c.reopen();
+        a.reopen(); // Production default is conservative GATT until a fresh direct-ingress hint.
+        for (int i = 0; i < 80 && !a.store.dao().chat(row.id).status.equals("DELIVERED"); i++) {
+            elapsed.addAndGet(5000);
+            a.actions.pump(System.currentTimeMillis(), elapsed.get());
+            for (PendingRecord pending : a.store.dao().pending())
+                assertTrue(a.store.decodePending(pending).toBytes().length <= 2048);
+            drain(a, c);
+        }
+        assertEquals("DELIVERED", a.store.dao().chat(row.id).status);
+        assertArrayEquals(image, c.actions.attachment(row.id));
+    }
+
+    @Test
+    public void noRangeCapabilityKeepsLegacyChunksAndPacingEvenOnWifiHint() throws Exception {
+        MediaRecord row = offer(largePhoto(), "image/jpeg");
+        MeshMessage legacy =
+                c.crypto.control(
+                        a.crypto.getLocalId(),
+                        new JSONObject()
+                                .put("kind", "media_status")
+                                .put("mid", row.id)
+                                .put("bits", "")
+                                .toString());
+        a.receive(c, legacy);
+        a.actions.transferProfiles(id -> com.example.offgrid.mesh.transport.TransferProfile.WIFI);
+        elapsed.addAndGet(5000);
+        a.actions.pump(System.currentTimeMillis(), elapsed.get());
+        elapsed.addAndGet(5000);
+        a.actions.pump(System.currentTimeMillis(), elapsed.get());
+        int before = a.store.dao().pending().size();
+        a.actions.pump(System.currentTimeMillis(), elapsed.get() + 200);
+        assertEquals(before, a.store.dao().pending().size());
+        assertEquals(2500, a.actions.pumpDelay());
+        for (PendingRecord pending : a.store.dao().pending()) {
+            MeshMessage packet = a.store.decodePending(pending);
+            assertTrue(packet.toBytes().length <= 2048);
+            if (packet.isControl())
+                assertNotEquals(
+                        "media_range",
+                        new JSONObject(c.crypto.decryptControl(packet)).optString("kind"));
+        }
+    }
+
+    @Test
+    public void rangesRejectWrongAuthorMisalignmentOversizeAndCiphertextTampering()
+            throws Exception {
+        byte[] image = largePhoto();
+        MediaRecord row = offer(image, "image/jpeg");
+        assertSame(
+                MeshProtocol.Incoming.IGNORED,
+                c.receive(b, range(row, 0, Arrays.copyOf(image, 2560), b)));
+        assertSame(
+                MeshProtocol.Incoming.IGNORED,
+                c.receive(a, range(row, 0, Arrays.copyOf(image, 641), a)));
+        assertSame(
+                MeshProtocol.Incoming.IGNORED,
+                c.receive(a, range(row, 0, Arrays.copyOf(image, 7681), a)));
+        MeshMessage valid = range(row, 0, Arrays.copyOf(image, 7680), a);
+        JSONObject tampered = valid.toJson();
+        String text = tampered.getString("txt");
+        tampered.put("txt", (text.charAt(0) == 'A' ? "B" : "A") + text.substring(1));
+        assertSame(
+                MeshProtocol.Incoming.IGNORED,
+                c.protocol.receive(
+                        "wifi:A",
+                        tampered.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        System.currentTimeMillis()));
+        assertTrue(c.store.dao().parts(row.id).isEmpty());
+        char[] padding = new char[3000];
+        Arrays.fill(padding, 'x');
+        JSONObject ordinary =
+                a.protocol.publicMessage("hello").wire.toJson().put("padding", new String(padding));
+        try {
+            MeshMessage.fromBytes(
+                    ordinary.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fail("Oversize ordinary packet accepted");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    @Test
+    public void rangeReplayAndEveryPartCommitAtomicallyOrRollBackTogether() throws Exception {
+        byte[] image = largePhoto();
+        MediaRecord row = offer(image, "image/jpeg");
+        MeshMessage packet = range(row, 0, Arrays.copyOf(image, 7680), a);
+        c.db.getOpenHelper()
+                .getWritableDatabase()
+                .execSQL(
+                        "CREATE TRIGGER fail_bulk BEFORE INSERT ON media_parts BEGIN SELECT"
+                                + " RAISE(ABORT,'injected bulk failure'); END");
+        try {
+            c.protocol.receive("wifi:A", packet.toBytes(), System.currentTimeMillis());
+            fail("Injected transaction succeeded");
+        } catch (android.database.sqlite.SQLiteException expected) {
+        }
+        assertEquals(0, c.store.dao().replayed(packet.getMessageId()));
+        assertTrue(c.store.dao().parts(row.id).isEmpty());
+        assertEquals(0, BitSet.valueOf(c.store.dao().media(row.id).received).cardinality());
+        c.db.getOpenHelper().getWritableDatabase().execSQL("DROP TRIGGER fail_bulk");
+        assertNotNull(
+                c.protocol.receive("wifi:A", packet.toBytes(), System.currentTimeMillis()).wire);
+        assertEquals(12, c.store.dao().parts(row.id).size());
+        assertEquals(1, c.store.dao().replayed(packet.getMessageId()));
     }
 
     private final class Peer {

@@ -10,6 +10,20 @@ Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
 Development continues from `main` on short feature branches; the published v0.2 APK
 is an immutable earlier snapshot, not every later commit.
 
+## Transport throughput development
+
+Current source adds **BLE L2CAP CoC on API 29+**, with GATT fallback, plus separate
+media pacing/chunk policies for GATT, CoC and local Wi-Fi. Resume bitmaps remain
+640-byte blocks; new capable peers can carry 2,560-byte CoC or 7,680-byte Wi-Fi
+ranges in one signed encrypted control packet. Ordinary/GATT packets stay bounded
+to 2,048 bytes. Unknown/legacy routes use the conservative profile.
+
+**Network** now includes per-transport measurements, a reset button, and an L2CAP
+toggle for measuring the GATT baseline. Profile limits are initial policy settings,
+not measured radio speeds. See [THROUGHPUT.md](THROUGHPUT.md) for exact limits,
+capability/fallback behavior, host benchmark results and the physical-phone
+benchmark procedure. No physical CoC or Wi-Fi speed claim has been established.
+
 ## Application identity, signing and licensing
 
 Current release builds use **`io.github.mittalsukhansh.offgrid`**; development/debug
@@ -55,8 +69,9 @@ identity, contacts and history. Preserve needed information before changing buil
   recent failures and retry delays. Addresses are discovered transport endpoints,
   not authenticated contacts or proof of connectivity. A phone can appear twice
   when discovered over both transports.
-- Wi-Fi avoids BLE fragmentation but retains current attachment size limits,
-  flood budgets and conservative media pacing. No throughput claim is made yet.
+- Wi-Fi avoids BLE fragmentation and now has its own bounded media profile;
+  attachment size limits remain. Larger ranges require an authenticated recipient
+  capability. No physical throughput claim is made yet.
   A TCP transfer confirmation changes forwarding progress; only an authenticated
   recipient acknowledgement establishes **Delivered**.
 
@@ -87,9 +102,10 @@ Choose a private contact and tap **Attach**:
 - Files and partial chunks are encrypted locally. A small persisted transfer window,
   integrity hashes, receiver bitmaps and retries allow resumption after reconnects
   and restarts. The recipient must validate/save the whole file before Delivered.
-- Media uses the existing slow BLE mesh: only two chunks are prepared per five-second
-  pump. Images can take minutes and video much longer. Transfers expire after an
-  hour; initial offer acceptance has a ten-minute window. Keep both meshes running.
+- The v0.2 release prepares only two chunks per five-second pump. Current source
+  has transport-specific pacing/ranges described in THROUGHPUT.md. Actual transfer
+  time still needs device measurement. Transfers expire after an hour; initial
+  offer acceptance has a ten-minute window. Keep both meshes running.
 - Up to two outgoing/four total active transfers, 64 retained attachments, and about
   16 MB of encrypted file storage are allowed in this test build.
 

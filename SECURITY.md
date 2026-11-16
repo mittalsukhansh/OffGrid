@@ -174,3 +174,21 @@ existing routing/status fields. Message bodies remain encrypted at rest.
 Notifications deliberately exclude contact nicknames and message text. The
 conversation list loads no plaintext previews. Diagnostics expose local transport
 addresses; review those before sharing screenshots or logs.
+
+## Negotiated bulk ranges and CoC (current development)
+
+Large control envelopes are admitted only within 12 KiB plaintext / 32 KiB packet
+bounds; ordinary text/private packet limits and GATT's 2,048-byte reassembly cap
+stay in place. Range offsets/lengths and author/target binding are validated against
+the saved manifest; whole-range replay/progress/part acceptance is atomic. Receiver
+capability and progress are signed/encrypted, but neither is a final delivery receipt.
+
+CoC uses Android's unpaired/insecure L2CAP API. It does not replace message signatures
+or end-to-end encryption, confer peer trust, or hide public content/metadata. PSM
+advertisements are untrusted discovery input with strict encoding/range checks.
+Both TCP and CoC have bounded frames, sessions, worker admission and close deadlines.
+Stream ingress has separate bounded global/per-peer packet quotas (40 burst/20 per
+second global, 20 burst/10 per second per peer) and authenticated-control identity
+quotas (20 burst/10 per second). Ordinary/GATT sender quotas remain unchanged.
+These higher CPU budgets require physical resource/abuse testing before further
+increases. Mutable TTL is only a performance hint, not cryptographic route evidence.

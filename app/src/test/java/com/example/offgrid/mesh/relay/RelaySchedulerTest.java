@@ -190,6 +190,32 @@ public class RelaySchedulerTest {
         assertEquals(1, transport.calls.size());
     }
 
+    @Test
+    public void bulkPacketsSkipGattAndWifiHasPriorityOverStrongerRadioSignal() {
+        scheduler =
+                new RelayScheduler(
+                        time,
+                        storage,
+                        transport,
+                        packet -> new byte[6000],
+                        new RelayScheduler.Listener() {
+                            @Override
+                            public void onPeerCount(int count) {}
+
+                            @Override
+                            public void onError(String error) {
+                                fail(error);
+                            }
+                        });
+        queued(0);
+        peer("ble:strong", -10);
+        peer("wifi:weak", -100);
+        scheduler.start();
+        time.runDue();
+        assertEquals(1, transport.calls.size());
+        assertEquals("wifi:weak", transport.calls.get(0).peer);
+    }
+
     private static final class FakeTimer implements RelayScheduler.Timer {
         long elapsed;
         final long wallBase = System.currentTimeMillis();
@@ -251,6 +277,13 @@ public class RelaySchedulerTest {
     private static final class FakeTransport implements MeshTransport {
         final List<Call> calls = new ArrayList<>();
         int cancellations;
+
+        @Override
+        public com.example.offgrid.mesh.transport.TransferProfile profile(String peer) {
+            return peer.startsWith("wifi:")
+                    ? com.example.offgrid.mesh.transport.TransferProfile.WIFI
+                    : com.example.offgrid.mesh.transport.TransferProfile.GATT;
+        }
 
         @Override
         public void start(Listener listener) {}

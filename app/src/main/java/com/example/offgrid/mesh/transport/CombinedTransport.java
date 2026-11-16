@@ -60,6 +60,13 @@ public final class CombinedTransport implements MeshTransport {
     }
 
     @Override
+    public TransferProfile profile(String peer) {
+        if (peer.startsWith("wifi:")) return wifi.profile(peer.substring(5));
+        if (peer.startsWith("ble:")) return ble.profile(peer.substring(4));
+        return TransferProfile.GATT;
+    }
+
+    @Override
     public void maintain() {
         ble.maintain();
         wifi.maintain();

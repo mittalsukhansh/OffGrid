@@ -36,6 +36,19 @@ public final class MeshNode implements MeshTransport.Listener {
     private final Events events;
     private final Random random = new Random();
     private final Runnable maintenanceTask = this::maintain;
+    private final Runnable mediaTask = this::pumpMedia;
+    private final java.util.Map<String, RouteHint> routes = new java.util.LinkedHashMap<>();
+
+    private static final class RouteHint {
+        final String peer;
+        final long seen;
+
+        RouteHint(String peer, long seen) {
+            this.peer = peer;
+            this.seen = seen;
+        }
+    }
+
     private volatile boolean active, closed;
     private boolean ready, started;
     private long lastAnnouncement;
@@ -50,6 +63,12 @@ public final class MeshNode implements MeshTransport.Listener {
             PrivateActions actions,
             Events events) {
         this.actions = actions;
+        actions.transferProfiles(target -> {
+            RouteHint hint = routes.get(target);
+            return hint != null && SystemClock.elapsedRealtime() - hint.seen < 15_000
+                    ? transport.profile(hint.peer)
+                    : com.example.offgrid.mesh.transport.TransferProfile.GATT;
+        });
         this.worker = worker;
         this.transport = transport;
         this.storage = storage;
@@ -123,6 +142,7 @@ public final class MeshNode implements MeshTransport.Listener {
         started = true;
         events.onStatus("Starting mesh");
         transport.start(this);
+        worker.post(mediaTask);
         worker.postDelayed(maintenanceTask, MeshConfig.MAINTENANCE_MS);
     }
 
@@ -132,6 +152,8 @@ public final class MeshNode implements MeshTransport.Listener {
             started = false;
             active = false;
             worker.removeCallbacks(maintenanceTask);
+            worker.removeCallbacks(mediaTask);
+            routes.clear();
             relay.clear();
             transport.stop();
             protocol.clear();
@@ -178,6 +200,7 @@ public final class MeshNode implements MeshTransport.Listener {
         worker.post(() -> {
             try {
                 actions.offer(target, bytes, mime, System.currentTimeMillis());
+                wakeMedia();
                 refreshOutbox();
                 relay.schedule(0);
             } catch (Exception e) {
@@ -227,6 +250,24 @@ public final class MeshNode implements MeshTransport.Listener {
         }
     }
 
+    private void wakeMedia() {
+        if (closed || !started) return;
+        worker.removeCallbacks(mediaTask);
+        worker.post(mediaTask);
+    }
+
+    private void pumpMedia() {
+        if (closed || !started) return;
+        try {
+            actions.pump(System.currentTimeMillis(), SystemClock.elapsedRealtime());
+            refreshOutbox();
+            relay.schedule(0);
+        } catch (Exception e) {
+            error("Could not advance attachment transfers", e);
+        }
+        worker.postDelayed(mediaTask, actions.pumpDelay());
+    }
+
     private void maintain() {
         if (closed || !started) return;
         try {
@@ -235,7 +276,6 @@ public final class MeshNode implements MeshTransport.Listener {
             reportError("Could not refresh delivery deadlines");
         }
         try {
-            actions.pump(System.currentTimeMillis());
             refreshOutbox();
         } catch (Exception e) {
             error("Could not resume attachment transfers", e);
@@ -256,7 +296,18 @@ public final class MeshNode implements MeshTransport.Listener {
         try {
             MeshProtocol.Incoming incoming =
                     protocol.receive(peer, packet, System.currentTimeMillis());
-            if (incoming.wire != null) acceptedPackets++;
+            if (incoming.wire != null) {
+                acceptedPackets++;
+                // TTL is only a performance hint, not an authenticated route proof.
+                if (incoming.wire.getTtl() == MeshMessage.DEFAULT_TTL
+                        && localId().equals(incoming.wire.getTargetId())) {
+                    if (routes.size() >= 256) routes.remove(routes.keySet().iterator().next());
+                    routes.put(
+                            incoming.wire.getSenderId(),
+                            new RouteHint(peer, SystemClock.elapsedRealtime()));
+                }
+                if (incoming.wire.isControl() || incoming.wire.isMedia()) wakeMedia();
+            }
             if (incoming.error != null) reportError(incoming.error);
             if (incoming.deliveredId != null) relay.remove(incoming.deliveredId);
             if (incoming.wire != null) relay.receivedFrom(peer, incoming.wire.getMessageId());
@@ -306,6 +357,7 @@ public final class MeshNode implements MeshTransport.Listener {
                     .append("\nIgnored packet events: ")
                     .append(receivedPackets - acceptedPackets)
                     .append("\n(Ignored includes duplicates, limits and invalid packets.)");
+            text.append("\n\n").append(actions.transferDiagnostics(System.currentTimeMillis()));
             if (!recentErrors.isEmpty()) {
                 text.append("\n\nRecent errors (this run):");
                 for (String error : recentErrors) text.append("\n").append(error);

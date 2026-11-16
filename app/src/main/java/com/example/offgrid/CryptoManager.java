@@ -437,7 +437,11 @@ public final class CryptoManager {
             String messageId, String targetId, long timestamp, String plaintext, String purpose)
             throws GeneralSecurityException {
         byte[] pt = plaintext.getBytes(StandardCharsets.UTF_8);
-        if (pt.length == 0 || pt.length > MeshMessage.MAX_PRIVATE_PLAINTEXT_BYTES) {
+        if (pt.length == 0
+                || pt.length
+                        > ("control".equals(purpose)
+                                ? MeshMessage.MAX_CONTROL_PLAINTEXT_BYTES
+                                : MeshMessage.MAX_PRIVATE_PLAINTEXT_BYTES)) {
             throw new IllegalArgumentException("plaintext size out of range");
         }
         ECPublicKey targetKey = getContactKey(targetId);

@@ -30,6 +30,7 @@ import com.example.offgrid.mesh.storage.RoomMeshStorage;
 import com.example.offgrid.mesh.transport.BleTransport;
 import com.example.offgrid.mesh.transport.CombinedTransport;
 import com.example.offgrid.mesh.transport.LanTransport;
+import com.example.offgrid.mesh.transport.TransportMetrics;
 
 import java.util.Set;
 import java.util.UUID;
@@ -84,6 +85,7 @@ public class MeshService extends Service {
     private MeshNode node;
     private LanTransport wifi;
     private BleTransport ble;
+    private TransportMetrics measurements;
     private volatile boolean destroyed;
     private volatile int peerCount;
     private String statusText = "Starting…";
@@ -110,8 +112,10 @@ public class MeshService extends Service {
         PrivateActions actions = new PrivateActions(this, MessageStore.get(this), crypto);
         MeshProtocol protocol = new MeshProtocol(crypto, storage, flood);
         protocol.extensions(actions);
-        ble = new BleTransport(this, worker, flood);
-        wifi = new LanTransport(this, worker, flood);
+        measurements = new TransportMetrics(SystemClock::elapsedRealtime);
+        ble = new BleTransport(this, worker, flood, measurements);
+        ble.setCocEnabled(cocEnabled(this));
+        wifi = new LanTransport(this, worker, flood, measurements);
         wifi.enabled(wifiEnabled(this));
         node =
                 new MeshNode(
@@ -235,6 +239,23 @@ public class MeshService extends Service {
         worker.post(() -> wifi.enabled(value));
     }
 
+    public static boolean cocEnabled(Context context) {
+        return context.getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .getBoolean("coc", true);
+    }
+
+    public void setCocEnabled(boolean enabled) {
+        getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .edit()
+                .putBoolean("coc", enabled)
+                .apply();
+        worker.post(() -> ble.setCocEnabled(enabled));
+    }
+
+    public void resetMeasurements() {
+        worker.post(measurements::reset);
+    }
+
     public void diagnostics(java.util.function.Consumer<String> callback) {
         node.diagnostics(detail -> {
             String snapshot =
@@ -246,6 +267,8 @@ public class MeshService extends Service {
                             + "\n\n"
                             + detail
                             + "\n\n"
+                            + measurements.snapshot()
+                            + "\n\n"
                             + "Endpoints are transport addresses, not verified contacts. One phone"
                             + " may appear on both transports. Forwarded means transferred to a"
                             + " peer; only an authenticated recipient acknowledgement means"
@@ -253,7 +276,8 @@ public class MeshService extends Service {
                             + "Wi-Fi needs the same local network with peer traffic and multicast"
                             + " discovery allowed. Guest isolation, VPNs or hotspot settings may"
                             + " block it. Internet is not required. Media keeps its existing size"
-                            + " limits and conservative pacing.";
+                            + " limits; pacing follows the last authenticated direct-ingress hint"
+                            + " and recipient range capability.";
             main.post(() -> {
                 if (!destroyed) callback.accept(snapshot);
             });

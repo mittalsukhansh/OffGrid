@@ -1,0 +1,26 @@
+{
+  "recorded_utc": "2026-11-16T10:30:41.676828+00:00",
+  "host": "Linux x86_64",
+  "scope": "Host localhost TCP length framing and byte confirmation only; no Android, encryption, media pacing, BLE or physical Wi-Fi. Not an application speed claim.",
+  "legacy_configured_media_ceiling_bytes_per_second": 256,
+  "results": [
+    {
+      "payload_chunk_bytes": 640,
+      "payload_bytes": 2097152,
+      "elapsed_seconds": 0.0814147499986575,
+      "payload_bytes_per_second": 25758870.475369405
+    },
+    {
+      "payload_chunk_bytes": 2560,
+      "payload_bytes": 2097152,
+      "elapsed_seconds": 0.022159448999445885,
+      "payload_bytes_per_second": 94639176.27430362
+    },
+    {
+      "payload_chunk_bytes": 7680,
+      "payload_bytes": 2097152,
+      "elapsed_seconds": 0.00815503200283274,
+      "payload_bytes_per_second": 257160486.83457416
+    }
+  ]
+}

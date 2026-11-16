@@ -75,6 +75,10 @@ public final class MeshMessage {
     /** Worst-case private message is ~1.8 KB (ciphertext + 87-char key + ids), which fits. */
     public static final int MAX_SERIALIZED_BYTES = 2048;
 
+    public static final int MAX_CONTROL_PLAINTEXT_BYTES = 12 * 1024;
+    public static final int MAX_CONTROL_SERIALIZED_BYTES = 32768;
+    private static final Pattern CONTROL_CIPHERTEXT = Pattern.compile("[A-Za-z0-9_-]{39,16424}");
+
     private static final Pattern TARGET_ID = Pattern.compile("[0-9a-f]{32}");
 
     /** 65-byte uncompressed P-256 point as unpadded Base64url. */
@@ -204,7 +208,10 @@ public final class MeshMessage {
                     throw new IllegalArgumentException("private message needs a valid sender key");
                 }
                 if (payloadEncrypted) {
-                    if (text == null || !CIPHERTEXT.matcher(text).matches()) {
+                    if (text == null
+                            || !(type == TYPE_CONTROL ? CONTROL_CIPHERTEXT : CIPHERTEXT)
+                                    .matcher(text)
+                                    .matches()) {
                         throw new IllegalArgumentException("invalid ciphertext");
                     }
                 } else {
@@ -563,7 +570,7 @@ public final class MeshMessage {
     @NonNull
     public byte[] toBytes() {
         byte[] bytes = toJson().toString().getBytes(StandardCharsets.UTF_8);
-        if (bytes.length > MAX_SERIALIZED_BYTES) {
+        if (bytes.length > (isControl() ? MAX_CONTROL_SERIALIZED_BYTES : MAX_SERIALIZED_BYTES)) {
             throw new IllegalStateException("Serialized message too large: " + bytes.length);
         }
         return bytes;
@@ -579,10 +586,13 @@ public final class MeshMessage {
         if (data == null || data.length == 0) {
             throw new IllegalArgumentException("empty payload");
         }
-        if (data.length > MAX_SERIALIZED_BYTES) {
+        if (data.length > MAX_CONTROL_SERIALIZED_BYTES) {
             throw new IllegalArgumentException("payload too large: " + data.length);
         }
-        return fromJsonString(new String(data, StandardCharsets.UTF_8));
+        MeshMessage packet = fromJsonString(new String(data, StandardCharsets.UTF_8));
+        if (!packet.isControl() && data.length > MAX_SERIALIZED_BYTES)
+            throw new IllegalArgumentException("ordinary packet exceeds inline limit");
+        return packet;
     }
 
     /**

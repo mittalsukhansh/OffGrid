@@ -17,6 +17,19 @@ final class MediaTransfers {
     private final PrivateActions actions;
     private final MessageStore store;
     private final CryptoManager crypto;
+    java.util.function.Function<String, com.example.offgrid.mesh.transport.TransferProfile>
+            profiles = id -> com.example.offgrid.mesh.transport.TransferProfile.GATT;
+    private final Map<String, Long> nextPump = new HashMap<>();
+    private long pumpDelay = 5000;
+    private int cursor;
+    private final java.util.EnumMap<com.example.offgrid.mesh.transport.TransferProfile, Long>
+            profileDue =
+                    new java.util.EnumMap<>(
+                            com.example.offgrid.mesh.transport.TransferProfile.class);
+
+    long pumpDelay() {
+        return pumpDelay;
+    }
 
     MediaTransfers(PrivateActions actions) {
         this.actions = actions;
@@ -151,6 +164,7 @@ final class MediaTransfers {
                 record.outgoing ? record.targetId : record.senderId,
                 new JSONObject()
                         .put("kind", "media_status")
+                        .put("ranges", true)
                         .put("mid", record.id)
                         .put(
                                 "bits",
@@ -295,6 +309,11 @@ final class MediaTransfers {
             BitSet received = bits(record);
             received.or(BitSet.valueOf(bitmap));
             record.received = received.toByteArray();
+            JSONObject meta = metadata(record).put("ranges", body.optBoolean("ranges", false));
+            record.metadata =
+                    actions.seal(
+                            "media-meta:" + record.id,
+                            meta.toString().getBytes(StandardCharsets.UTF_8));
             record.state = body.optBoolean("failed") ? "FAILED" : "TRANSFERRING";
             actions.transaction(() -> {
                 actions.accept(packet, null, now);
@@ -314,7 +333,8 @@ final class MediaTransfers {
             });
             return PrivateActions.result(packet, null);
         }
-        if (kind.equals("media_chunk") && !record.outgoing) return chunk(packet, body, record, now);
+        if ((kind.equals("media_chunk") || kind.equals("media_range")) && !record.outgoing)
+            return chunk(packet, body, record, now);
         return MeshProtocol.Incoming.IGNORED;
     }
 
@@ -331,8 +351,9 @@ final class MediaTransfers {
             return PrivateActions.result(packet, response);
         }
         int index = body.optInt("index", -1);
+        boolean range = body.optString("kind").equals("media_range");
         String encoded = body.optString("data");
-        if (index < 0 || index >= record.chunkCount || encoded.length() > 856)
+        if (index < 0 || index >= record.chunkCount || encoded.length() > (range ? 10240 : 856))
             return MeshProtocol.Incoming.IGNORED;
         byte[] bytes;
         try {
@@ -340,19 +361,32 @@ final class MediaTransfers {
         } catch (IllegalArgumentException e) {
             return MeshProtocol.Incoming.IGNORED;
         }
-        int expected = Math.min(CHUNK, record.byteCount - index * CHUNK);
-        if (bytes.length != expected) return MeshProtocol.Incoming.IGNORED;
+        int spans = (bytes.length + CHUNK - 1) / CHUNK;
+        if (spans < 1
+                || spans > (range ? 12 : 1)
+                || index + spans > record.chunkCount
+                || bytes.length != Math.min(spans * CHUNK, record.byteCount - index * CHUNK))
+            return MeshProtocol.Incoming.IGNORED;
         BitSet received = bits(record);
-        if (received.get(index)) {
+        List<MediaPart> added = new ArrayList<>();
+        for (int offset = 0; offset < spans; offset++) {
+            int partIndex = index + offset;
+            if (received.get(partIndex)) continue;
+            MediaPart part = new MediaPart();
+            part.mediaId = record.id;
+            part.partIndex = partIndex;
+            byte[] data =
+                    Arrays.copyOfRange(
+                            bytes, offset * CHUNK, Math.min(bytes.length, (offset + 1) * CHUNK));
+            part.data = actions.seal("media-part:" + record.id + ":" + partIndex, data);
+            added.add(part);
+            received.set(partIndex);
+        }
+        if (added.isEmpty()) {
             MeshMessage response = status(record);
             actions.accept(packet, response, now);
             return PrivateActions.result(packet, response);
         }
-        MediaPart part = new MediaPart();
-        part.mediaId = record.id;
-        part.partIndex = index;
-        part.data = actions.seal("media-part:" + record.id + ":" + index, bytes);
-        received.set(index);
         record.received = received.toByteArray();
         if (received.cardinality() == record.chunkCount) {
             byte[] file = new byte[record.byteCount];
@@ -361,7 +395,11 @@ final class MediaTransfers {
                         actions.open("media-part:" + record.id + ":" + old.partIndex, old.data);
                 System.arraycopy(chunk, 0, file, old.partIndex * CHUNK, chunk.length);
             }
-            System.arraycopy(bytes, 0, file, index * CHUNK, bytes.length);
+            for (MediaPart part : added) {
+                byte[] data =
+                        actions.open("media-part:" + record.id + ":" + part.partIndex, part.data);
+                System.arraycopy(data, 0, file, part.partIndex * CHUNK, data.length);
+            }
             try {
                 if (!hash(file)
                         .equals(metadata(record).getJSONObject("manifest").getString("sha256")))
@@ -406,10 +444,10 @@ final class MediaTransfers {
                     null,
                     null);
         }
-        MeshMessage response = received.cardinality() % 4 == 0 ? status(record) : null;
+        MeshMessage response = range || received.cardinality() % 4 == 0 ? status(record) : null;
         actions.transaction(() -> {
             actions.accept(packet, response, now);
-            dao().putPart(part);
+            for (MediaPart part : added) dao().putPart(part);
             dao().putMedia(record);
             dao().mediaStatus(
                             record.id,
@@ -420,9 +458,13 @@ final class MediaTransfers {
         return PrivateActions.result(packet, response);
     }
 
-    public void pump(long now) throws Exception {
-        java.util.List<MediaRecord> active = dao().activeMedia();
-        int budget = active.stream().anyMatch(record -> !record.outgoing) ? 1 : 2;
+    public void pump(long now, long elapsed) throws Exception {
+        List<MediaRecord> active = dao().activeMedia();
+        if (!active.isEmpty()) Collections.rotate(active, -(cursor++ % active.size()));
+        Set<String> ids = new HashSet<>();
+        for (MediaRecord record : active) ids.add(record.id);
+        nextPump.keySet().retainAll(ids);
+        pumpDelay = 5000;
         for (MediaRecord record : active) {
             ChatRecord chat = dao().chat(record.id);
             if (record.outgoing && chat != null && chat.status.equals("DELIVERED")) {
@@ -447,9 +489,16 @@ final class MediaTransfers {
                 });
                 continue;
             }
-            if (!record.outgoing || budget <= 0) continue;
-            BitSet received = bits(record);
-            List<MediaPart> parts = dao().parts(record.id);
+            if (!record.outgoing) continue;
+            boolean ranges = metadata(record).optBoolean("ranges", false);
+            com.example.offgrid.mesh.transport.TransferProfile profile =
+                    ranges
+                            ? profiles.apply(record.targetId)
+                            : com.example.offgrid.mesh.transport.TransferProfile.GATT;
+            pumpDelay = Math.min(pumpDelay, profile.intervalMs);
+            if (elapsed < nextPump.getOrDefault(record.id, 0L)
+                    || elapsed < profileDue.getOrDefault(profile, 0L)) continue;
+            nextPump.put(record.id, elapsed + profile.intervalMs);
             if (now - record.lastQuery >= 45_000) {
                 MeshMessage query =
                         crypto.control(
@@ -463,52 +512,76 @@ final class MediaTransfers {
                     actions.queue(query, now);
                     dao().putMedia(record);
                 });
-                budget--;
+                // Leave the legacy quota for the query; fast streams have a separate bounded
+                // budget.
+                if (profile == com.example.offgrid.mesh.transport.TransferProfile.GATT) {
+                    profileDue.put(profile, elapsed + profile.intervalMs);
+                    continue;
+                }
             }
-            if (!record.state.equals("TRANSFERRING") || budget <= 0) continue;
+            if (!record.state.equals("TRANSFERRING")) continue;
+            BitSet received = bits(record);
             Map<Integer, MediaPart> sent = new HashMap<>();
+            List<MediaPart> parts = dao().parts(record.id);
             for (MediaPart part : parts) sent.put(part.partIndex, part);
             long inFlight =
                     parts.stream()
                             .filter(part ->
                                     !received.get(part.partIndex) && now - part.sentAt < 45_000)
                             .count();
-            byte[] file = null;
-            for (int index = 0; index < record.chunkCount && budget > 0 && inFlight < 4; index++) {
-                if (received.get(index)) continue;
-                MediaPart previous = sent.get(index);
-                if (previous != null && now - previous.sentAt < 45_000) continue;
-                if (file == null) file = actions.open("media-file:" + record.id, record.file);
-                String data =
-                        Base64.getUrlEncoder()
-                                .withoutPadding()
-                                .encodeToString(
-                                        Arrays.copyOfRange(
-                                                file,
-                                                index * CHUNK,
-                                                Math.min(file.length, (index + 1) * CHUNK)));
-                MeshMessage chunk =
-                        crypto.control(
-                                record.targetId,
-                                new JSONObject()
-                                        .put("kind", "media_chunk")
-                                        .put("mid", record.id)
-                                        .put("index", index)
-                                        .put("data", data)
-                                        .toString());
+            if (inFlight >= profile.windowBlocks) continue;
+            int index = -1;
+            for (int i = 0; i < record.chunkCount; i++)
+                if (!received.get(i)
+                        && (!sent.containsKey(i) || now - sent.get(i).sentAt >= 45_000)) {
+                    index = i;
+                    break;
+                }
+            if (index < 0) continue;
+            int count = 0;
+            int cap = Math.min(profile.chunkBytes / CHUNK, (int) (profile.windowBlocks - inFlight));
+            while (count < cap && index + count < record.chunkCount) {
+                int i = index + count;
+                if (received.get(i) || (sent.containsKey(i) && now - sent.get(i).sentAt < 45_000))
+                    break;
+                count++;
+            }
+            if (count == 0) continue;
+            byte[] file = actions.open("media-file:" + record.id, record.file);
+            String data =
+                    Base64.getUrlEncoder()
+                            .withoutPadding()
+                            .encodeToString(
+                                    Arrays.copyOfRange(
+                                            file,
+                                            index * CHUNK,
+                                            Math.min(file.length, (index + count) * CHUNK)));
+            MeshMessage chunk =
+                    crypto.control(
+                            record.targetId,
+                            new JSONObject()
+                                    .put("kind", count > 1 ? "media_range" : "media_chunk")
+                                    .put("mid", record.id)
+                                    .put("index", index)
+                                    .put("data", data)
+                                    .toString());
+            profileDue.put(profile, elapsed + profile.intervalMs);
+            List<MediaPart> replacements = new ArrayList<>();
+            Set<String> obsolete = new HashSet<>();
+            for (int i = index; i < index + count; i++) {
+                if (sent.containsKey(i)) obsolete.add(sent.get(i).packetId);
                 MediaPart part = new MediaPart();
                 part.mediaId = record.id;
-                part.partIndex = index;
+                part.partIndex = i;
                 part.sentAt = now;
                 part.packetId = chunk.getMessageId();
-                actions.transaction(() -> {
-                    if (previous != null) dao().deletePending(previous.packetId);
-                    actions.queue(chunk, now);
-                    dao().putPart(part);
-                });
-                budget--;
-                inFlight++;
+                replacements.add(part);
             }
+            actions.transaction(() -> {
+                for (String old : obsolete) dao().deletePending(old);
+                actions.queue(chunk, now);
+                for (MediaPart part : replacements) dao().putPart(part);
+            });
         }
     }
 

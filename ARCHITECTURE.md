@@ -164,3 +164,21 @@ Diagnostics snapshots are constructed on the mesh worker, then published to the
 main thread. The Network dialog requests a snapshot every two seconds while
 visible. Connection failures are kept in a bounded diagnostic ring instead of
 showing repeated connection-error toasts. Debug counters reset with the service.
+
+## Transport-specific bulk development
+
+`TransferProfile` defines chunk, pacing and in-flight policies. `MediaTransfers`
+retains canonical block persistence, adds negotiated encrypted ranges, and rotates
+outgoing transfers through shared profile gates. `MeshNode` has a separate adaptive
+media task, distinct from five-second housekeeping; idle polling backs off. Recent
+signed direct-ingress packets provide bounded, expiring performance hints, not
+route/authentication proofs. Relay candidates prefer usable Wi-Fi, then CoC, then
+GATT, and exclude packets that exceed a path's cap.
+
+`BleTransport` owns `CocTransport` on API 29+, advertises its PSM in scan responses
+and preserves GATT fallback. CoC socket IO is bounded and uses the same OGL1 stream
+framing as TCP; worker admission and deadline/cancellation rules remain explicit.
+`TransportMetrics` is worker-confined and shared by native transport adapters, so
+CoC failures followed by GATT are counted on their actual paths. Counters expose
+serialized packet throughput and timing, not a Delivered or unique-goodput claim.
+See THROUGHPUT.md for resource bounds and the physical benchmark protocol.

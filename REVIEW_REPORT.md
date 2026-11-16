@@ -6,6 +6,15 @@ This report describes implemented code, recorded validation, known limitations a
 proposals. It is not an independent security audit or evidence of physical mesh
 reliability. Proposed work is explicitly separated from completed work.
 
+## Subsequent transport throughput update
+
+Later development adds API 29+ LE L2CAP CoC, negotiated encrypted ranges, separate
+GATT/CoC/Wi-Fi pacing, and resettable packet/session metrics. The 640-byte canonical
+resume format remains. The old 256 B/s bottleneck assessment below describes the
+pinned historical snapshot; see THROUGHPUT.md for current source limits, host
+microbenchmarks and the physical validation still outstanding. No real radio speed
+or CoC interoperability result has been established.
+
 ## Subsequent identity/signing and licensing update
 
 After the application snapshot below, release application ID changed to
