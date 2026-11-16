@@ -103,7 +103,15 @@ public final class LanTransport implements MeshTransport {
                             next = link;
                             break;
                         }
-                    if (next == null) return;
+                    if (next == null) {
+                        if (network == null || candidate.equals(network)) {
+                            closeNetwork();
+                            network = candidate;
+                            address = null;
+                            maintain();
+                        }
+                        return;
+                    }
                     if (!candidate.equals(network) || !next.equals(address)) {
                         closeNetwork();
                         network = candidate;
@@ -131,7 +139,10 @@ public final class LanTransport implements MeshTransport {
             return;
         }
         if (network == null || address == null) {
-            status = "Waiting for a Wi-Fi network";
+            status =
+                    network == null
+                            ? "Waiting for a Wi-Fi network"
+                            : "Wi-Fi needs a private IPv4 address";
             return;
         }
         if (server == null && android.os.SystemClock.elapsedRealtime() >= retryAfter) openNetwork();
@@ -307,21 +318,27 @@ public final class LanTransport implements MeshTransport {
             while (!accepting.isClosed()) {
                 Socket socket = accepting.accept();
                 sockets.add(socket);
-                // Admission is evaluated on the worker before parsing any peer bytes.
-                boolean admitted =
-                        call(() ->
-                                epoch == generation
-                                        && localPeer(socket.getInetAddress())
-                                        && inboundSlots.tryAcquire());
-                if (!admitted) {
+                if (!inboundSlots.tryAcquire()) {
                     close(socket);
                     continue;
                 }
+                boolean handedOff = false;
                 try {
-                    io.execute(() -> receive(socket, epoch));
-                } catch (RejectedExecutionException e) {
-                    inboundSlots.release();
-                    close(socket);
+                    // IO owns the permit until receive() takes over. A worker timeout must
+                    // never strand a permit or restart an otherwise healthy listener.
+                    boolean admitted =
+                            call(() -> epoch == generation && localPeer(socket.getInetAddress()));
+                    if (admitted) {
+                        io.execute(() -> receive(socket, epoch));
+                        handedOff = true;
+                    }
+                } catch (Exception ignored) {
+                    // Busy/closed worker or exhausted IO slots: reject just this connection.
+                } finally {
+                    if (!handedOff) {
+                        inboundSlots.release();
+                        close(socket);
+                    }
                 }
             }
         } catch (Exception e) {

@@ -44,7 +44,10 @@ public class ConversationsUiTest {
             onView(withText("Bob only " + token)).check(doesNotExist());
             eventually(() -> assertTrue(store.dao().chat(first.getMessageId()).read));
             assertFalse(store.dao().chat(second.getMessageId()).read);
-            onView(withId(R.id.conversationsButton)).perform(click());
+            scenario.recreate();
+            eventually(() -> onView(withText("Alice only " + token)).check(matches(isDisplayed())));
+            androidx.test.espresso.Espresso.pressBack();
+            eventually(() -> onView(withId(R.id.conversationList)).check(matches(isDisplayed())));
             eventually(() ->
                     onData(
                                     allOf(

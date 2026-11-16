@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<ScanOptions> contactScanner;
     private ActivityResultLauncher<String> mediaPicker;
     private ActivityResultLauncher<String> localNetworkPermission;
+    private ActivityResultLauncher<String> notificationPermission;
     private final java.util.concurrent.ExecutorService mediaWorker =
             java.util.concurrent.Executors.newSingleThreadExecutor();
 
@@ -121,6 +122,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        notificationPermission =
+                registerForActivityResult(
+                        new ActivityResultContracts.RequestPermission(),
+                        allowed -> startMeshService());
         localNetworkPermission =
                 registerForActivityResult(
                         new ActivityResultContracts.RequestPermission(),
@@ -179,6 +184,19 @@ public class MainActivity extends AppCompatActivity {
             setRecipient(conversation.equals("public") ? null : conversation);
         });
         findViewById(R.id.diagnosticsButton).setOnClickListener(v -> showDiagnostics());
+        getOnBackPressedDispatcher()
+                .addCallback(
+                        this,
+                        new androidx.activity.OnBackPressedCallback(true) {
+                            @Override
+                            public void handleOnBackPressed() {
+                                if (!chatViewModel.listVisible) showConversations();
+                                else {
+                                    setEnabled(false);
+                                    getOnBackPressedDispatcher().onBackPressed();
+                                }
+                            }
+                        });
         applyWindowInsets();
 
         chatViewModel = new ViewModelProvider(this).get(ChatViewModel.class);
@@ -426,7 +444,12 @@ public class MainActivity extends AppCompatActivity {
         if (mesh != null) {
             stopMeshService();
         } else if (MeshService.wifiEnabled(this)) {
-            startMeshService();
+            if (Build.VERSION.SDK_INT >= 33
+                    && androidx.core.content.ContextCompat.checkSelfPermission(
+                                    this, android.Manifest.permission.POST_NOTIFICATIONS)
+                            != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS);
+            else startMeshService();
         } else {
             permissionHelper.requestPermissions(); // -> permissionCallback
         }
