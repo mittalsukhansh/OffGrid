@@ -211,10 +211,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Physical Wi-Fi Direct discovery/pairing, permission/OEM behavior and off-grid throughput remain unverified; the emulator socket tests are not a radio test.
 - **Sources:** This change; [`89fcec2`](https://github.com/mittalsukhansh/OffGrid/commit/89fcec2f223c9c8751020a7a01d44d53f7d3e4c7); [initial Direct CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43857686933); [WIFI_DIRECT.md](WIFI_DIRECT.md)
 
+## D022 — 2026-11-16 11:35 UTC — Wi-Fi Direct runtime validation and integration
+
+- **Status:** Final source checks passed; integration record
+- **Work:** Recorded final validation for D020/D021 and prepared the tested Wi-Fi Direct source plus this evidence for consolidation into main. The implementation, compatibility fix and their log entries were pushed using mittalsukhansh.
+- **Decision / reason:** Integrate only after both the build and Android emulator jobs pass. Preserve the earlier pending-validation entries; record the successful outcome here rather than rewriting them. This final evidence-only update needs document checks, not another local application-test run.
+- **Validation / evidence:** Final application commit 2d6205d passed GitHub build/lint/54 JVM tests and the Android runtime suite, including ownership/hello/permission contracts, real loopback framed transfer/cancellation, Direct-prefixed encrypted media, migration and UI regressions. Checked document links, sequential decision IDs and Git diff formatting for this record.
+- **Open items:** Physical AP-free pairing, group formation, permission/OEM interactions, radio throughput and rapid process/connection recovery still need phones under WIFI_DIRECT.md. Loopback and emulator tests do not establish those outcomes. Wi-Fi Aware and private group chats remain unimplemented.
+- **Sources:** This change; [`2d6205d`](https://github.com/mittalsukhansh/OffGrid/commit/2d6205d3484c8eeb601700ce82a0059b4c07c462); [final Direct CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43858481086); [WIFI_DIRECT.md](WIFI_DIRECT.md)
+
 ## Template for the next work set
 
 ```markdown
-## D022 — YYYY-MM-DD HH:MM UTC — Short title
+## D023 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
