@@ -1,4 +1,4 @@
-# OffGrid repository review report — 1.0 preparation
+# OffGrid repository review report — 1.0 experimental release
 
 Updated 16 November 2026 from the current source changes. This report separates implementation, automated evidence, physical evidence and external blockers. Consult [DECISIONS.md](../DECISIONS.md) for append-only validation/publication records.
 
@@ -52,7 +52,9 @@ Briar, Bitchat and Meshtastic solve overlapping problems with different architec
 
 ## 5. Validation scope
 
-Local build/lint/JVM tests and instrumentation compilation are recorded in the decision log for each source commit. GitHub emulator results and release upgrade results must be linked there after they actually complete. A staged signed baseline exists for an in-place package/signature upgrade test; staging alone is not a passing upgrade result.
+Local build/lint/JVM tests and instrumentation compilation are recorded in the decision log for each source commit. GitHub emulator results and release upgrade results must be linked there after they actually complete. The signed 1.0 release from source `061e5fa` is published as an experimental prerelease. [Exact-source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923057763) passed build/lint/65 JVM tests and the Android runtime suite. [Upgrade/publication workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923646455) passed baseline seed, baseline process reopening, in-place signed code-7→100 install and candidate verification. Identity/signing key/contact nickname/encrypted history survived; old single-key contact verification was cleared. APK/certificate/hash/signed-source provenance was checked before publishing, and the public release download was checked afterwards.
+
+The first upgrade attempt failed an identity comparison and stopped publication. The subsequent fixture explicitly committed seed preferences and verified baseline reopening; application identity creation now commits before use and unreadable records fail closed. The original comparison alone did not establish whether loss happened before or during upgrade, so do not attribute it solely to a version migration. The published candidate passed the stronger test. [Attached upgrade report](https://github.com/mittalsukhansh/OffGrid/releases/download/v1.0/upgrade.txt).
 
 The deterministic JVM simulator exercises the production relay scheduler and codec with seeded loss/reordering, an A–B–C partition and a relay restart preserving queue/count state. It does not simulate Android radio negotiation or independently validate cryptography. Android suites exercise actual Room/Keystore/crypto with logical peers, framing sockets, migrations, receipt/unsend/media and UI contracts. Fuzz tests are bounded seeded smoke tests, not exhaustive fuzzing or a security audit.
 
@@ -72,7 +74,7 @@ Recipient long-term agreement-key compromise still reveals recorded traffic. No 
 
 1. Owner sends the upstream request and gets written consent; resolve license before encouraging external reuse/contribution.
 2. Complete three named-phone tests and radio benchmarks, publish evidence and investigate failures before a stable reliability claim.
-3. Verify signed baseline→1.0 install-without-uninstall continuity on an emulator and then actual phones; preserve identity/history, document old package/debug incompatibility and backup scope.
+3. Repeat the now-passing signed baseline→1.0 install-without-uninstall check on actual phones; emulator evidence does not establish OEM behavior. Preserve signing-key custody for future updates; old package/debug incompatibility and backup scope remain documented.
 4. Externally review protocol 5, backup/restore and replay/unsend transactions; expand fuzz campaigns and fault injection beyond bounded smoke tests.
 5. Assess maintained reviewed session protocols/libraries for asynchronous mesh constraints; do not equate ephemeral-static encryption with forward secrecy.
 6. Later work: private group key management, SOS/optional location, measured adaptive transport policy, Wi-Fi Aware where useful and a separately designed iOS transport/app.

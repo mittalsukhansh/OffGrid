@@ -301,10 +301,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Determine the key-loading failure from baseline-reopen/filtered logs, fix it and repeat exact-source CI and signed upgrade. No physical results or licensing permission exist; admin settings remain blocked.
 - **Sources:** This change; [failed upgrade](https://github.com/mittalsukhansh/OffGrid/actions/runs/43921168068)
 
+## D032 — 2026-11-16 — Stage durable baseline-reopen upgrade attempt
+
+- **Status:** Candidate/test artifacts prepared; upgrade and publication pending
+- **Work:** Staged fresh signed APKs for source 061e5fa and updated baseline fixture. Public manifest binds every APK hash. Upgrade now verifies saved identity records and a separate baseline reopening before installing the candidate, and retains filtered crypto-loading logs.
+- **Decision / reason:** Keep the failed first attempt immutable and use a new temporary attempt branch. Do not publish until the stricter continuity assertions pass. No private key or password is staged.
+- **Validation / evidence:** Local signed release/lint/release-instrumentation build and package/version/certificate/embedded-source verification passed. Exact-source hosted checks and signed upgrade are checked before publication; their outcomes are recorded separately.
+- **Open items:** Resolve any reproduced key-loading failure, pass upgrade and verify publication; owner physical/legal/admin actions remain.
+- **Sources:** This staging change; [source](https://github.com/mittalsukhansh/OffGrid/commit/061e5fa8cdf27f8dddd87d83c3313333894c1886)
+
+## D033 — 2026-11-16 — Publish verified experimental 1.0 and consolidate main
+
+- **Status:** Signed 1.0 published; automated/emulator evidence complete; physical/legal/admin items open
+- **Work:** Integrated tested application source 061e5fa into main. Published v1.0/code 100 as an experimental prerelease with the pinned release certificate, immutable source provenance and upgrade evidence. Updated download/review/signing records and removed merged feature/temporary public artifact branches from GitHub after verifying the release download. Copied the staging record into the canonical main history; no APK fixtures are merged into main.
+- **Decision / reason:** A successful installer is insufficient; require durable baseline identity before upgrade and verify identity/signing key/contact nickname/encrypted history after it. The first identity comparison failed and correctly blocked publication. The second fixture explicitly committed seed state and checked a separate baseline reopening; the candidate passed. Do not infer from the first comparison alone whether loss preceded the upgrade. Preserve failed-attempt evidence and retain the stronger fail-closed/durable production identity behavior.
+- **Validation / evidence:** Exact source passed GitHub build/lint/65 JVM tests and the API-30 Android suite. Upgrade workflow 43923646455 passed three explicit tests (seed, baseline reopen, upgraded identity/contact/history), actual install -r and publication. Verified the downloaded public APK against its SHA-256, non-debuggable package/version, pinned certificate and embedded 061e5fa source; checked attached PASSED upgrade evidence. Re-audited reachable Git/public signing material and known local signing values in this completion record. Document links and diff formatting checked; no physical tests claimed.
+- **Open items:** Owner must obtain written upstream consent (request was blocked/not delivered), perform actual three-phone/radio/upgrade testing, apply admin-only metadata/secrets as needed and preserve private signing-key custody. Full forward secrecy/ratchets remain unimplemented; the reviewed-library direction is documented. Identity backup excludes history/media and inbound replay evidence. Only main remains as a GitHub branch; local scratch worktrees retain intermediate build evidence.
+- **Sources:** This change; [source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923057763); [upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/43923646455); [release](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0); [first blocked attempt](https://github.com/mittalsukhansh/OffGrid/actions/runs/43921168068)
+
 ## Template for the next work set
 
 ```markdown
-## D032 — YYYY-MM-DD HH:MM UTC — Short title
+## D034 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

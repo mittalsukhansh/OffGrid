@@ -6,14 +6,17 @@ media**. Phones exchange signed packets without a messaging server or shared
 access point. It uses a custom store-and-forward protocol; field reliability and
 radio throughput still require physical-device evidence.
 
-[Download the v0.2 test prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v0.2).
+[Download OffGrid 1.0 — experimental prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0).
 Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
-Development continues from `main` on short feature branches; the published v0.2 APK
-is an immutable earlier snapshot, not every later commit.
+Development continues from `main` on short feature branches. The signed 1.0 APK
+comes from commit `061e5fa`; later documentation does not change that immutable APK.
+[Signed in-place emulator upgrade evidence](https://github.com/mittalsukhansh/OffGrid/releases/download/v1.0/upgrade.txt)
+confirms identity/contact/history continuity from a matching signed code-7 baseline.
+Upstream consent and physical-phone reliability/throughput are still pending.
 
 ## Wi-Fi Direct without a router
 
-Current development builds include **Wi-Fi Direct** for the off-grid case.
+Version 1.0 includes **Wi-Fi Direct** for the off-grid case.
 Open **Network → Wi-Fi Direct · no access point** on both phones, enable it,
 start the meshes, find nearby OffGrid phones and select one to pair. Accept
 Android's connection prompt. Phones form their own group; no shared access point,
@@ -60,8 +63,8 @@ access or public availability grants relicensing rights.
 
 ## Conversations, Wi-Fi and diagnostics (1.0 source)
 
-These additions are in current development builds; the published v0.2 APK does
-**not** include them. Download the `offgrid-debug-apk` artifact from a successful
+These additions are included in the signed 1.0 prerelease. The older v0.2 APK does
+**not** include them. Development debug artifacts are also available from a successful
 [Android build](https://github.com/mittalsukhansh/OffGrid/actions/workflows/android.yml).
 Debug artifact signing certificates can differ between builds; published release
 builds now pin a persistent certificate. Use [encrypted identity export](IDENTITY_BACKUP.md)
@@ -210,7 +213,7 @@ rollback no longer pauses reception. Version 2/3/4 history is readable; legacy p
 packets must be resent using the updated app. Contacts need a new QR exchange because
 signing/agreement keys are now separate; compare the new full fingerprint. Every participating endpoint and relay must upgrade.
 
-## 1.0 preparation additions
+## 1.0 additions
 
 - Separate signing/agreement keys; fresh ephemeral ECDH per encrypted packet. Recipient-key compromise still exposes recorded traffic; full forward secrecy is not implemented.
 - Durable sender epoch/sequence replay windows, atomic with Room acceptance. Old replay windows never expire by clock; new-identity capacity is bounded and fails closed.
