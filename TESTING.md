@@ -156,3 +156,19 @@ rapid stop/start, process kill, screen off, unrelated existing groups and a
 three-phone group. Separate actual physical results from the loopback socket,
 pure ownership/hello, UI and logical encrypted-range tests. Wi-Fi Aware and
 unrestricted multi-group Wi-Fi mesh are not implemented.
+
+## Reproducible physical session capture (1.0 preparation)
+
+Use `python3 scripts/physical-test-session.py --phone A=SERIAL_A --phone B=SERIAL_B --phone C=SERIAL_C --apk offgrid.apk --output work/session.json` on a computer with the three owner-authorized phones connected to adb. The command only reads model/API metadata and hashes the APK; it neither installs nor clears app data and omits device serials from the output. A successful command means setup captured, not tests passed.
+
+On each phone, open **Network → Reset measurements**, perform one controlled test, then **Export measurements**. Android's document picker chooses the destination; no broad storage permission is required. The aggregate report includes model/API, app version, UTC time, elapsed time, transmitted/received wire bytes, packets, sessions and failures. It excludes contact identities, messages, transport addresses and error text. Model and timing information can still identify a test session; review before sharing.
+
+Record A/B/C roles, exact APK hash, transport selection, distance/obstacles, payload bytes/hash, duration, receiver completion, loss/retries and screen state alongside each export. Isolate GATT (CoC disabled), CoC (confirm negotiated transport), same-LAN and Direct (no AP, Bluetooth off) runs. Repeat each run three times. Keep unsuccessful runs. Receiver unique-media goodput is payload bytes divided by completion seconds; the exported wire averages include retries and idle time.
+
+| Required run | Actual phones | Result | Evidence |
+| --- | --- | --- | --- |
+| A–B–C, A/C outside direct range | Not available to automated environment | NOT RUN | Owner phone session needed |
+| GATT vs CoC vs Direct throughput | Not available to automated environment | NOT RUN | Per-radio exports needed |
+| Screen off, Bluetooth toggles, movement, process restart | Not available to automated environment | NOT RUN | Observations and timing needed |
+
+Never substitute JVM simulation, loopback sockets or emulator networking for these radio results. Publish measured numbers in THROUGHPUT.md only after attaching actual evidence.

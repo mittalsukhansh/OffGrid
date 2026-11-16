@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
     private LiveData<List<ChatRecord>> conversationHistory;
     private ActivityResultLauncher<ScanOptions> contactScanner;
     private ActivityResultLauncher<String> mediaPicker;
+    private ActivityResultLauncher<String> diagnosticsExport;
     private ActivityResultLauncher<String> localNetworkPermission;
     private ActivityResultLauncher<String> notificationPermission;
     private ActivityResultLauncher<String[]> directPermissions;
@@ -124,6 +125,47 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        diagnosticsExport =
+                registerForActivityResult(
+                        new ActivityResultContracts.CreateDocument("text/plain"),
+                        uri -> {
+                            if (uri == null) return;
+                            MeshService current = mesh;
+                            if (current == null) {
+                                Toast.makeText(
+                                                this,
+                                                "Start mesh before exporting measurements",
+                                                Toast.LENGTH_LONG)
+                                        .show();
+                                return;
+                            }
+                            current.exportMeasurements(report ->
+                                    mediaWorker.execute(() -> {
+                                        try (java.io.OutputStream out =
+                                                getContentResolver().openOutputStream(uri, "wt")) {
+                                            if (out == null)
+                                                throw new java.io.IOException("No destination");
+                                            out.write(
+                                                    report.getBytes(
+                                                            java.nio.charset.StandardCharsets
+                                                                    .UTF_8));
+                                            runOnUiThread(() ->
+                                                    Toast.makeText(
+                                                                    this,
+                                                                    "Measurements exported",
+                                                                    Toast.LENGTH_SHORT)
+                                                            .show());
+                                        } catch (Exception failure) {
+                                            runOnUiThread(() ->
+                                                    Toast.makeText(
+                                                                    this,
+                                                                    "Export failed; choose another"
+                                                                        + " destination",
+                                                                    Toast.LENGTH_LONG)
+                                                            .show());
+                                        }
+                                    }));
+                        });
         directPermissions =
                 registerForActivityResult(
                         new ActivityResultContracts.RequestMultiplePermissions(),
@@ -1271,6 +1313,9 @@ public class MainActivity extends AppCompatActivity {
         reset.setOnClickListener(v -> {
             if (mesh != null) mesh.resetMeasurements();
         });
+        Button export = new Button(this);
+        export.setText("Export measurements");
+        export.setOnClickListener(v -> diagnosticsExport.launch("offgrid-measurements.txt"));
         TextView details = new TextView(this);
         details.setTextIsSelectable(true);
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
@@ -1281,6 +1326,7 @@ public class MainActivity extends AppCompatActivity {
         panel.addView(toggle);
         panel.addView(coc);
         panel.addView(reset);
+        panel.addView(export);
         panel.addView(
                 scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         AlertDialog dialog =

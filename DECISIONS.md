@@ -238,10 +238,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Continue 1.0 implementation and automated release evidence; external and physical blockers from D023 remain.
 - **Sources:** This change; [review report](docs/REVIEW_REPORT.md)
 
+## D025 — 2026-11-16 — Aggregate diagnostics export and physical session harness
+
+- **Status:** Implemented; physical runs pending
+- **Work:** Added Network measurement export through Android's document picker and a named three-phone metadata/APK-hash capture script. Added controlled radio runs and an explicit NOT RUN results table.
+- **Decision / reason:** Export only aggregate metrics plus device/app metadata; exclude messages, contacts, addresses and error text. Capture setup separately from test outcomes and distinguish wire throughput from unique-media goodput.
+- **Validation / evidence:** Debug build, lint, JVM suite and Android-test compilation passed locally. Script help/syntax and diff formatting checked. No physical phone results generated.
+- **Open items:** Run A–B–C and three repetitions per radio on actual phones; attach exports and receiver completion measurements. Continue protocol/backup/release work.
+- **Sources:** This change; [testing](TESTING.md)
+
 ## Template for the next work set
 
 ```markdown
-## D025 — YYYY-MM-DD HH:MM UTC — Short title
+## D026 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

@@ -299,6 +299,41 @@ public class MeshService extends Service {
         worker.post(measurements::reset);
     }
 
+    /** Aggregate-only export: never includes contacts, packet IDs, addresses or error text. */
+    public void exportMeasurements(java.util.function.Consumer<String> callback) {
+        worker.post(() -> {
+            String version;
+            try {
+                version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (android.content.pm.PackageManager.NameNotFoundException impossible) {
+                version = "unknown";
+            }
+            String report =
+                    "OffGrid measurement export v1\n"
+                            + "App: "
+                            + getPackageName()
+                            + " "
+                            + version
+                            + "\nDevice: "
+                            + android.os.Build.MANUFACTURER
+                            + " "
+                            + android.os.Build.MODEL
+                            + "\nAndroid API: "
+                            + android.os.Build.VERSION.SDK_INT
+                            + "\nCaptured UTC: "
+                            + java.time.Instant.now()
+                            + "\n\n"
+                            + measurements.snapshot()
+                            + "\n\n"
+                            + "Test topology, distance, radio selection and payload must be"
+                            + " recorded separately. This export does not certify delivery or"
+                            + " physical mesh reliability.\n";
+            main.post(() -> {
+                if (!destroyed) callback.accept(report);
+            });
+        });
+    }
+
     public void diagnostics(java.util.function.Consumer<String> callback) {
         node.diagnostics(detail -> {
             String snapshot =
