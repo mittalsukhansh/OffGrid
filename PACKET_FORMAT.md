@@ -194,3 +194,21 @@ Wire version 4 is required on every endpoint and relay. Saved history from versi
 2 and 3 remains readable. Room schema 3 adds withdrawal/media/part tables plus
 message kind/progress with a non-destructive 2→3 migration. Forward secrecy remains
 unimplemented.
+
+## Optional local Wi-Fi framing (0.3-dev)
+
+The signed JSON packet and wire version 4 are unchanged. DNS-SD advertises
+`_offgrid._tcp.` with a random service-instance name, a dynamic TCP port and
+`framing=1`. Discovery does not establish contact trust. TCP is bound to the
+selected local Wi-Fi IPv4 address/network, with same-subnet peer admission.
+
+Each connection starts with two big-endian 32-bit integers: magic `0x4f474c31`
+(`OGL1`), then a packet count from 1 through 20. Each packet is a big-endian 32-bit
+length from 1 through 2048 followed by exactly that many signed-JSON bytes. The
+receiver passes it through the normal protocol/flood/replay pipeline and writes
+one byte `0x01` as a **transport** confirmation. This is not signed and proves
+neither recipient identity nor message delivery. Delivered still requires the
+existing encrypted authenticated message receipt, queued in the reverse direction.
+Bad lengths, truncated frames, invalid headers and timed-out sessions are closed.
+An unsent or canceled item can terminate a batch; remaining durable items can retry.
+Public message content remains plaintext on Wi-Fi, just as it is over BLE.

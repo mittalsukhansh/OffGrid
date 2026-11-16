@@ -132,6 +132,8 @@ public class RelaySchedulerTest {
         scheduler.start();
         time.runDue();
         transport.calls.get(0).listener.onComplete("disconnected", false);
+        assertTrue(scheduler.diagnostics().contains("peer: disconnected"));
+        assertTrue(scheduler.diagnostics().contains("retry in 4s"));
         time.advance(3999);
         scheduler.maintenance();
         time.runDue();

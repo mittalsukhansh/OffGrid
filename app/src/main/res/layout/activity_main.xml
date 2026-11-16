@@ -39,6 +39,18 @@
         android:alpha="0.2"
         android:background="#808080" />
 
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:paddingHorizontal="12dp">
+        <Button android:id="@+id/conversationsButton" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="Conversations" />
+        <Button android:id="@+id/diagnosticsButton" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Network" />
+    </LinearLayout>
+    <TextView android:id="@+id/conversationHeading" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:paddingHorizontal="16dp"
+        android:text="Conversations · choose a chat or start a new one below" android:textSize="14sp" />
+    <ListView android:id="@+id/conversationList" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" />
     <!-- Chat history -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/chatRecycler"
@@ -83,7 +95,7 @@
     </LinearLayout>
 
     <!-- Message input row -->
-    <LinearLayout
+    <LinearLayout android:id="@+id/composerRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"

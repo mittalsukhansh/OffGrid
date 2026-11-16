@@ -16,9 +16,17 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
             MediaRecord.class,
             MediaPart.class
         },
-        version = 3,
+        version = 4,
         exportSchema = true)
 public abstract class MessageDatabase extends RoomDatabase {
+    public static final Migration MIGRATION_3_4 =
+            new Migration(3, 4) {
+                @Override
+                public void migrate(@NonNull SupportSQLiteDatabase db) {
+                    // Existing history must not suddenly appear as unread.
+                    db.execSQL("ALTER TABLE messages ADD COLUMN `read` INTEGER NOT NULL DEFAULT 1");
+                }
+            };
     public static final Migration MIGRATION_2_3 =
             new Migration(2, 3) {
                 @Override

@@ -1,7 +1,7 @@
 # OffGrid
 
-OffGrid is an Android prototype for offline messaging over a custom Bluetooth Low
-Energy/GATT relay network. Phones discover peers, exchange signed packets, and
+OffGrid is an Android prototype for offline messaging over Bluetooth Low
+Energy/GATT and optional local Wi-Fi TCP transports. Phones discover peers, exchange signed packets, and
 retain messages for later forwarding. It is not an implementation of the Bluetooth
 SIG Mesh standard.
 
@@ -9,6 +9,43 @@ SIG Mesh standard.
 Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
 Development continues from `main` on short feature branches; the published v0.2 APK
 is an immutable earlier snapshot, not every later commit.
+
+## Conversations, Wi-Fi and diagnostics (0.3-dev source)
+
+These additions are in current development builds; the published v0.2 APK does
+**not** include them. Download the `offgrid-debug-apk` artifact from a successful
+[Android build](https://github.com/mittalsukhansh/OffGrid/actions/workflows/android.yml).
+Test APK signing certificates can differ between builds: an uninstall can erase
+identity, contacts and history. Preserve needed information before changing builds.
+
+- **Conversations** shows public chat and each private contact separately, sorted
+  by latest activity, with persistent unread counts. Opening a chat loads only its
+  history (up to 500 latest entries per conversation). Drafts are separate while
+  switching chats and survive rotation; draft text is not a durable backup.
+- New-message notifications open the correct conversation and hide message bodies
+  and contact nicknames. Allow Android notification permission to receive them.
+  Private attachments notify after completion, not just the initial offer.
+- Open **Network → Local Wi-Fi sharing** on each phone, then start the mesh. Connect
+  phones as clients of the same Wi-Fi network or hotspot; internet is unnecessary.
+  Android 17+ requests local-network permission. This is shared-network transport,
+  not Wi-Fi Direct, hotspot creation, or support for every hotspot host interface.
+- Wi-Fi uses local DNS-SD discovery and bounded IPv4 TCP sessions. Guest/client
+  isolation, blocked multicast, VPNs and IPv6-only networks can prevent discovery
+  or connections. Bluetooth continues independently; Wi-Fi can remain active when
+  Bluetooth is off. Startup can use Wi-Fi without requesting Bluetooth access.
+- **Network diagnostics** refreshes Bluetooth scanning/advertising/server state,
+  Wi-Fi state, endpoint counts, relay queue, outbound sessions, packet counters,
+  recent failures and retry delays. Addresses are discovered transport endpoints,
+  not authenticated contacts or proof of connectivity. A phone can appear twice
+  when discovered over both transports.
+- Wi-Fi avoids BLE fragmentation but retains current attachment size limits,
+  flood budgets and conservative media pacing. No throughput claim is made yet.
+  A TCP transfer confirmation changes forwarding progress; only an authenticated
+  recipient acknowledgement establishes **Delivered**.
+
+Battery modes, private groups and SOS remain deferred. No hosting or login is
+needed. Device Wi-Fi discovery, network changes and mixed-radio behavior still
+need physical testing using [TESTING.md](TESTING.md).
 
 ## Offline sharing in 0.2
 
@@ -60,6 +97,8 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 | Abuse protection | Packet signatures, timestamp admission, persistent replay ledger and bounded flood budgets | JVM rules and emulator security tests | No independent security audit or radio-level denial-of-service guarantee |
 | Background operation | Connected-device foreground service, radio-state handling and maintenance | Component tests and compilation; no physical screen-off evidence | Screen off, battery optimization and Bluetooth toggling await the checklist |
 | Offline sharing | Local nicknames, private withdrawals, encrypted image/short-video transfers | Emulator regression tests for authorization, tombstones, integrity, resumption and size/duration bounds | Camera/gallery/player UI and real media throughput need phones |
+| Conversations and unread notifications | Per-contact/public histories, durable unread flags, generic notification routing | SQLite filtering/read/migration regressions and Espresso conversation/navigation checks | Notification permissions and OEM background behavior need phones |
+| Local Wi-Fi and diagnostics | Opt-in DNS-SD/IPv4 TCP alongside BLE, bounded sessions, live queue/endpoint/error diagnostics | Real TCP framing tests and transport selection/radio-state regressions | Physical NSD, access-point compatibility, network changes and throughput unverified |
 | Forward secrecy | **Not implemented**; private messages still use static ECDH | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
 
 ## Components and documentation

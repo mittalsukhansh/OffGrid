@@ -76,4 +76,26 @@ public class SecurityMigrationTest {
             InstrumentationRegistry.getInstrumentation().getTargetContext().deleteDatabase(name);
         }
     }
+
+    @Test
+    public void unreadMigrationKeepsHistoryAndMarksLegacyMessagesRead() throws Exception {
+        String name = "unread-migration-" + UUID.randomUUID();
+        try {
+            SupportSQLiteDatabase db = helper.createDatabase(name, 3);
+            db.execSQL(
+                    "INSERT INTO messages VALUES"
+                            + " ('old-message','public',X'010203',0,100,'RECEIVED','text',0)");
+            db.close();
+            db = helper.runMigrationsAndValidate(name, 4, true, MessageDatabase.MIGRATION_3_4);
+            try (android.database.Cursor rows =
+                    db.query("SELECT hex(content),`read` FROM messages")) {
+                assertTrue(rows.moveToFirst());
+                assertEquals("010203", rows.getString(0));
+                assertEquals(1, rows.getInt(1));
+            }
+            db.close();
+        } finally {
+            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteDatabase(name);
+        }
+    }
 }

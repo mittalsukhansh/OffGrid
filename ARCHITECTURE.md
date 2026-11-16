@@ -8,6 +8,8 @@
 | `MeshNode` | Worker orchestration, recovery, maintenance, announcements and component events | GATT implementation, cryptographic primitives, SQL |
 | `MeshTransport` | Byte-oriented transport and send-callback contract | Message types or delivery receipts |
 | `BleTransport` | BLE discovery/advertising, GATT server, radio receiver, native resource lifetime | Conversation state, TTL policy, delivery confirmation |
+| `CombinedTransport` | Namespaced BLE/Wi-Fi peer dispatch, aggregate radio availability | Contact identity or delivery guarantees |
+| `LanTransport` / `LanFrames` | Opt-in Wi-Fi network callbacks, DNS-SD, network-bound IPv4 TCP, bounded length framing and native socket lifetime | Message authentication, encryption, Room or delivery receipts |
 | `GattOutboundSession` | One client connection, MTU negotiation, service discovery, framed writes and close deadlines | Peer selection, retries across sessions, database mutations |
 | `FrameCodec` | Packet fragmentation/reassembly, per-peer buffers, size/capacity/deadline rules | JSON, UTF-8 text decoding, signatures, Android |
 | `RelayScheduler` | Peer table, signal ordering, freshness, backoff, batches, concurrency, pending cache and forwarding eligibility | Native Bluetooth objects, Handler, UI or Room DAO |
@@ -21,7 +23,10 @@ flowchart TD
   Service --> Node[MeshNode]
   Node --> Protocol[MeshProtocol]
   Node --> Relay[RelayScheduler]
-  Node --> BLE[BleTransport]
+  Node --> Combined[CombinedTransport]
+  Combined --> BLE[BleTransport]
+  Combined --> LAN[LanTransport]
+  LAN --> LANCodec[LanFrames]
   Relay --> Transport[MeshTransport interface]
   BLE -. implements .-> Transport
   BLE --> GATT[GattOutboundSession]
@@ -76,9 +81,11 @@ BLE, including session completion and pre-send cancellation checks.
 On start, recovery expires old records, authenticates saved packets and restores
 only eligible records with the original remaining lifetime and forward count.
 An unreadable encrypted record fails recovery without deleting the original data.
-Legacy/invalid pending packets are explicitly rejected as before. Bluetooth loss
-pauses routing and clears peer/native connection state, retaining durable pending
-messages for recovery. Service destruction closes active **and delayed-closing**
+Legacy/invalid pending packets are explicitly rejected as before. Routing pauses
+when all transports are unavailable. Each radio closes its own native sessions on
+loss; completing canceled Bluetooth sessions releases relay slots even when Wi-Fi
+keeps the combined transport active. Durable pending messages remain available
+for retry. Service destruction closes active **and delayed-closing**
 GATT sessions before the worker thread exits.
 
 ## Validation boundaries
@@ -125,3 +132,35 @@ receipt evidence and message status changes remain transactional. Existing
 protocol-only tests may omit extensions; the production service always installs
 them. Wire version 4 and Room schema 3 belong to this feature milestone, not the
 prior component extraction.
+
+## Conversations and local Wi-Fi in 0.3-dev
+
+Room schema 4 adds `messages.read` with a default of true for legacy records;
+new inbound display rows explicitly start unread. Aggregate summaries scan all
+history, while the selected conversation observes up to 500 latest messages.
+Read updates are limited to rendered IDs and the selected conversation, and are
+skipped for incomplete media. Visible-conversation tracking is cleared on pause.
+Notifications contain generic text and explicit conversation intents. Media
+completion emits a display event only after the existing integrity/save transaction.
+
+LAN discovery/routing state lives on the mesh worker. A maximum of seven IO
+threads covers one accept loop, three inbound sessions and three outbound
+sessions, with no queued IO tasks. Frames wait for worker admission before a
+transfer confirmation; the socket thread never calls protocol/Room directly.
+Connections have a five-second connect timeout, eight-second IO waits and a
+25-second absolute session deadline. Cancellation/network loss closes sockets.
+Late send completion must still release a relay session; generation checks reject
+late payloads, discovery callbacks and forwarding updates from an old network.
+DNS-SD has bounded service/resolve tables, one active resolve and a deadline.
+Only peers in the selected Wi-Fi interface's IPv4 subnet are admitted.
+
+`CombinedTransport` reports active if either transport is active. Wi-Fi endpoints
+have priority over negative BLE RSSI for available relay sessions; the existing
+forwarding budget still spans transports. Transport endpoint addresses are not
+contact IDs. A phone discovered twice is counted twice in diagnostics, and signed
+packet replay/duplicate checks still operate across both paths.
+
+Diagnostics snapshots are constructed on the mesh worker, then published to the
+main thread. The Network dialog requests a snapshot every two seconds while
+visible. Connection failures are kept in a bounded diagnostic ring instead of
+showing repeated connection-error toasts. Debug counters reset with the service.

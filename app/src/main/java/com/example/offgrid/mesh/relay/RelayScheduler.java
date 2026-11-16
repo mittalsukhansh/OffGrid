@@ -51,6 +51,7 @@ public final class RelayScheduler {
     private final Map<String, Object> sessions = new HashMap<>();
     private final LinkedHashMap<String, Buffered> queue = new LinkedHashMap<>();
     private final Runnable connectPass = this::connect;
+    private final java.util.ArrayDeque<String> recentFailures = new java.util.ArrayDeque<>();
     private boolean active;
     private boolean scheduled;
     private int publishedPeerCount;
@@ -241,6 +242,10 @@ public final class RelayScheduler {
                         public void onComplete(String failure, boolean incompatible) {
                             if (!current()) return;
                             sessions.remove(peer.address);
+                            if (failure != null) {
+                                if (recentFailures.size() == 8) recentFailures.removeFirst();
+                                recentFailures.addLast(peer.address + ": " + failure);
+                            }
                             if (failure == null || forwarded > 0) {
                                 peer.failures = 0;
                                 peer.backoffUntil = 0;
@@ -263,6 +268,41 @@ public final class RelayScheduler {
                 callbacks.onComplete("Transport rejected session", false);
             }
         }
+    }
+
+    public String diagnostics() {
+        StringBuilder text = new StringBuilder();
+        text.append("Relay queue: ")
+                .append(queue.size())
+                .append(" packets\n")
+                .append("Active outbound sessions: ")
+                .append(sessions.size())
+                .append(" / ")
+                .append(MAX_CONNECTIONS)
+                .append("\n")
+                .append("Discovered transport endpoints: ")
+                .append(peers.size())
+                .append("\n");
+        long now = timer.elapsed();
+        for (Peer peer : peers.values()) {
+            text.append("\n")
+                    .append(peer.address)
+                    .append(" · seen ")
+                    .append(Math.max(0, now - peer.lastSeen) / 1000)
+                    .append("s ago");
+            if (!peer.address.startsWith("wifi:"))
+                text.append(" · ").append(peer.rssi).append(" dBm");
+            text.append(" · failures ").append(peer.failures);
+            if (peer.backoffUntil > now)
+                text.append(" · retry in ")
+                        .append((peer.backoffUntil - now + 999) / 1000)
+                        .append("s");
+        }
+        if (!recentFailures.isEmpty()) {
+            text.append("\n\nRecent connection failures:");
+            for (String failure : recentFailures) text.append("\n").append(failure);
+        }
+        return text.toString();
     }
 
     private void evictStalest() {

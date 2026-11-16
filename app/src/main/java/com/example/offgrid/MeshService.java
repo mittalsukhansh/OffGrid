@@ -28,6 +28,8 @@ import com.example.offgrid.mesh.protocol.MeshProtocol;
 import com.example.offgrid.mesh.storage.MeshStorage;
 import com.example.offgrid.mesh.storage.RoomMeshStorage;
 import com.example.offgrid.mesh.transport.BleTransport;
+import com.example.offgrid.mesh.transport.CombinedTransport;
+import com.example.offgrid.mesh.transport.LanTransport;
 
 import java.util.Set;
 import java.util.UUID;
@@ -80,6 +82,8 @@ public class MeshService extends Service {
     private Handler worker;
     private Handler main;
     private MeshNode node;
+    private LanTransport wifi;
+    private BleTransport ble;
     private volatile boolean destroyed;
     private volatile int peerCount;
     private String statusText = "Starting…";
@@ -106,10 +110,13 @@ public class MeshService extends Service {
         PrivateActions actions = new PrivateActions(this, MessageStore.get(this), crypto);
         MeshProtocol protocol = new MeshProtocol(crypto, storage, flood);
         protocol.extensions(actions);
+        ble = new BleTransport(this, worker, flood);
+        wifi = new LanTransport(this, worker, flood);
+        wifi.enabled(wifiEnabled(this));
         node =
                 new MeshNode(
                         worker,
-                        new BleTransport(this, worker, flood),
+                        new CombinedTransport(ble, wifi),
                         storage,
                         protocol,
                         actions,
@@ -132,7 +139,20 @@ public class MeshService extends Service {
 
                             @Override
                             public void onReceived(MeshMessage message) {
+                                boolean notify =
+                                        !message.isMedia()
+                                                || "READY"
+                                                        .equals(
+                                                                MessageStore.get(MeshService.this)
+                                                                        .dao()
+                                                                        .chat(
+                                                                                message
+                                                                                        .getMessageId())
+                                                                        .status);
                                 main.post(() -> {
+                                    if (destroyed) return;
+                                    if (notify)
+                                        ChatNotifications.received(MeshService.this, message);
                                     for (MeshListener listener : listeners)
                                         listener.onMessageReceived(message);
                                 });
@@ -200,6 +220,44 @@ public class MeshService extends Service {
 
     public void removeListener(@NonNull MeshListener listener) {
         listeners.remove(listener);
+    }
+
+    public static boolean wifiEnabled(Context context) {
+        return context.getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .getBoolean("wifi", false);
+    }
+
+    public void setWifiEnabled(boolean value) {
+        getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .edit()
+                .putBoolean("wifi", value)
+                .apply();
+        worker.post(() -> wifi.enabled(value));
+    }
+
+    public void diagnostics(java.util.function.Consumer<String> callback) {
+        node.diagnostics(detail -> {
+            String snapshot =
+                    ble.diagnostics()
+                            + "\nWi-Fi: "
+                            + wifi.status()
+                            + "\nWi-Fi discovered endpoints: "
+                            + wifi.peerCount()
+                            + "\n\n"
+                            + detail
+                            + "\n\n"
+                            + "Endpoints are transport addresses, not verified contacts. One phone"
+                            + " may appear on both transports. Forwarded means transferred to a"
+                            + " peer; only an authenticated recipient acknowledgement means"
+                            + " Delivered.\n\n"
+                            + "Wi-Fi needs the same local network with peer traffic and multicast"
+                            + " discovery allowed. Guest isolation, VPNs or hotspot settings may"
+                            + " block it. Internet is not required. Media keeps its existing size"
+                            + " limits and conservative pacing.";
+            main.post(() -> {
+                if (!destroyed) callback.accept(snapshot);
+            });
+        });
     }
 
     public int getPeerCount() {

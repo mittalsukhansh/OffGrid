@@ -99,3 +99,38 @@ All nodes must use the same version 4 APK. Updating from an APK signed with
 another debug certificate may require uninstalling; that deletes local identity
 and data. Preserve needed test information first. This is a test prerelease, not a
 production signing or recovery system.
+
+## Conversations, Wi-Fi and diagnostics (0.3-dev)
+
+The v0.2 release APK predates these features. Install the same current development
+APK on all phones, with the signing/data-loss precautions above.
+
+1. Receive messages from two private contacts and public chat. Check separate
+   conversations sorted by recent activity, unread counts after process restart,
+   and notification routing. Opening one contact must not display or mark another
+   contact's messages as read. Check rotation and drafts when switching chats.
+2. Deny notifications, then enable them in Android settings. Messaging and unread
+   counts must work in either case. In the background, notifications must not show
+   private text or nicknames. Open a notification and confirm the intended chat.
+3. Put phones on the same Wi-Fi access point (internet disconnected). Enable
+   Network → Local Wi-Fi sharing on each and start their meshes. Confirm Wi-Fi
+   endpoint discovery, exchange private text/images and verify authenticated
+   Delivered receipts. A forwarding event alone must not show Delivered.
+4. Turn Bluetooth off while Wi-Fi is active. Check continued messages, queues and
+   released outbound session slots. Turn Wi-Fi off during a transfer and check BLE
+   can resume eligible packets. Repeat stopping/restarting the service and process.
+5. Move one phone to another network and back, change Wi-Fi address, deny/revoke
+   Android 17 local-network permission and test a hotspot with phones as clients.
+   Record Wi-Fi state, discovery/failure messages and successful recovery. Do not
+   assume hotspot-host support or discovery on guest/client-isolated Wi-Fi.
+6. Compare diagnostics against logs: BLE scanning/advertising, Wi-Fi endpoints,
+   queue size, session count, failure/retry delays and packet counters. Confirm one
+   dual-transport phone can count as two endpoints without becoming two contacts.
+7. Record actual attachment transfer time, screen-off behavior and Wi-Fi/BLE
+   fallbacks. Size limits and media pacing are unchanged; do not report improved
+   throughput or battery use without measuring it.
+
+Automated coverage adds real-loopback TCP framing/max-batch and malformed/truncated
+frame tests, combined-transport state/routing tests, Room conversation/unread/read
+race and schema 3→4 migration tests, and Espresso chat switching/diagnostic-screen
+checks. These do not exercise physical NSD discovery or access-point behavior.

@@ -11,13 +11,16 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.text.InputFilter;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -31,6 +34,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.lifecycle.LiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -71,6 +75,9 @@ public class MainActivity extends AppCompatActivity {
         /** Device ID of the selected private recipient, or null for "Everyone". */
         @Nullable String recipientId;
 
+        boolean listVisible = true;
+        final java.util.Map<String, String> drafts = new java.util.HashMap<>();
+
         @Nullable String pendingMessageId;
         @Nullable String pendingText;
         @Nullable String mediaTarget;
@@ -91,8 +98,15 @@ public class MainActivity extends AppCompatActivity {
     private ChatViewModel chatViewModel;
     private BlePermissionHelper permissionHelper;
     private int historyVersion;
+    private boolean resumed;
+    private ListView conversationList;
+    private TextView conversationHeading;
+    private Button conversationsButton;
+    private final List<ConversationSummary> conversations = new ArrayList<>();
+    private LiveData<List<ChatRecord>> conversationHistory;
     private ActivityResultLauncher<ScanOptions> contactScanner;
     private ActivityResultLauncher<String> mediaPicker;
+    private ActivityResultLauncher<String> localNetworkPermission;
     private final java.util.concurrent.ExecutorService mediaWorker =
             java.util.concurrent.Executors.newSingleThreadExecutor();
 
@@ -107,6 +121,24 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        localNetworkPermission =
+                registerForActivityResult(
+                        new ActivityResultContracts.RequestPermission(),
+                        allowed -> {
+                            if (allowed) setWifiEnabled(true);
+                            else
+                                new AlertDialog.Builder(this)
+                                        .setTitle("Local-network access needed")
+                                        .setMessage(
+                                                "Allow local-network access in Android app settings"
+                                                    + " to discover Wi-Fi peers. Bluetooth remains"
+                                                    + " available.")
+                                        .setPositiveButton(
+                                                "App settings",
+                                                (d, w) -> BlePermissionHelper.openAppSettings(this))
+                                        .setNegativeButton(android.R.string.cancel, null)
+                                        .show();
+                        });
         mediaPicker =
                 registerForActivityResult(
                         new ActivityResultContracts.GetContent(), this::prepareAttachment);
@@ -138,6 +170,15 @@ public class MainActivity extends AppCompatActivity {
         messageInput = findViewById(R.id.messageInput);
         chatRecycler = findViewById(R.id.chatRecycler);
 
+        conversationList = findViewById(R.id.conversationList);
+        conversationHeading = findViewById(R.id.conversationHeading);
+        conversationsButton = findViewById(R.id.conversationsButton);
+        conversationsButton.setOnClickListener(v -> showConversations());
+        conversationList.setOnItemClickListener((parent, view, position, id) -> {
+            String conversation = conversations.get(position).conversationId;
+            setRecipient(conversation.equals("public") ? null : conversation);
+        });
+        findViewById(R.id.diagnosticsButton).setOnClickListener(v -> showDiagnostics());
         applyWindowInsets();
 
         chatViewModel = new ViewModelProvider(this).get(ChatViewModel.class);
@@ -225,18 +266,15 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
         store.dao()
-                .observeHistory()
+                .observeConversations()
                 .observe(
                         this,
                         rows -> {
-                            int version = ++historyVersion;
-                            store.loadHistory(
-                                    rows,
-                                    (entries, unreadable) -> {
-                                        if (isDestroyed() || version != historyVersion) return;
-                                        showStoredHistory(entries, unreadable);
-                                    });
+                            conversations.clear();
+                            conversations.addAll(rows);
+                            updateConversationList();
                         });
+        observeSelectedConversation();
 
         messageInput.setFilters(
                 new InputFilter[] {new InputFilter.LengthFilter(MeshMessage.MAX_TEXT_LENGTH)});
@@ -256,8 +294,51 @@ public class MainActivity extends AppCompatActivity {
         // Must be created during onCreate (registers Activity Result launchers).
         permissionHelper = new BlePermissionHelper(this, permissionCallback);
 
+        if (savedInstanceState != null) {
+            chatViewModel.recipientId = savedInstanceState.getString("conversation");
+            chatViewModel.listVisible = savedInstanceState.getBoolean("listVisible", true);
+            observeSelectedConversation();
+        }
+        openNotification(getIntent());
         updateRecipientButton();
+        updateConversationVisibility();
         updateUi();
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle state) {
+        state.putString("conversation", chatViewModel.recipientId);
+        state.putBoolean("listVisible", chatViewModel.listVisible);
+        super.onSaveInstanceState(state);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openNotification(intent);
+    }
+
+    private void openNotification(Intent intent) {
+        if (intent == null) return;
+        String id = intent.getStringExtra("conversation");
+        if (id != null && (id.equals("public") || id.matches("[0-9a-f]{32}")))
+            setRecipient(id.equals("public") ? null : id);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        updateConversationVisibility();
+        markDisplayedRead();
+    }
+
+    @Override
+    protected void onPause() {
+        resumed = false;
+        MessageStore.get(this).visibleConversation(null);
+        super.onPause();
     }
 
     @Override
@@ -344,6 +425,8 @@ public class MainActivity extends AppCompatActivity {
     private void onToggleClicked() {
         if (mesh != null) {
             stopMeshService();
+        } else if (MeshService.wifiEnabled(this)) {
+            startMeshService();
         } else {
             permissionHelper.requestPermissions(); // -> permissionCallback
         }
@@ -353,7 +436,8 @@ public class MainActivity extends AppCompatActivity {
             new BlePermissionHelper.Callback() {
                 @Override
                 public void onAllGranted() {
-                    permissionHelper.requestEnableBluetooth(); // -> onBluetoothEnabled
+                    if (MeshService.wifiEnabled(MainActivity.this)) startMeshService();
+                    else permissionHelper.requestEnableBluetooth(); // -> onBluetoothEnabled
                 }
 
                 @Override
@@ -449,8 +533,97 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setRecipient(@Nullable String id) {
+        if (chatViewModel.pendingMessageId != null) {
+            Toast.makeText(this, "Wait for the message to be saved", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        chatViewModel.drafts.put(conversationId(), messageInput.getText().toString());
         chatViewModel.recipientId = id;
+        chatViewModel.listVisible = false;
+        messageInput.setText(chatViewModel.drafts.getOrDefault(conversationId(), ""));
         updateRecipientButton();
+        observeSelectedConversation();
+        updateConversationVisibility();
+    }
+
+    private String conversationId() {
+        return chatViewModel.recipientId == null ? "public" : chatViewModel.recipientId;
+    }
+
+    private void showConversations() {
+        if (chatViewModel.pendingMessageId != null) return;
+        chatViewModel.listVisible = true;
+        updateConversationVisibility();
+    }
+
+    private void updateConversationVisibility() {
+        boolean list = chatViewModel.listVisible;
+        conversationList.setVisibility(list ? View.VISIBLE : View.GONE);
+        chatRecycler.setVisibility(list ? View.GONE : View.VISIBLE);
+        findViewById(R.id.composerRow).setVisibility(list ? View.GONE : View.VISIBLE);
+        conversationHeading.setText(
+                list
+                        ? "Conversations · start a chat with the contact selector below"
+                        : (chatViewModel.recipientId == null
+                                ? "Everyone · public broadcast"
+                                : crypto().contactLabel(chatViewModel.recipientId)));
+        MessageStore.get(this).visibleConversation(resumed && !list ? conversationId() : null);
+    }
+
+    private void updateConversationList() {
+        List<String> labels = new ArrayList<>();
+        int unread = 0;
+        for (ConversationSummary item : conversations) {
+            String label =
+                    item.conversationId.equals("public")
+                            ? "Everyone · public"
+                            : crypto().contactLabel(item.conversationId);
+            labels.add(
+                    label
+                            + (item.unread > 0 ? "  ·  " + item.unread + " unread" : "")
+                            + "\n"
+                            + android.text.format.DateFormat.getMediumDateFormat(this)
+                                    .format(new java.util.Date(item.lastTime))
+                            + " "
+                            + android.text.format.DateFormat.getTimeFormat(this)
+                                    .format(new java.util.Date(item.lastTime)));
+            unread += item.unread;
+        }
+        conversationList.setAdapter(
+                new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels));
+        conversationsButton.setText("Conversations" + (unread > 0 ? " (" + unread + ")" : ""));
+    }
+
+    private void observeSelectedConversation() {
+        MessageStore store = MessageStore.get(this);
+        if (conversationHistory != null) conversationHistory.removeObservers(this);
+        ++historyVersion;
+        chatViewModel.entries.clear();
+        adapter.notifyDataSetChanged();
+        conversationHistory = store.dao().observeConversation(conversationId());
+        String selected = conversationId();
+        conversationHistory.observe(
+                this,
+                rows -> {
+                    int version = ++historyVersion;
+                    store.loadHistory(
+                            rows,
+                            (entries, unreadable) -> {
+                                if (isDestroyed()
+                                        || version != historyVersion
+                                        || !selected.equals(conversationId())) return;
+                                showStoredHistory(entries, unreadable);
+                            });
+                });
+    }
+
+    private void markDisplayedRead() {
+        if (!resumed || chatViewModel.listVisible) return;
+        List<String> ids = new ArrayList<>();
+        for (ChatAdapter.ChatEntry entry : chatViewModel.entries)
+            if (!entry.outgoing) ids.add(entry.message.getMessageId());
+        MessageStore.get(this).markRead(conversationId(), ids);
+        ChatNotifications.cancel(this, conversationId());
     }
 
     private void updateRecipientButton() {
@@ -577,6 +750,8 @@ public class MainActivity extends AppCompatActivity {
                                     () -> {
                                         crypto().setNickname(id, name);
                                         updateRecipientButton();
+                                        updateConversationList();
+                                        updateConversationVisibility();
                                         adapter.notifyDataSetChanged();
                                     };
                             if (crypto().nicknameInUse(id, name)) {
@@ -805,6 +980,7 @@ public class MainActivity extends AppCompatActivity {
         chatViewModel.entries.clear();
         chatViewModel.entries.addAll(entries);
         adapter.notifyDataSetChanged();
+        markDisplayedRead();
         for (ChatAdapter.ChatEntry entry : entries) {
             if (entry.message.getMessageId().equals(chatViewModel.pendingMessageId)) {
                 if (messageInput.getText().toString().trim().equals(chatViewModel.pendingText)) {
@@ -833,6 +1009,84 @@ public class MainActivity extends AppCompatActivity {
     // UI state
     // ------------------------------------------------------------------
 
+    private void setWifiEnabled(boolean enabled) {
+        getSharedPreferences("offgrid-network", MODE_PRIVATE)
+                .edit()
+                .putBoolean("wifi", enabled)
+                .apply();
+        if (mesh != null) mesh.setWifiEnabled(enabled);
+        else
+            Toast.makeText(
+                            this,
+                            enabled
+                                    ? "Wi-Fi enabled. Start the mesh to discover peers."
+                                    : "Wi-Fi disabled",
+                            Toast.LENGTH_LONG)
+                    .show();
+    }
+
+    private void showDiagnostics() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        panel.setPadding(padding, padding / 2, padding, 0);
+        androidx.appcompat.widget.SwitchCompat toggle =
+                new androidx.appcompat.widget.SwitchCompat(this);
+        toggle.setText("Local Wi-Fi sharing");
+        toggle.setMinHeight((int) (48 * getResources().getDisplayMetrics().density));
+        toggle.setChecked(MeshService.wifiEnabled(this));
+        TextView details = new TextView(this);
+        details.setTextIsSelectable(true);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(details);
+        panel.addView(toggle);
+        panel.addView(
+                scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        AlertDialog dialog =
+                new AlertDialog.Builder(this)
+                        .setTitle("Network diagnostics")
+                        .setView(panel)
+                        .setPositiveButton("Close", null)
+                        .create();
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (checked
+                    && Build.VERSION.SDK_INT >= 37
+                    && androidx.core.content.ContextCompat.checkSelfPermission(
+                                    this, android.Manifest.permission.ACCESS_LOCAL_NETWORK)
+                            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                dialog.dismiss();
+                localNetworkPermission.launch(android.Manifest.permission.ACCESS_LOCAL_NETWORK);
+            } else setWifiEnabled(checked);
+        });
+        android.os.Handler refresh = new android.os.Handler(android.os.Looper.getMainLooper());
+        Runnable update =
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!dialog.isShowing() || isDestroyed() || !resumed) return;
+                        MeshService current = mesh;
+                        if (current == null)
+                            details.setText(
+                                    "Mesh stopped. Start the mesh to inspect live peers, queues and"
+                                        + " errors.\n\n"
+                                        + "Connect both phones to the same Wi-Fi network or"
+                                        + " hotspot. Enable local Wi-Fi sharing on each phone. No"
+                                        + " internet is required. Wi-Fi Direct is not included.");
+                        else
+                            current.diagnostics(text -> {
+                                if (dialog.isShowing() && mesh == current) details.setText(text);
+                            });
+                        refresh.postDelayed(this, 2_000);
+                    }
+                };
+        dialog.setOnDismissListener(d -> refresh.removeCallbacks(update));
+        dialog.show();
+        panel.getLayoutParams().height =
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.6);
+        panel.requestLayout();
+        refresh.post(update);
+    }
+
     private void updateUi() {
         boolean running = mesh != null;
         toggleButton.setText(running ? "Stop Mesh" : "Start Mesh");
@@ -841,7 +1095,7 @@ public class MainActivity extends AppCompatActivity {
         if (!running) {
             statusText.setText("Mesh stopped");
         } else {
-            String state = mesh.isMeshActive() ? "Mesh active" : "Waiting for Bluetooth";
+            String state = mesh.isMeshActive() ? "Mesh active" : "Waiting for Bluetooth or Wi-Fi";
             statusText.setText(state + " · " + mesh.getPeerCount() + " nearby");
         }
     }

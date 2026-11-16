@@ -15,6 +15,10 @@ public class ChatRecord {
     @NonNull public String conversationId = "";
     @NonNull public byte[] content = new byte[0];
     public boolean outgoing;
+
+    @ColumnInfo(defaultValue = "1")
+    public boolean read = true;
+
     public long displayTimeMs;
     @NonNull public String status = "RECEIVED";
 

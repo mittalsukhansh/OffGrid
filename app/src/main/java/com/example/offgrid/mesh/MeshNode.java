@@ -39,6 +39,8 @@ public final class MeshNode implements MeshTransport.Listener {
     private volatile boolean active, closed;
     private boolean ready, started;
     private long lastAnnouncement;
+    private long receivedPackets, acceptedPackets;
+    private final java.util.ArrayDeque<String> recentErrors = new java.util.ArrayDeque<>();
 
     public MeshNode(
             Handler worker,
@@ -87,7 +89,7 @@ public final class MeshNode implements MeshTransport.Listener {
 
                             @Override
                             public void onError(String error) {
-                                events.onError(error);
+                                reportError(error);
                             }
                         });
         worker.post(this::restore);
@@ -115,7 +117,7 @@ public final class MeshNode implements MeshTransport.Listener {
     public void start() {
         if (closed || started) return;
         if (!ready) {
-            events.onError("Message storage unavailable; mesh was not started");
+            reportError("Message storage unavailable; mesh was not started");
             return;
         }
         started = true;
@@ -193,7 +195,7 @@ public final class MeshNode implements MeshTransport.Listener {
     private void persistOutgoing(MeshProtocol.Outgoing outgoing) {
         if (closed || !ready) {
             storage.outgoingFailed(outgoing.wire.getMessageId());
-            events.onError("Message storage unavailable; message was not queued");
+            reportError("Message storage unavailable; message was not queued");
             return;
         }
         try {
@@ -230,7 +232,7 @@ public final class MeshNode implements MeshTransport.Listener {
         try {
             storage.expire(System.currentTimeMillis());
         } catch (RuntimeException e) {
-            events.onError("Could not refresh delivery deadlines");
+            reportError("Could not refresh delivery deadlines");
         }
         try {
             actions.pump(System.currentTimeMillis());
@@ -250,10 +252,12 @@ public final class MeshNode implements MeshTransport.Listener {
     @Override
     public void onPacket(String peer, byte[] packet) {
         if (closed || !active) return;
+        receivedPackets++;
         try {
             MeshProtocol.Incoming incoming =
                     protocol.receive(peer, packet, System.currentTimeMillis());
-            if (incoming.error != null) events.onError(incoming.error);
+            if (incoming.wire != null) acceptedPackets++;
+            if (incoming.error != null) reportError(incoming.error);
             if (incoming.deliveredId != null) relay.remove(incoming.deliveredId);
             if (incoming.wire != null) relay.receivedFrom(peer, incoming.wire.getMessageId());
             if (incoming.relay != null) {
@@ -282,13 +286,40 @@ public final class MeshNode implements MeshTransport.Listener {
             events.onStatus("Mesh active");
         } else {
             relay.pause();
-            events.onStatus("Waiting for Bluetooth");
+            events.onStatus("Waiting for Bluetooth or local Wi-Fi");
         }
     }
 
     @Override
     public void onError(String message) {
         events.onStatus(message);
+        reportError(message);
+    }
+
+    public void diagnostics(java.util.function.Consumer<String> callback) {
+        worker.post(() -> {
+            StringBuilder text = new StringBuilder(relay.diagnostics());
+            text.append("\n\nPackets received this run: ")
+                    .append(receivedPackets)
+                    .append("\nAccepted packet events: ")
+                    .append(acceptedPackets)
+                    .append("\nIgnored packet events: ")
+                    .append(receivedPackets - acceptedPackets)
+                    .append("\n(Ignored includes duplicates, limits and invalid packets.)");
+            if (!recentErrors.isEmpty()) {
+                text.append("\n\nRecent errors (this run):");
+                for (String error : recentErrors) text.append("\n").append(error);
+            }
+            callback.accept(text.toString());
+        });
+    }
+
+    private void reportError(String message) {
+        if (recentErrors.size() >= 8) recentErrors.removeFirst();
+        recentErrors.addLast(
+                android.text.format.DateFormat.format("HH:mm:ss", System.currentTimeMillis())
+                        + " "
+                        + message);
         events.onError(message);
     }
 
@@ -298,6 +329,6 @@ public final class MeshNode implements MeshTransport.Listener {
 
     private void error(String message, Exception failure) {
         Log.e("OffGridMesh", message, failure);
-        events.onError(message);
+        reportError(message);
     }
 }

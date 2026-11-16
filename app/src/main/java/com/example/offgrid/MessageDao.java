@@ -93,6 +93,30 @@ public interface MessageDao {
     @Query("SELECT * FROM messages ORDER BY displayTimeMs DESC, id DESC LIMIT 500")
     LiveData<List<ChatRecord>> observeHistory();
 
+    @Query(
+            "SELECT * FROM messages WHERE conversationId = :conversation ORDER BY displayTimeMs"
+                    + " DESC, id DESC LIMIT 500")
+    LiveData<List<ChatRecord>> observeConversation(String conversation);
+
+    @Query(
+            "SELECT conversationId, MAX(displayTimeMs) AS lastTime, SUM(CASE WHEN outgoing = 0 AND"
+                    + " `read` = 0 AND status NOT IN ('UNSENT', 'RECEIVING') THEN 1 ELSE 0 END) AS"
+                    + " unread FROM messages GROUP BY conversationId ORDER BY lastTime DESC,"
+                    + " conversationId")
+    LiveData<List<ConversationSummary>> observeConversations();
+
+    @Query(
+            "SELECT conversationId, MAX(displayTimeMs) AS lastTime, SUM(CASE WHEN outgoing = 0 AND"
+                    + " `read` = 0 AND status NOT IN ('UNSENT', 'RECEIVING') THEN 1 ELSE 0 END) AS"
+                    + " unread FROM messages GROUP BY conversationId ORDER BY lastTime DESC,"
+                    + " conversationId")
+    List<ConversationSummary> conversations();
+
+    @Query(
+            "UPDATE messages SET `read` = 1 WHERE conversationId = :conversation AND id IN (:ids)"
+                    + " AND `read` = 0 AND status != 'RECEIVING'")
+    void markRead(String conversation, List<String> ids);
+
     @Query("SELECT * FROM messages ORDER BY displayTimeMs DESC, id DESC LIMIT 500")
     List<ChatRecord> history();
 

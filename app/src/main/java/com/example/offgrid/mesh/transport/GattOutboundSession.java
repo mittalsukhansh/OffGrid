@@ -72,9 +72,13 @@ final class GattOutboundSession extends BluetoothGattCallback {
     }
 
     void abort() {
+        boolean notify = !finished;
         finished = true;
         worker.removeCallbacks(timeout);
         closeNow();
+        // With multiple transports, Bluetooth can stop while LAN keeps the relay running.
+        // The relay must release this session instead of permanently occupying a slot.
+        if (notify) listener.onComplete("Bluetooth session cancelled", false);
     }
 
     @Override

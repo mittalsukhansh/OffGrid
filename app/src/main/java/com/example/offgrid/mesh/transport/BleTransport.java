@@ -82,6 +82,18 @@ public final class BleTransport implements MeshTransport {
         floodGuard = flood;
     }
 
+    public String diagnostics() {
+        return "Bluetooth: "
+                + (meshActive ? "active" : "unavailable")
+                + "\nScanning: "
+                + scanning
+                + " · advertising: "
+                + advertising
+                + "\nGATT server ready: "
+                + serverReady
+                + (lastProblem == null ? "" : "\nBluetooth issue: " + lastProblem);
+    }
+
     @Override
     public void start(Listener listener) {
         if (requested) return;

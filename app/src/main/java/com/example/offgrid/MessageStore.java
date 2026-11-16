@@ -41,7 +41,8 @@ public final class MessageStore {
                                                         "offgrid-messages.db")
                                                 .addMigrations(
                                                         MessageDatabase.MIGRATION_1_2,
-                                                        MessageDatabase.MIGRATION_2_3)
+                                                        MessageDatabase.MIGRATION_2_3,
+                                                        MessageDatabase.MIGRATION_3_4)
                                                 .build(),
                                         new StorageCipher());
                     } catch (Exception e) {
@@ -56,6 +57,24 @@ public final class MessageStore {
     MessageStore(MessageDatabase database, StorageCipher cipher) {
         this.database = database;
         this.cipher = cipher;
+    }
+
+    private volatile String visibleConversation;
+
+    public void visibleConversation(String id) {
+        visibleConversation = id;
+    }
+
+    public boolean isConversationVisible(String id) {
+        return id != null && id.equals(visibleConversation);
+    }
+
+    /** Mark only the rows actually rendered, never newer arrivals racing the history load. */
+    public void markRead(String conversation, List<String> ids) {
+        historyExecutor.execute(() -> {
+            if (isConversationVisible(conversation) && !ids.isEmpty())
+                dao().markRead(conversation, ids);
+        });
     }
 
     public MessageDao dao() {
@@ -112,6 +131,7 @@ public final class MessageStore {
                             ? (outgoing ? wire.getTargetId() : wire.getSenderId())
                             : "public";
             chat.outgoing = outgoing;
+            chat.read = outgoing;
             chat.displayTimeMs = displayTime;
             chat.status = outgoing ? "QUEUED" : "RECEIVED";
             JSONObject body =

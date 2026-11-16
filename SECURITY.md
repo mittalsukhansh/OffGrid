@@ -152,3 +152,25 @@ No broad storage access, address-book access, phone login or server was added.
 The small transfer window, storage/active-transfer caps and existing flood budgets
 limit work; they do not guarantee that a long transfer survives movement or radio
 jamming. Do not infer physical mesh reliability from the emulator sharing tests.
+
+## Local Wi-Fi transport and conversation metadata (0.3-dev)
+
+Wi-Fi sharing is opt-in and uses a Wi-Fi-interface-bound TCP listener plus local
+DNS-SD. The socket is not TLS protected: private packets retain their existing
+end-to-end encryption/signatures; public broadcasts remain readable. LAN observers
+can see addresses, sizes, timing, framing and packet-routing metadata. Discovery
+names are random instances, not verified user identities. No internet server,
+cloud directory or account service is introduced by the INTERNET permission.
+
+Admission requires the interface IPv4 subnet and bounded socket/worker resources,
+but these controls cannot prevent network-level denial of service. Both transports
+share the protocol's signature, time, replay and flood checks. Transfer-confirmation
+bytes are unauthenticated and update Forwarded only; they cannot establish Delivered.
+A malicious neighbor can still advertise fake peers, refuse traffic or suppress
+multicast. Forward secrecy is still not implemented.
+
+Unread flags, conversation IDs and timestamps are queryable metadata, like the
+existing routing/status fields. Message bodies remain encrypted at rest.
+Notifications deliberately exclude contact nicknames and message text. The
+conversation list loads no plaintext previews. Diagnostics expose local transport
+addresses; review those before sharing screenshots or logs.

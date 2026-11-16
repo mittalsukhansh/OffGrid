@@ -399,7 +399,12 @@ final class MediaTransfers {
                 dao().updateMediaContent(record.id, content);
                 dao().mediaStatus(record.id, kind(record.mime), 100, "READY");
             });
-            return PrivateActions.result(packet, ack);
+            return new MeshProtocol.Incoming(
+                    packet,
+                    wire.withPlaintext(label(record.mime, record.byteCount)),
+                    ack,
+                    null,
+                    null);
         }
         MeshMessage response = received.cardinality() % 4 == 0 ? status(record) : null;
         actions.transaction(() -> {
