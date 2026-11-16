@@ -355,10 +355,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Run hosted reinstall and ordinary suites, then consolidate. Owner offline backup is deferred; second compatible phone and protocol/security follow-ups remain open. No new APK release is published.
 - **Sources:** This change; [testing](TESTING.md); [signing](SIGNING.md)
 
+## D038 — 2026-11-16 UTC — Make reinstall harness setup and failures explicit
+
+- **Status:** Host harness corrected/locally checked; emulator rerun pending
+- **Work:** The added reinstall stage could not launch its seed instrumentation after the Gradle-managed suite. Made initial matching app/test installation explicit before seeding and retained ADB stdout/stderr on failure. Added host orchestration regressions for install ordering and diagnostic/no-false-PASS behavior.
+- **Decision / reason:** Do not depend on Gradle/UTP leaving instrumentation packages installed. The first wrapper raised before recording the diagnostic, so the precise original setup cause was not captured. Treat it as a harness startup failure, not an application continuity failure or pass. App/mesh protocol behavior is unchanged.
+- **Validation / evidence:** D037 build/lint/JVM checks passed, while its hosted reinstall seed launch returned exit 1 before any new continuity assertions completed. New standard-library host tests validate initial installation, actual reinstallation and retained error output; workflow syntax checked. Runtime outcome follows after rerun.
+- **Open items:** Pass the actual emulator reinstall stage before merging this release-test work. Existing owner-deferred offline backup, phone testing and security follow-ups remain.
+- **Sources:** This change; [first harness run](https://github.com/mittalsukhansh/OffGrid/actions/runs/43939144742)
+
 ## Template for the next work set
 
 ```markdown
-## D038 — YYYY-MM-DD HH:MM UTC — Short title
+## D039 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

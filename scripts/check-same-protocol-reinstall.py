@@ -12,8 +12,11 @@ OUTPUT = Path('app/build/outputs/same-protocol-reinstall')
 
 
 def adb(*args, timeout=45):
-    result = subprocess.run(['adb', *args], capture_output=True, text=True, timeout=timeout, check=True)
-    return result.stdout + result.stderr
+    result = subprocess.run(['adb', *args], capture_output=True, text=True, timeout=timeout, check=False)
+    diagnostic = result.stdout + result.stderr
+    if result.returncode != 0:
+        raise RuntimeError('adb failed: ' + diagnostic.strip())
+    return diagnostic
 
 
 def instrument(method, mode):
@@ -24,20 +27,30 @@ def instrument(method, mode):
         raise RuntimeError('Seed/continuity assertion failed; inspect ' + mode + '.txt')
 
 
-if adb('shell', 'getprop', 'ro.kernel.qemu').strip() != '1':
-    raise SystemExit('Refusing reinstall test outside an emulator')
-OUTPUT.mkdir(parents=True, exist_ok=True)
-instrument('seed', 'seed')
-installs = [adb('install', '-t', '-r', 'app/build/outputs/apk/debug/app-debug.apk'),
-            adb('install', '-t', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')]
-if any('Success' not in value for value in installs):
-    raise RuntimeError('Android did not accept in-place installation')
-(OUTPUT / 'installation.txt').write_text('\n'.join(installs))
-instrument('verify', 'verify')
-(OUTPUT / 'summary.json').write_text(json.dumps({
-    'result': 'PASS', 'scope': 'Same-protocol, same-build Android APK reinstall on emulator; not an N-to-N+1 or radio claim',
-    'checks': ['same identity/signing key', 'same verified two-key contact fingerprint', 'verification preserved',
-               'contact nickname preserved', 'encrypted history readable'],
-    'package': PACKAGE, 'uninstallPerformed': False
-}, indent=2) + '\n')
-print('PASS: same-protocol APK reinstall preserved identity, verified contact binding and encrypted history')
+def main():
+    if adb('shell', 'getprop', 'ro.kernel.qemu').strip() != '1':
+        raise SystemExit('Refusing reinstall test outside an emulator')
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    initial = [adb('install', '-t', '-r', 'app/build/outputs/apk/debug/app-debug.apk'),
+               adb('install', '-t', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')]
+    if any('Success' not in value for value in initial):
+        raise RuntimeError('Initial app/test installation failed')
+    (OUTPUT / 'initial-installation.txt').write_text('\n'.join(initial))
+    instrument('seed', 'seed')
+    installs = [adb('install', '-t', '-r', 'app/build/outputs/apk/debug/app-debug.apk'),
+                adb('install', '-t', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')]
+    if any('Success' not in value for value in installs):
+        raise RuntimeError('Android did not accept in-place installation')
+    (OUTPUT / 'installation.txt').write_text('\n'.join(installs))
+    instrument('verify', 'verify')
+    (OUTPUT / 'summary.json').write_text(json.dumps({
+        'result': 'PASS', 'scope': 'Same-protocol, same-build Android APK reinstall on emulator; not an N-to-N+1 or radio claim',
+        'checks': ['same identity/signing key', 'same verified two-key contact fingerprint', 'verification preserved',
+                   'contact nickname preserved', 'encrypted history readable'],
+        'package': PACKAGE, 'uninstallPerformed': False
+    }, indent=2) + '\n')
+    print('PASS: same-protocol APK reinstall preserved identity, verified contact binding and encrypted history')
+
+
+if __name__ == "__main__":
+    main()
