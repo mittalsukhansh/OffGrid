@@ -58,7 +58,7 @@ attribution; [UPSTREAM_PERMISSION.md](UPSTREAM_PERMISSION.md) describes the rema
 permission decision and includes a draft request. Do not assume repository push
 access or public availability grants relicensing rights.
 
-## Conversations, Wi-Fi and diagnostics (0.3-dev source)
+## Conversations, Wi-Fi and diagnostics (1.0 source)
 
 These additions are in current development builds; the published v0.2 APK does
 **not** include them. Download the `offgrid-debug-apk` artifact from a successful
@@ -167,7 +167,7 @@ callbacks, relay peer table, packet acceptance policy, or database queries.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): component ownership, dependency boundaries,
   threading, persistence transactions and how to test changes.
-- [PACKET_FORMAT.md](PACKET_FORMAT.md): protocol version 4 fields, canonical
+- [PACKET_FORMAT.md](PACKET_FORMAT.md): protocol version 5 fields, canonical
   signatures, private encryption/ACKs, TTL and exact BLE framing.
 - [SECURITY.md](SECURITY.md): trust model, flood/replay policy, upgrade behavior,
   limitations and the forward-secrecy assessment.

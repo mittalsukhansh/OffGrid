@@ -25,6 +25,7 @@ tasks.configureEach {
 }
 
 android {
+    testBuildType = providers.gradleProperty("offgridTestBuildType").getOrElse("debug")
     buildFeatures {
         resValues = true
     }
@@ -38,8 +39,8 @@ android {
         applicationId = "io.github.mittalsukhansh.offgrid"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "0.3-dev"
+        versionCode = 100
+        versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         javaCompileOptions {
@@ -98,4 +99,28 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.room.testing)
+}
+
+// The signed APK carries its exact source commit; never include signing credentials here.
+val offgridSourceSha = providers.environmentVariable("OFFGRID_SOURCE_SHA").orElse(
+    providers.exec { commandLine("git", "rev-parse", "HEAD"); workingDir(rootDir) }
+        .standardOutput.asText.map { it.trim() }
+)
+abstract class GenerateOffgridIdentity : DefaultTask() {
+    @get:Input abstract val sourceCommit: Property<String>
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+    @TaskAction fun writeIdentity() {
+        val sha = sourceCommit.get()
+        check(sha.matches(Regex("[0-9a-f]{40}"))) { "Exact source commit required" }
+        val target = outputDirectory.get().file("offgrid-build.json").asFile
+        target.parentFile.mkdirs()
+        target.writeText("""{"sourceCommit":"$sha","protocol":5}""")
+    }
+}
+val generateBuildIdentity = tasks.register<GenerateOffgridIdentity>("generateBuildIdentity") {
+    sourceCommit.set(offgridSourceSha)
+    outputDirectory.set(layout.buildDirectory.dir("generated/offgrid-assets"))
+}
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(generateBuildIdentity, GenerateOffgridIdentity::outputDirectory)
 }

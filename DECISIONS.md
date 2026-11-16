@@ -256,10 +256,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Run hosted Android runtime tests, signed in-place upgrade and release verification. Actual phones, upstream written consent and admin-only metadata/secrets remain open. Backup excludes history/media and inbound replay windows; concurrent identity clones unsupported. Audit custom protocol externally before security-critical use.
 - **Sources:** This change; [protocol](PACKET_FORMAT.md); [security](SECURITY.md); [backup](IDENTITY_BACKUP.md); [review](docs/REVIEW_REPORT.md)
 
+## D027 — 2026-11-16 — Runtime evidence, parser hardening and signed 1.0 release preparation
+
+- **Status:** D026 source passed hosted checks; 1.0 publication and signed-upgrade execution pending
+- **Work:** Extended shared JSON size/depth guards to decrypted controls, media manifests, inventory and identity backup imports. Restore now waits for all mesh worker threads to stop, including delayed Direct cleanup. Prepared version 1.0/code 100, signed source provenance, opt-in upgrade fixtures and a public pre-signed artifact verification/upgrade/publication workflow. Signing secrets stay local; only signed APKs/public certificate and evidence are staged. Added release notes and owner limitations.
+- **Decision / reason:** Supersedes time-based live replay admission without claiming full forward secrecy. Provisioning GitHub signing secrets is still forbidden by integration permissions, so build with the persistent key locally and verify public artifacts in Actions. Publish as experimental until actual radio tests and upstream consent exist. Require exact source CI and signed in-place upgrade before release; do not overwrite earlier APKs or claim a successful upgrade from old package IDs/debug keys.
+- **Validation / evidence:** D026 commit 2c4de86 passed both GitHub build and API-30 emulator jobs, including actual Room/Keystore key separation, backup round-trip, sequence rollback/restart, media/unsend, migration and UI suites. Local final 1.0 build/lint/JVM/instrumentation-compilation checks precede this commit. Prepared baseline release/test APKs signed with the pinned certificate; not yet an executed upgrade. Checked workflow/Python syntax and diff formatting.
+- **Open items:** Execute final-source hosted checks, locally sign/verify exact-source APK, stage only public artifacts, run actual emulator upgrade, publish/verify v1.0 and integrate/delete merged branches. Physical runs and written licensing consent remain owner actions; repository metadata/signing secret admin access remains blocked.
+- **Sources:** This change; [D026 CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43918236795); [release notes](RELEASE_NOTES_1.0.md); [signing](SIGNING.md)
+
 ## Template for the next work set
 
 ```markdown
-## D027 — YYYY-MM-DD HH:MM UTC — Short title
+## D028 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

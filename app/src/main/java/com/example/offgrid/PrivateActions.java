@@ -171,7 +171,7 @@ public final class PrivateActions implements MeshProtocol.Extensions {
         }
         JSONObject body;
         try {
-            body = new JSONObject(plaintext);
+            body = JsonBounds.object(plaintext, MeshMessage.MAX_CONTROL_PLAINTEXT_BYTES);
         } catch (org.json.JSONException e) {
             return MeshProtocol.Incoming.IGNORED;
         }

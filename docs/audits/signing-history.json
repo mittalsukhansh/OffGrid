@@ -1,10 +1,10 @@
 {
   "scope": "All blobs reachable from local refs/tags, current signing directory, private-key markers/keystore filenames, and optional exact known signing values. Not proof against every possible secret encoding.",
-  "reachable_blobs_scanned": 302,
+  "reachable_blobs_scanned": 359,
   "current_signing_files": [
     "signing/offgrid-release-cert.pem",
     "signing/release-identity.json"
   ],
-  "known_value_comparisons_enabled": true,
+  "known_value_comparisons_enabled": false,
   "findings": []
 }

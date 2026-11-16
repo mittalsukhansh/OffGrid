@@ -116,7 +116,6 @@ public class MainActivity extends AppCompatActivity {
 
     // Service connection state (main thread only)
     private IdentityBackupUi identityBackup;
-    private volatile boolean identityRestoreAllowed;
     private MeshService mesh; // non-null == service is running and connected
     private boolean bound;
 
@@ -127,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        identityBackup = new IdentityBackupUi(this, () -> identityRestoreAllowed);
+        identityBackup = new IdentityBackupUi(this, MeshService::identityRestoreSafe);
         diagnosticsExport =
                 registerForActivityResult(
                         new ActivityResultContracts.CreateDocument("text/plain"),
@@ -560,7 +559,6 @@ public class MainActivity extends AppCompatActivity {
             };
 
     private void startMeshService() {
-        identityRestoreAllowed = false;
         if (IdentityBackupUi.busy()) {
             Toast.makeText(this, "Wait for identity backup to finish", Toast.LENGTH_LONG).show();
             return;
@@ -1011,7 +1009,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMyContactDialog() {
-        identityRestoreAllowed = mesh == null && !bound;
         final CryptoManager cm = crypto();
         ImageView qr = new ImageView(this);
         int size = (int) (240 * getResources().getDisplayMetrics().density);
@@ -1029,7 +1026,6 @@ public class MainActivity extends AppCompatActivity {
         Button backup = new Button(this);
         backup.setText("Identity backup / restore");
         backup.setOnClickListener(v -> {
-            identityRestoreAllowed = mesh == null && !bound;
             identityBackup.show();
         });
         qrContainer.addView(backup);

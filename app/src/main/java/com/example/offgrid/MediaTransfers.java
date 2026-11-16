@@ -179,7 +179,7 @@ final class MediaTransfers {
             throws Exception {
         JSONObject manifest;
         try {
-            manifest = new JSONObject(plaintext);
+            manifest = JsonBounds.object(plaintext, MeshMessage.MAX_PRIVATE_PLAINTEXT_BYTES);
             validateManifest(manifest);
         } catch (Exception e) {
             return MeshProtocol.Incoming.IGNORED;

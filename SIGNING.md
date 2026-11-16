@@ -125,3 +125,10 @@ requires a connected Android device/emulator and should be recorded before broad
 distribution. GitHub publication with the persistent key remains blocked until the
 owner provisions the three secrets. App signing does not resolve the separate
 upstream licensing permission gap in LICENSE and UPSTREAM_PERMISSION.md.
+
+
+## Public pre-signed artifact route for 1.0
+
+When Actions-secret provisioning is unavailable, build locally with the same private release keystore. The signed APK embeds its exact source commit in `assets/offgrid-build.json`. Only public signed APK/test fixtures, checksums, public certificate and metadata go on a temporary `release-assets/v1.0` branch, as one commit whose parent is the exact tested source on main. Never stage a keystore, credential JSON, password, identity backup or private handoff ZIP.
+
+The `publish-pre-signed.yml` workflow verifies APK hashes, installed identity, pinned certificate, non-debuggable release status, embedded source provenance and exact-source successful CI. It installs the older matching signed code-7 baseline, seeds identity/contact/encrypted-history data, installs 1.0 with `adb install -r`, then verifies continuity and required trust reverification. Publication depends on that actual emulator result. This is a local-key build plus public-artifact verification path, not secret provisioning, a reproducible-build guarantee or physical-phone validation. Preserve the private signing backup separately for future updates.

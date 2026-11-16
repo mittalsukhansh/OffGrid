@@ -9,12 +9,14 @@ import re
 import shutil
 import ssl
 import subprocess
+import zipfile
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
     parser.add_argument("--version")
+    parser.add_argument("--source-sha")
     parser.add_argument("--signature-output", type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -46,6 +48,11 @@ def main():
     actual = re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]+)$", signature, re.M)
     if len(actual) != 1 or actual[0].lower() != expected:
         raise SystemExit("APK signer does not match the pinned OffGrid release certificate")
+    if args.source_sha:
+        with zipfile.ZipFile(apk) as archive:
+            provenance = json.loads(archive.read("assets/offgrid-build.json"))
+        if provenance.get("sourceCommit") != args.source_sha or provenance.get("protocol") != 5:
+            raise SystemExit("Signed APK source provenance does not match the release source")
     if args.signature_output:
         args.signature_output.write_text(signature)
     print(f"Verified release: {identity['applicationId']} {version}")

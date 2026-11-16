@@ -88,7 +88,7 @@ public final class InventoryExchange {
             state = states.get(peer);
         }
         try {
-            JSONObject body = new JSONObject(packet.getText());
+            JSONObject body = com.example.offgrid.JsonBounds.object(packet.getText(), 1152);
             String kind = body.getString("kind"), nonce = body.getString("nonce");
             if (!nonce.matches("[0-9a-f]{32}")) return;
             if ("request".equals(kind)) {

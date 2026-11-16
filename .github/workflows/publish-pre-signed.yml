@@ -1,0 +1,82 @@
+name: Verify and publish pre-signed 1.0
+on:
+  push:
+    branches: ['release-assets/v1.0']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-offgrid-v1
+  cancel-in-progress: false
+jobs:
+  upgrade:
+    if: github.repository == 'mittalsukhansh/OffGrid'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '13114758'
+          packages: 'platform-tools'
+      - name: Install verifier tools
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+      - name: Verify pinned certificate, package, hashes and signed provenance
+        run: python3 scripts/verify-staged-release.py
+      - name: Require successful source CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE=$(python3 -c 'import json; print(json.load(open("release-staging/manifest.json"))["sourceCommit"])')
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SOURCE&per_page=100" > "$RUNNER_TEMP/source-ci.json"
+          python3 - "$RUNNER_TEMP/source-ci.json" <<'PY'
+          import json,sys
+          runs=json.load(open(sys.argv[1]))['workflow_runs']
+          assert any(r['name']=='Android build and checks' and r['conclusion']=='success' for r in runs), 'Exact source CI has not passed'
+          PY
+      - name: Enable emulator acceleration
+        run: sudo chmod a+rw /dev/kvm
+      - name: Test signed install without uninstalling
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          disable-animations: true
+          script: bash scripts/check-upgrade.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: signed-upgrade-evidence
+          path: |
+            release-evidence/
+            release-staging/SHA256SUMS
+            release-staging/signature.txt
+          if-no-files-found: ignore
+  publish:
+    needs: upgrade
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-upgrade-evidence
+          path: .
+      - name: Publish experimental version 1.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SOURCE=$(python3 -c 'import json; print(json.load(open("release-staging/manifest.json"))["sourceCommit"])')
+          test ! -z "$SOURCE"
+          gh release create v1.0 --target "$SOURCE" --prerelease --title 'OffGrid 1.0 — experimental' --notes-file RELEASE_NOTES_1.0.md release-staging/offgrid-1.0.apk release-staging/SHA256SUMS release-staging/signature.txt signing/offgrid-release-cert.pem release-evidence/upgrade.txt

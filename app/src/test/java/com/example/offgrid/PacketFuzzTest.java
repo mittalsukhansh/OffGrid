@@ -48,6 +48,9 @@ public class PacketFuzzTest {
         for (int i = 0; i < 8000; i++) text.append('[');
         assertThrows(
                 IllegalArgumentException.class, () -> MeshMessage.fromJsonString(text.toString()));
+        assertThrows(
+                org.json.JSONException.class,
+                () -> JsonBounds.object(text.toString(), IdentityBackup.MAX_BYTES));
     }
 
     private static DataInputStream input(byte[] data) {

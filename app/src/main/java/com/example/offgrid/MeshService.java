@@ -39,6 +39,14 @@ import java.util.concurrent.CopyOnWriteArraySet;
 
 /** Android lifecycle, foreground notification and binding adapter for the composed mesh node. */
 public class MeshService extends Service {
+    private static final java.util.List<Thread> identityWorkers =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public static boolean identityRestoreSafe() {
+        identityWorkers.removeIf(thread -> !thread.isAlive());
+        return identityWorkers.isEmpty();
+    }
+
     private static final String TAG = "OffGridMesh";
     private static final String CHANNEL_ID = "offgrid_mesh";
     private static final int NOTIFICATION_ID = 1001;
@@ -106,6 +114,7 @@ public class MeshService extends Service {
         super.onCreate();
         thread = new HandlerThread("offgrid-mesh");
         thread.start();
+        identityWorkers.add(thread);
         worker = new Handler(thread.getLooper());
         main = new Handler(Looper.getMainLooper());
         CryptoManager crypto = CryptoManager.getInstance(this);

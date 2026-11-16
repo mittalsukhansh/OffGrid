@@ -606,7 +606,9 @@ public final class CryptoManager {
         byte[] plain = IdentityBackup.decrypt(encrypted, password);
         byte[] signing = null, agreement = null;
         try {
-            JSONObject payload = new JSONObject(new String(plain, StandardCharsets.UTF_8));
+            JSONObject payload =
+                    JsonBounds.object(
+                            new String(plain, StandardCharsets.UTF_8), IdentityBackup.MAX_BYTES);
             if (payload.getInt("version") != 1)
                 throw new GeneralSecurityException("Unsupported identity version");
             signing = Base64.decode(payload.getString("signingPrivate"), B64_FLAGS);

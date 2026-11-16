@@ -718,24 +718,8 @@ public final class MeshMessage {
      */
     @NonNull
     public static MeshMessage fromJsonString(@NonNull String json) {
-        if (json.length() > MAX_CONTROL_SERIALIZED_BYTES
-                || json.getBytes(StandardCharsets.UTF_8).length > MAX_CONTROL_SERIALIZED_BYTES)
-            throw new IllegalArgumentException("JSON exceeds packet limit");
-        int depth = 0;
-        boolean quoted = false, escape = false;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (quoted) {
-                if (escape) escape = false;
-                else if (c == '\\') escape = true;
-                else if (c == '"') quoted = false;
-            } else if (c == '"') quoted = true;
-            else if (c == '{' || c == '[') {
-                if (++depth > 16) throw new IllegalArgumentException("JSON nesting too deep");
-            } else if (c == '}' || c == ']') depth--;
-        }
         try {
-            return fromJson(new JSONObject(json));
+            return fromJson(JsonBounds.object(json, MAX_CONTROL_SERIALIZED_BYTES));
         } catch (JSONException e) {
             throw new IllegalArgumentException("malformed JSON: " + e.getMessage(), e);
         }
