@@ -1,0 +1,21 @@
+LICENSING STATUS — UPSTREAM PERMISSION PENDING
+
+No repository-wide open-source license is granted at this time.
+
+This repository contains code inherited from:
+https://github.com/vikramaditya19/OffGrid
+
+No license or permission to relicense that inherited code has been confirmed.
+The original contributors and later contributors retain the rights in their
+respective contributions. Public availability on GitHub, commit authorship,
+repository ownership and push access do not by themselves grant permission to
+relicense another contributor's work.
+
+This file records the current status; it is not the MIT License or an alternative
+open-source permission grant. Do not treat the project as MIT-licensed until the
+necessary copyright holders have agreed and an actual license is adopted.
+
+Upstream provenance and attribution are recorded in NOTICE.md. The outstanding
+permission decision and a suggested request are recorded in
+UPSTREAM_PERMISSION.md. Third-party dependencies remain subject to their own
+licenses; this notice does not replace those licenses or notices.

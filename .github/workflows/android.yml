@@ -31,6 +31,26 @@ jobs:
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
       - name: Build, lint and unit tests
         run: ./gradlew --no-daemon assembleDebug lintDebug testDebugUnitTest assembleDebugAndroidTest
+      - name: Check app identity and fail-closed release signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(apkanalyzer manifest application-id app/build/outputs/apk/debug/app-debug.apk)" = io.github.mittalsukhansh.offgrid.debug
+          test "$(apkanalyzer manifest debuggable app/build/outputs/apk/debug/app-debug.apk)" = true
+          python3 - <<'PYTHON'
+          import ast, hashlib, json, ssl, subprocess
+          from pathlib import Path
+          ast.parse(Path("scripts/verify-release-apk.py").read_text())
+          identity = json.loads(Path("signing/release-identity.json").read_text())
+          cert = ssl.PEM_cert_to_DER_cert(Path("signing/offgrid-release-cert.pem").read_text())
+          assert hashlib.sha256(cert).hexdigest() == identity["certificateSha256"]
+          result = subprocess.run(
+              ["./gradlew", "--no-daemon", "--no-configuration-cache", "assembleRelease"],
+              capture_output=True, text=True)
+          assert result.returncode != 0, "Release built without signing secrets"
+          assert "Release signing is required. Missing:" in result.stdout + result.stderr, result.stdout + result.stderr
+          print("Debug package, public signing pin and missing-key rejection verified")
+          PYTHON
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

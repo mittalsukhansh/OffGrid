@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing draft prerelease tag
         required: true
-        default: v0.1
+        default: v0.3-dev
         type: string
       source_sha:
         description: Full tested commit SHA from main
@@ -53,19 +53,42 @@ jobs:
           cmdline-tools-version: '13114758'
           packages: 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
       - name: Install Android platform
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
-      - name: Build test APK
-        run: ./gradlew --no-daemon assembleDebug
+      - name: Restore persistent release keystore
+        env:
+          OFFGRID_KEYSTORE_BASE64: ${{ secrets.OFFGRID_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          import base64, os
+          from pathlib import Path
+          encoded = os.environ.get("OFFGRID_KEYSTORE_BASE64", "")
+          if not encoded:
+              raise SystemExit("Missing OFFGRID_KEYSTORE_BASE64 repository secret. See SIGNING.md.")
+          path = Path(os.environ["RUNNER_TEMP"]) / "offgrid-release.p12"
+          # Restrict permissions at creation, before any key bytes are written.
+          fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, "wb") as output:
+              output.write(base64.b64decode(encoded, validate=True))
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"OFFGRID_KEYSTORE_FILE={path}\n")
+          PYTHON
+      - name: Build signed release APK
+        env:
+          OFFGRID_STORE_PASSWORD: ${{ secrets.OFFGRID_STORE_PASSWORD }}
+          OFFGRID_KEY_PASSWORD: ${{ secrets.OFFGRID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --no-configuration-cache assembleRelease
       - name: Verify and stage release assets
         shell: bash
         run: |
           mkdir -p release-assets
           apk="release-assets/OffGrid-${RELEASE_TAG}-test.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
-          actual=$(apkanalyzer manifest version-name "$apk")
-          test "$actual" = "${RELEASE_TAG#v}"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk" > release-assets/APK-SIGNATURE.txt
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          python3 scripts/verify-release-apk.py "$apk" --version "${RELEASE_TAG#v}" --signature-output release-assets/APK-SIGNATURE.txt
           cp TESTING.md release-assets/TESTING.md
           cd release-assets
           sha256sum "OffGrid-${RELEASE_TAG}-test.apk" > SHA256SUMS.txt
@@ -74,3 +97,8 @@ jobs:
         run: |
           gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --prerelease --draft=false
+
+      - name: Remove runner keystore
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/offgrid-release.p12"

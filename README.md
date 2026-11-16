@@ -10,12 +10,29 @@ Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
 Development continues from `main` on short feature branches; the published v0.2 APK
 is an immutable earlier snapshot, not every later commit.
 
+## Application identity, signing and licensing
+
+Current release builds use **`io.github.mittalsukhansh.offgrid`**; development/debug
+builds use **`io.github.mittalsukhansh.offgrid.debug`** and the label OffGrid Debug.
+These are separate apps from old `com.example.offgrid` APKs: there is no automatic
+history/identity migration. Keep the old app installed if its data is needed.
+Release signing now requires the persistent keystore and verifies a pinned public
+certificate. See [SIGNING.md](SIGNING.md) for backup and GitHub-secret setup;
+the connected integration cannot provision those secrets (GitHub HTTP 403).
+
+**Licensing is pending upstream permission.** [LICENSE](LICENSE) records the current
+status and does not grant an MIT license. [NOTICE.md](NOTICE.md) preserves upstream
+attribution; [UPSTREAM_PERMISSION.md](UPSTREAM_PERMISSION.md) describes the remaining
+permission decision and includes a draft request. Do not assume repository push
+access or public availability grants relicensing rights.
+
 ## Conversations, Wi-Fi and diagnostics (0.3-dev source)
 
 These additions are in current development builds; the published v0.2 APK does
 **not** include them. Download the `offgrid-debug-apk` artifact from a successful
 [Android build](https://github.com/mittalsukhansh/OffGrid/actions/workflows/android.yml).
-Test APK signing certificates can differ between builds: an uninstall can erase
+Debug artifact signing certificates can differ between builds; published release
+builds now pin a persistent certificate. An uninstall can erase
 identity, contacts and history. Preserve needed information before changing builds.
 
 - **Conversations** shows public chat and each private contact separately, sorted

@@ -6,6 +6,20 @@ This report describes implemented code, recorded validation, known limitations a
 proposals. It is not an independent security audit or evidence of physical mesh
 reliability. Proposed work is explicitly separated from completed work.
 
+## Subsequent identity/signing and licensing update
+
+After the application snapshot below, release application ID changed to
+`io.github.mittalsukhansh.offgrid`, debug builds gained a `.debug` suffix and a
+persistent release keystore/public-certificate verification workflow was added.
+See [SIGNING.md](SIGNING.md) for custody and GitHub-secret provisioning, which is
+blocked for the integration by GitHub HTTP 403. A connected-device upgrade test
+and production signing custody confirmation remain outstanding.
+
+Upstream permission is explicitly unconfirmed. The new root LICENSE is a status
+notice, not an MIT grant. NOTICE.md records provenance; UPSTREAM_PERMISSION.md
+contains the unresolved permission decision and request draft. The report's pinned
+snapshot, historical findings and old artifacts below predate these changes.
+
 ## 1. Repository and reviewed baseline
 
 | Item | Current state |
