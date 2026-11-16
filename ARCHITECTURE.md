@@ -1,3 +1,5 @@
+> Current update: protocol 5 and Room schema 5 add separate agreement keys, durable sender-epoch sequence windows, signed inventory and identity backup. Historical feature-milestone version references below describe their original implementation. See PACKET_FORMAT.md and SECURITY.md for current admission/crypto rules.
+
 # Mesh component architecture
 
 ## Ownership
@@ -69,7 +71,7 @@ BLE, including session completion and pre-send cancellation checks.
 
 1. BLE reassembles bytes through `FrameCodec` before decoding any JSON/text.
 2. `MeshProtocol` applies packet budgets, parsing, signed namespace/time/identity
-   checks and sender budgets. It checks the durable clock/replay state before any
+   checks and sender budgets. It checks durable sequence/replay state before any
    delivery or relay mutation.
 3. The protocol calls a storage use case that commits the packet's replay record,
    history and pending relay packet in one transaction. A private recipient saves

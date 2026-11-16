@@ -64,8 +64,8 @@ These additions are in current development builds; the published v0.2 APK does
 **not** include them. Download the `offgrid-debug-apk` artifact from a successful
 [Android build](https://github.com/mittalsukhansh/OffGrid/actions/workflows/android.yml).
 Debug artifact signing certificates can differ between builds; published release
-builds now pin a persistent certificate. An uninstall can erase
-identity, contacts and history. Preserve needed information before changing builds.
+builds now pin a persistent certificate. Use [encrypted identity export](IDENTITY_BACKUP.md)
+before changing incompatible builds; it preserves identity/contacts, not chat history or files.
 
 - **Conversations** shows public chat and each private contact separately, sorted
   by latest activity, with persistent unread counts. Opening a chat loads only its
@@ -152,7 +152,7 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 | Conversations and unread notifications | Per-contact/public histories, durable unread flags, generic notification routing | SQLite filtering/read/migration regressions and Espresso conversation/navigation checks | Notification permissions and OEM background behavior need phones |
 | Wi-Fi Direct | AP-free OffGrid DNS-SD discovery, explicit Android pairing, P2P-interface TCP and lifecycle recovery | Ownership/hello and transport tests; Android loopback socket and encrypted-media regressions | Physical pairing, permission/OEM behavior, group limits and throughput unverified |
 | Local Wi-Fi and diagnostics | Opt-in DNS-SD/IPv4 TCP alongside BLE, bounded sessions, live queue/endpoint/error diagnostics | Real TCP framing tests and transport selection/radio-state regressions | Physical NSD, access-point compatibility, network changes and throughput unverified |
-| Forward secrecy | **Not implemented**; private messages still use static ECDH | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
+| Forward secrecy | **Not implemented**; per-message ephemeral ECDH with a static recipient agreement key | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
 
 ## Components and documentation
 
@@ -205,9 +205,21 @@ storage or losing its key can make history unrecoverable; backup is disabled.
 
 The queue holds at most 200 packets and expires them after ten minutes; it does not
 promise indefinite or guaranteed delivery. Recovery preserves deadlines and
-forward counts. Live traffic requires version 4 signatures and reasonably accurate
-clocks. Version 2/3 history is readable; old unsigned pending packets must be resent
-using the updated app. Every participating endpoint and relay must upgrade.
+forward counts. Live traffic requires version 5 signatures and durable sender sequences; wall-clock
+rollback no longer pauses reception. Version 2/3/4 history is readable; legacy pending
+packets must be resent using the updated app. Contacts need a new QR exchange because
+signing/agreement keys are now separate; compare the new full fingerprint. Every participating endpoint and relay must upgrade.
+
+## 1.0 preparation additions
+
+- Separate signing/agreement keys; fresh ephemeral ECDH per encrypted packet. Recipient-key compromise still exposes recorded traffic; full forward secrecy is not implemented.
+- Durable sender epoch/sequence replay windows, atomic with Room acceptance. Old replay windows never expire by clock; new-identity capacity is bounded and fails closed.
+- Signed nonce inventory exchange, rotating exact-ID pages and logical identity association across radios. Inventory reduces some repeated forwarding; it is not full history sync or a delivery receipt.
+- [Encrypted identity backup/restore](IDENTITY_BACKUP.md), including contacts/nicknames/verification, without hosting. History/files remain local and are not exported.
+- Network aggregate measurement export and a three-phone capture harness. Physical results remain **NOT RUN** until real phones provide evidence.
+- Seeded parser/framing fuzz smoke tests and a deterministic production-relay simulator; existing Android unsend-before-original coverage remains.
+
+See [review report](docs/REVIEW_REPORT.md) and [decisions](DECISIONS.md) for validation and outstanding owner actions. Version 1.0 does not resolve upstream permission, verify real radio performance, or constitute a security audit.
 
 ## Build and run checks
 

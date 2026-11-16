@@ -33,6 +33,7 @@ public final class MeshNode implements MeshTransport.Listener {
     private final MeshStorage storage;
     private final MeshProtocol protocol;
     private final RelayScheduler relay;
+    private final com.example.offgrid.mesh.protocol.InventoryExchange inventory;
     private final Events events;
     private final Random random = new Random();
     private final Runnable maintenanceTask = this::maintain;
@@ -111,6 +112,46 @@ public final class MeshNode implements MeshTransport.Listener {
                                 reportError(error);
                             }
                         });
+        inventory =
+                new com.example.offgrid.mesh.protocol.InventoryExchange(
+                        protocol.localId(),
+                        SystemClock::elapsedRealtime,
+                        new com.example.offgrid.mesh.protocol.InventoryExchange.Link() {
+                            public MeshMessage packet(String target, String body) throws Exception {
+                                return protocol.inventory(target, body);
+                            }
+
+                            public java.util.List<String> ids(int cursor, int count) {
+                                return relay.inventoryIds(cursor, count);
+                            }
+
+                            public void authenticated(
+                                    String peer, String identity, java.util.List<String> ids) {
+                                relay.inventory(peer, identity, ids);
+                                relay.schedule(0);
+                            }
+
+                            public void send(String peer, MeshMessage packet) {
+                                byte[] bytes = packet.toBytes();
+                                if (bytes.length > transport.maxPacketBytes(peer)) return;
+                                transport.send(
+                                        peer,
+                                        java.util.Collections.singletonList(
+                                                new MeshTransport.Packet(
+                                                        packet.getMessageId(), bytes)),
+                                        new MeshTransport.SendListener() {
+                                            public boolean shouldSend(String id) {
+                                                return active && !closed;
+                                            }
+
+                                            public void onForwarded(String id) {}
+
+                                            public void onComplete(
+                                                    String failure, boolean incompatible) {}
+                                        });
+                            }
+                        });
+        relay.inventoryReady(inventory::ready);
         worker.post(this::restore);
     }
 
@@ -154,6 +195,7 @@ public final class MeshNode implements MeshTransport.Listener {
             worker.removeCallbacks(maintenanceTask);
             worker.removeCallbacks(mediaTask);
             routes.clear();
+            inventory.clear();
             relay.clear();
             transport.stop();
             protocol.clear();
@@ -296,6 +338,10 @@ public final class MeshNode implements MeshTransport.Listener {
         try {
             MeshProtocol.Incoming incoming =
                     protocol.receive(peer, packet, System.currentTimeMillis());
+            if (incoming.wire != null && incoming.wire.isInventory()) {
+                inventory.receive(peer, incoming.wire);
+                return;
+            }
             if (incoming.wire != null) {
                 acceptedPackets++;
                 // TTL is only a performance hint, not an authenticated route proof.
@@ -324,7 +370,15 @@ public final class MeshNode implements MeshTransport.Listener {
 
     @Override
     public void onPeerSeen(String peer, int rssi) {
-        if (active && !closed) relay.peerSeen(peer, rssi);
+        if (active && !closed) {
+            relay.peerSeen(peer, rssi);
+            inventory.seen(peer);
+            worker.postDelayed(
+                    () -> {
+                        if (active && !closed) relay.schedule(0);
+                    },
+                    5000);
+        }
     }
 
     @Override

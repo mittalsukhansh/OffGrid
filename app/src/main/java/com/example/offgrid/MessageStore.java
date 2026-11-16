@@ -42,7 +42,8 @@ public final class MessageStore {
                                                 .addMigrations(
                                                         MessageDatabase.MIGRATION_1_2,
                                                         MessageDatabase.MIGRATION_2_3,
-                                                        MessageDatabase.MIGRATION_3_4)
+                                                        MessageDatabase.MIGRATION_3_4,
+                                                        MessageDatabase.MIGRATION_4_5)
                                                 .build(),
                                         new StorageCipher());
                     } catch (Exception e) {
@@ -317,8 +318,44 @@ public final class MessageStore {
         dao().saveClock(clock);
     }
 
+    public boolean canAcceptSequence(MeshMessage packet) {
+        if (packet.getEpoch() == null || packet.getSequence() < 1) return false;
+        SequenceRecord state = dao().sequence(packet.getSenderId() + ":" + packet.getEpoch());
+        return state == null
+                ? dao().sequenceCount() < 4096
+                : new SequenceWindow(state.highest, state.bits).accept(packet.getSequence());
+    }
+
     /** Called only inside the same transaction as history/outbox/status changes. */
     private void rememberInbound(MeshMessage packet, long now) {
+        if (packet.getProtocolVersion() >= 5) {
+            if (packet.getEpoch() == null || packet.getSequence() < 1)
+                throw new IllegalStateException("Missing replay sequence");
+            String key = packet.getSenderId() + ":" + packet.getEpoch();
+            SequenceRecord state = dao().sequence(key);
+            if (state == null) {
+                if (dao().sequenceCount() >= 4096)
+                    throw new IllegalStateException(
+                            "Replay identity capacity reached; evidence preserved");
+                state = new SequenceRecord();
+                state.id = key;
+            }
+            SequenceWindow window = new SequenceWindow(state.highest, state.bits);
+            if (!window.accept(packet.getSequence()))
+                throw new IllegalStateException("Sequence replay or outside window");
+            state.highest = window.highest();
+            state.bits = window.encode();
+            dao().saveSequence(state);
+            // ID hints accelerate duplicate control handling; permanent sequence state is
+            // authoritative.
+            dao().pruneReplay(now);
+            ReplayRecord hint = new ReplayRecord();
+            hint.id = packet.getMessageId();
+            hint.expiresAtMs = now + PacketSecurity.REPLAY_RETENTION_MS;
+            dao().insertReplay(hint);
+            dao().trimReplayHints();
+            return;
+        }
         if (!PacketSecurity.fresh(packet, now) || !clockSafe(now)) {
             throw new IllegalStateException("Packet outside trusted time window");
         }

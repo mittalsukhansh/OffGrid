@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  */
 public final class MeshMessage {
 
-    public static final int PROTOCOL_VERSION = 4;
+    public static final int PROTOCOL_VERSION = 5;
 
     public static final int TYPE_PUBLIC = 0;
     public static final int TYPE_PRIVATE = 1;
@@ -56,6 +56,7 @@ public final class MeshMessage {
     public static final int TYPE_ACK = 3;
     public static final int TYPE_CONTROL = 4;
     public static final int TYPE_MEDIA = 5;
+    public static final int TYPE_INVENTORY = 6;
 
     /** Optional explicit marker for "everyone"; equivalent to a null target. */
     public static final String BROADCAST = "BROADCAST";
@@ -70,14 +71,14 @@ public final class MeshMessage {
     public static final int MAX_PRIVATE_PLAINTEXT_BYTES = MAX_TEXT_LENGTH * 4;
 
     /** iv(12) + 1120 + tag(16) = 1148 bytes -> 1531 Base64 chars; 1600 leaves headroom. */
-    public static final int MAX_CIPHERTEXT_LENGTH = 1600;
+    public static final int MAX_CIPHERTEXT_LENGTH = 1800;
 
     /** Worst-case private message is ~1.8 KB (ciphertext + 87-char key + ids), which fits. */
     public static final int MAX_SERIALIZED_BYTES = 2048;
 
     public static final int MAX_CONTROL_PLAINTEXT_BYTES = 12 * 1024;
     public static final int MAX_CONTROL_SERIALIZED_BYTES = 32768;
-    private static final Pattern CONTROL_CIPHERTEXT = Pattern.compile("[A-Za-z0-9_-]{39,16424}");
+    private static final Pattern CONTROL_CIPHERTEXT = Pattern.compile("[A-Za-z0-9_-]{39,16512}");
 
     private static final Pattern TARGET_ID = Pattern.compile("[0-9a-f]{32}");
 
@@ -98,6 +99,9 @@ public final class MeshMessage {
     private static final String K_TTL = "ttl";
     private static final String K_TIMESTAMP = "ts";
 
+    private final String epoch;
+    private final long sequence;
+    private final String agreementKey;
     private final int wireVersion;
     private final String signature;
     private final String messageId;
@@ -170,6 +174,47 @@ public final class MeshMessage {
             long timestamp,
             @Nullable String signature,
             int wireVersion) {
+        this(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                text,
+                senderKey,
+                payloadEncrypted,
+                ttl,
+                timestamp,
+                signature,
+                wireVersion,
+                null,
+                0,
+                null);
+    }
+
+    private MeshMessage(
+            String messageId,
+            String senderId,
+            String targetId,
+            int type,
+            String text,
+            String senderKey,
+            boolean payloadEncrypted,
+            int ttl,
+            long timestamp,
+            String signature,
+            int wireVersion,
+            String epoch,
+            long sequence,
+            String agreementKey) {
+        if (epoch != null
+                && (!epoch.matches("[0-9a-f]{32}")
+                        || sequence < 1
+                        || agreementKey == null
+                        || !PUBLIC_KEY.matcher(agreementKey).matches()))
+            throw new IllegalArgumentException("Invalid sequence or agreement metadata");
+        this.epoch = epoch;
+        this.sequence = sequence;
+        this.agreementKey = agreementKey;
         this.wireVersion = wireVersion;
         if (signature != null && !signature.matches("[A-Za-z0-9_-]{8,104}")) {
             throw new IllegalArgumentException("Invalid signature encoding");
@@ -185,6 +230,17 @@ public final class MeshMessage {
         }
 
         switch (type) {
+            case TYPE_INVENTORY:
+                if (payloadEncrypted
+                        || ttl != 0
+                        || targetId == null
+                        || !TARGET_ID.matcher(targetId).matches()
+                        || text == null
+                        || text.length() > 1152
+                        || senderKey == null
+                        || !PUBLIC_KEY.matcher(senderKey).matches())
+                    throw new IllegalArgumentException("Invalid inventory envelope");
+                break;
             case TYPE_PUBLIC:
                 if (targetId != null && !BROADCAST.equals(targetId)) {
                     throw new IllegalArgumentException("public message cannot have a target");
@@ -355,7 +411,58 @@ public final class MeshMessage {
                 ttl,
                 timestamp,
                 signature,
-                wireVersion);
+                wireVersion,
+                epoch,
+                sequence,
+                agreementKey);
+    }
+
+    public String getEpoch() {
+        return epoch;
+    }
+
+    public long getSequence() {
+        return sequence;
+    }
+
+    public String getAgreementKey() {
+        return agreementKey;
+    }
+
+    public MeshMessage withSequence(String epoch, long sequence, String agreementKey) {
+        return new MeshMessage(
+                messageId,
+                senderId,
+                targetId,
+                type,
+                text,
+                senderKey,
+                payloadEncrypted,
+                ttl,
+                timestamp,
+                signature,
+                wireVersion,
+                epoch,
+                sequence,
+                agreementKey);
+    }
+
+    public boolean isInventory() {
+        return type == TYPE_INVENTORY;
+    }
+
+    public static MeshMessage createInventory(
+            String sender, String target, String text, String key) {
+        return new MeshMessage(
+                newId(sender),
+                sender,
+                target,
+                TYPE_INVENTORY,
+                text,
+                key,
+                false,
+                0,
+                System.currentTimeMillis());
     }
 
     public static MeshMessage createControl(
@@ -493,7 +600,10 @@ public final class MeshMessage {
                 Math.max(0, ttl - 1),
                 timestamp,
                 signature,
-                wireVersion);
+                wireVersion,
+                epoch,
+                sequence,
+                agreementKey);
     }
 
     /**
@@ -518,7 +628,10 @@ public final class MeshMessage {
                 ttl,
                 timestamp,
                 signature,
-                wireVersion);
+                wireVersion,
+                epoch,
+                sequence,
+                agreementKey);
     }
 
     /**
@@ -555,6 +668,11 @@ public final class MeshMessage {
             json.put(K_TEXT, text);
             if (senderKey != null) json.put(K_SENDER_KEY, senderKey);
             if (signature != null) json.put("sig", signature);
+            if (epoch != null) {
+                json.put("epoch", epoch);
+                json.put("seq", sequence);
+                json.put("apk", agreementKey);
+            }
             json.put(K_TTL, ttl);
             json.put(K_TIMESTAMP, timestamp);
             return json;
@@ -600,6 +718,22 @@ public final class MeshMessage {
      */
     @NonNull
     public static MeshMessage fromJsonString(@NonNull String json) {
+        if (json.length() > MAX_CONTROL_SERIALIZED_BYTES
+                || json.getBytes(StandardCharsets.UTF_8).length > MAX_CONTROL_SERIALIZED_BYTES)
+            throw new IllegalArgumentException("JSON exceeds packet limit");
+        int depth = 0;
+        boolean quoted = false, escape = false;
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (quoted) {
+                if (escape) escape = false;
+                else if (c == '\\') escape = true;
+                else if (c == '"') quoted = false;
+            } else if (c == '"') quoted = true;
+            else if (c == '{' || c == '[') {
+                if (++depth > 16) throw new IllegalArgumentException("JSON nesting too deep");
+            } else if (c == '}' || c == ']') depth--;
+        }
         try {
             return fromJson(new JSONObject(json));
         } catch (JSONException e) {
@@ -614,7 +748,7 @@ public final class MeshMessage {
     public static MeshMessage fromJson(@NonNull JSONObject json) {
         try {
             int version = json.optInt(K_VERSION, PROTOCOL_VERSION);
-            if (version != PROTOCOL_VERSION && version != 2 && version != 3) {
+            if (version != PROTOCOL_VERSION && version != 2 && version != 3 && version != 4) {
                 throw new IllegalArgumentException("unsupported protocol version " + version);
             }
             int type = json.optInt(K_TYPE, TYPE_PUBLIC);
@@ -632,7 +766,10 @@ public final class MeshMessage {
                     json.getInt(K_TTL),
                     json.getLong(K_TIMESTAMP),
                     json.isNull("sig") ? null : json.getString("sig"),
-                    version);
+                    version,
+                    json.isNull("epoch") ? null : json.getString("epoch"),
+                    json.optLong("seq", 0),
+                    json.isNull("apk") ? null : json.getString("apk"));
         } catch (JSONException e) {
             throw new IllegalArgumentException("missing or invalid field: " + e.getMessage(), e);
         }

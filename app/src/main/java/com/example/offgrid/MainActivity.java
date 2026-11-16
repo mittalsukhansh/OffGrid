@@ -115,6 +115,8 @@ public class MainActivity extends AppCompatActivity {
             java.util.concurrent.Executors.newSingleThreadExecutor();
 
     // Service connection state (main thread only)
+    private IdentityBackupUi identityBackup;
+    private volatile boolean identityRestoreAllowed;
     private MeshService mesh; // non-null == service is running and connected
     private boolean bound;
 
@@ -125,6 +127,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        identityBackup = new IdentityBackupUi(this, () -> identityRestoreAllowed);
         diagnosticsExport =
                 registerForActivityResult(
                         new ActivityResultContracts.CreateDocument("text/plain"),
@@ -160,7 +163,7 @@ public class MainActivity extends AppCompatActivity {
                                                     Toast.makeText(
                                                                     this,
                                                                     "Export failed; choose another"
-                                                                        + " destination",
+                                                                            + " destination",
                                                                     Toast.LENGTH_LONG)
                                                             .show());
                                         }
@@ -434,6 +437,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        identityBackup.close();
         mediaWorker.shutdown();
         super.onDestroy();
     }
@@ -556,6 +560,11 @@ public class MainActivity extends AppCompatActivity {
             };
 
     private void startMeshService() {
+        identityRestoreAllowed = false;
+        if (IdentityBackupUi.busy()) {
+            Toast.makeText(this, "Wait for identity backup to finish", Toast.LENGTH_LONG).show();
+            return;
+        }
         MeshService.start(this);
         if (!bound) { // safety net if the binding from onStart() was refused
             bound = bindService(new Intent(this, MeshService.class), serviceConnection, 0);
@@ -772,7 +781,7 @@ public class MainActivity extends AppCompatActivity {
         final EditText input = new EditText(this);
         input.setHint(CryptoManager.CONTACT_PREFIX + "…");
         input.setMaxLines(4);
-        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(200)});
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(400)});
 
         String clip = readClipboardText();
         if (clip != null
@@ -1002,6 +1011,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMyContactDialog() {
+        identityRestoreAllowed = mesh == null && !bound;
         final CryptoManager cm = crypto();
         ImageView qr = new ImageView(this);
         int size = (int) (240 * getResources().getDisplayMetrics().density);
@@ -1014,7 +1024,15 @@ public class MainActivity extends AppCompatActivity {
         }
         LinearLayout qrContainer = new LinearLayout(this);
         qrContainer.setGravity(android.view.Gravity.CENTER);
+        qrContainer.setOrientation(LinearLayout.VERTICAL);
         qrContainer.addView(qr);
+        Button backup = new Button(this);
+        backup.setText("Identity backup / restore");
+        backup.setOnClickListener(v -> {
+            identityRestoreAllowed = mesh == null && !bound;
+            identityBackup.show();
+        });
+        qrContainer.addView(backup);
         new AlertDialog.Builder(this)
                 .setTitle("My contact")
                 .setMessage(

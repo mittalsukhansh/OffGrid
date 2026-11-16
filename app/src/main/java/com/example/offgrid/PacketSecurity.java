@@ -12,8 +12,9 @@ public final class PacketSecurity {
     public static final int MAX_REPLAY_ENTRIES = 10_000;
 
     public static boolean fresh(MeshMessage packet, long now) {
-        return packet.getTimestamp() >= now - MAX_AGE_MS
-                && packet.getTimestamp() <= now + CLOCK_SKEW_MS;
+        return packet.getProtocolVersion() >= 5
+                || (packet.getTimestamp() >= now - MAX_AGE_MS
+                        && packet.getTimestamp() <= now + CLOCK_SKEW_MS);
     }
 
     public static boolean namespaced(MeshMessage packet) {
@@ -34,9 +35,16 @@ public final class PacketSecurity {
             data.writeUTF(packet.getSenderId());
             data.writeUTF(packet.getTargetId() == null ? "" : packet.getTargetId());
             data.writeUTF(packet.getSenderKey() == null ? "" : packet.getSenderKey());
+            if (packet.getProtocolVersion() >= 5) {
+                data.writeUTF(packet.getEpoch() == null ? "" : packet.getEpoch());
+                data.writeLong(packet.getSequence());
+                data.writeUTF(packet.getAgreementKey() == null ? "" : packet.getAgreementKey());
+            }
             data.writeLong(packet.getTimestamp());
             data.writeUTF(packet.getText());
             return bytes.toByteArray();
-        } catch (IOException e) { throw new IllegalStateException(e); }
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

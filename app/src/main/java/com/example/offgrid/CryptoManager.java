@@ -68,7 +68,7 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * <pre>
  *   shared = ECDH(myPrivate, theirPublic)
- *   key    = HKDF-SHA256(shared, info = "offgrid-e2ee-v1|" + senderId + ">" + targetId)
+ *   key    = HKDF-SHA256(shared, info = "offgrid-e2ee-v5|" + senderId + ">" + targetId)
  *   wire   = Base64url( iv(12) || AES-256-GCM(key, iv, plaintext, aad) )
  *   aad    = messageId | senderId | targetId | timestamp
  * </pre>
@@ -117,6 +117,7 @@ public final class CryptoManager {
 
     private static final class ContactRecord {
         final String keyB64;
+        String agreementB64;
         boolean manual;
         boolean verified;
         String nickname = "";
@@ -147,6 +148,11 @@ public final class CryptoManager {
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, ContactRecord> contacts = new LinkedHashMap<>(); // guarded by this
 
+    private PrivateKey agreementPrivate;
+    private String agreementPublic;
+    private long nextSequence, reservedUntil;
+    private String sendEpoch;
+    private String contactBundle;
     private PrivateKey privateKey;
     private byte[] publicKeyBytes;
     private String publicKeyB64;
@@ -156,6 +162,7 @@ public final class CryptoManager {
         prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         try {
             loadOrCreateIdentity();
+            loadAgreementIdentity();
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Unable to initialise device identity", e);
         }
@@ -180,8 +187,18 @@ public final class CryptoManager {
 
     /** A string others can import to message this device privately. */
     @NonNull
-    public String getContactString() {
-        return CONTACT_PREFIX + publicKeyB64;
+    public synchronized String getContactString() {
+        if (contactBundle != null) return contactBundle;
+        try {
+            String pair = publicKeyB64 + "." + agreementPublic;
+            java.security.Signature signer = java.security.Signature.getInstance("SHA256withECDSA");
+            signer.initSign(privateKey, secureRandom);
+            signer.update(("offgrid-contact-v5|" + pair).getBytes(StandardCharsets.UTF_8));
+            return contactBundle =
+                    "offgrid5:" + pair + "." + Base64.encodeToString(signer.sign(), B64_FLAGS);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     public static boolean isValidId(@Nullable String id) {
@@ -212,7 +229,8 @@ public final class CryptoManager {
      */
     @Nullable
     public String importContact(@Nullable String contactString) {
-        if (contactString == null || contactString.length() > 200) return null;
+        if (contactString == null || contactString.length() > 400) return null;
+        if (contactString.trim().startsWith("offgrid5:")) return importBundle(contactString.trim());
         String s = contactString.trim();
         if (!s.regionMatches(true, 0, CONTACT_PREFIX, 0, CONTACT_PREFIX.length())) return null;
         String keyB64 = s.substring(CONTACT_PREFIX.length()).trim();
@@ -236,7 +254,7 @@ public final class CryptoManager {
     }
 
     public synchronized boolean hasKeyFor(@NonNull String id) {
-        return contacts.containsKey(id);
+        return contacts.containsKey(id) && contacts.get(id).agreementB64 != null;
     }
 
     /** Manually added contacts first, then others, most recent first. */
@@ -310,12 +328,19 @@ public final class CryptoManager {
     }
 
     public String getOwnFingerprint() {
-        return fullFingerprint(publicKeyBytes);
+        return fullFingerprint(
+                (publicKeyB64 + "." + agreementPublic).getBytes(StandardCharsets.US_ASCII));
     }
 
     public synchronized String contactFingerprint(String id) {
         ContactRecord record = contacts.get(id);
-        return record == null ? null : fullFingerprint(Base64.decode(record.keyB64, B64_FLAGS));
+        return record == null
+                ? null
+                : (record.agreementB64 == null
+                        ? fullFingerprint(Base64.decode(record.keyB64, B64_FLAGS))
+                        : fullFingerprint(
+                                (record.keyB64 + "." + record.agreementB64)
+                                        .getBytes(StandardCharsets.US_ASCII)));
     }
 
     /** Import/discovery never verifies a person; explicit fingerprint comparison is required. */
@@ -353,7 +378,9 @@ public final class CryptoManager {
         if (message.isPrivate() && !message.isPayloadEncrypted()) {
             throw new GeneralSecurityException("Cannot sign a display-only plaintext copy");
         }
-        MeshMessage keyed = message.withAuthentication(publicKeyB64, null);
+        MeshMessage keyed =
+                message.withAuthentication(publicKeyB64, null)
+                        .withSequence(currentEpoch(), allocateSequence(), agreementPublic);
         java.security.Signature signer = java.security.Signature.getInstance("SHA256withECDSA");
         signer.initSign(privateKey, secureRandom);
         signer.update(PacketSecurity.signingBytes(keyed));
@@ -364,10 +391,14 @@ public final class CryptoManager {
     public boolean verifyPacket(MeshMessage packet) {
         if (packet.getProtocolVersion() != MeshMessage.PROTOCOL_VERSION
                 || packet.getSignature() == null
-                || packet.getSenderKey() == null) return false;
+                || packet.getSenderKey() == null
+                || packet.getAgreementKey() == null
+                || packet.getEpoch() == null
+                || packet.getSequence() < 1) return false;
         try {
             byte[] raw = Base64.decode(packet.getSenderKey(), B64_FLAGS);
             if (!deriveId(raw).equals(packet.getSenderId())) return false;
+            decodePublicKey(Base64.decode(packet.getAgreementKey(), B64_FLAGS));
             java.security.Signature verifier =
                     java.security.Signature.getInstance("SHA256withECDSA");
             verifier.initVerify(decodePublicKey(raw));
@@ -445,7 +476,9 @@ public final class CryptoManager {
             throw new IllegalArgumentException("plaintext size out of range");
         }
         ECPublicKey targetKey = getContactKey(targetId);
-        byte[] key = deriveKey(targetKey, localId, targetId, purpose);
+        KeyPair ephemeral = newEcPair();
+        byte[] ephemeralPublic = encodePublicKey((ECPublicKey) ephemeral.getPublic());
+        byte[] key = deriveKey(ephemeral.getPrivate(), targetKey, localId, targetId, purpose);
         try {
             byte[] iv = new byte[GCM_IV_BYTES];
             secureRandom.nextBytes(iv);
@@ -457,9 +490,10 @@ public final class CryptoManager {
             cipher.updateAAD(aad(messageId, localId, targetId, timestamp));
             byte[] ct = cipher.doFinal(pt);
 
-            byte[] out = new byte[iv.length + ct.length];
-            System.arraycopy(iv, 0, out, 0, iv.length);
-            System.arraycopy(ct, 0, out, iv.length, ct.length);
+            byte[] out = new byte[PUBLIC_KEY_BYTES + iv.length + ct.length];
+            System.arraycopy(ephemeralPublic, 0, out, 0, PUBLIC_KEY_BYTES);
+            System.arraycopy(iv, 0, out, PUBLIC_KEY_BYTES, iv.length);
+            System.arraycopy(ct, 0, out, PUBLIC_KEY_BYTES + iv.length, ct.length);
             return Base64.encodeToString(out, B64_FLAGS);
         } finally {
             Arrays.fill(key, (byte) 0);
@@ -506,25 +540,36 @@ public final class CryptoManager {
         if (!deriveId(senderKeyRaw).equals(message.getSenderId())) {
             throw new GeneralSecurityException("sender key does not match sender id");
         }
-        if (data.length < GCM_IV_BYTES + GCM_TAG_BITS / 8 + 1) {
+        if (data.length < PUBLIC_KEY_BYTES + GCM_IV_BYTES + GCM_TAG_BITS / 8 + 1) {
             throw new GeneralSecurityException("ciphertext too short");
         }
 
-        ECPublicKey senderKey = decodePublicKey(senderKeyRaw);
-        byte[] key = deriveKey(senderKey, message.getSenderId(), localId, purpose);
+        ECPublicKey ephemeral = decodePublicKey(Arrays.copyOfRange(data, 0, PUBLIC_KEY_BYTES));
+        byte[] key =
+                deriveKey(agreementPrivate, ephemeral, message.getSenderId(), localId, purpose);
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(
                     Cipher.DECRYPT_MODE,
                     new SecretKeySpec(key, "AES"),
-                    new GCMParameterSpec(GCM_TAG_BITS, data, 0, GCM_IV_BYTES));
+                    new GCMParameterSpec(GCM_TAG_BITS, data, PUBLIC_KEY_BYTES, GCM_IV_BYTES));
             cipher.updateAAD(
                     aad(
                             message.getMessageId(),
                             message.getSenderId(),
                             localId,
                             message.getTimestamp()));
-            byte[] pt = cipher.doFinal(data, GCM_IV_BYTES, data.length - GCM_IV_BYTES);
+            byte[] pt =
+                    cipher.doFinal(
+                            data,
+                            PUBLIC_KEY_BYTES + GCM_IV_BYTES,
+                            data.length - PUBLIC_KEY_BYTES - GCM_IV_BYTES);
+            int limit =
+                    "control".equals(purpose)
+                            ? MeshMessage.MAX_CONTROL_PLAINTEXT_BYTES
+                            : MeshMessage.MAX_PRIVATE_PLAINTEXT_BYTES;
+            if (pt.length == 0 || pt.length > limit)
+                throw new GeneralSecurityException("Plaintext size out of range");
 
             registerKey(message.getSenderId(), senderKeyB64, false);
             return new String(pt, StandardCharsets.UTF_8);
@@ -533,23 +578,123 @@ public final class CryptoManager {
         }
     }
 
+    /** Identity and contacts only. Message bodies/files and replay evidence are not exported. */
+    public synchronized byte[] exportIdentity(char[] password) throws Exception {
+        JSONObject payload = new JSONObject();
+        byte[] signing = privateKey.getEncoded(), agreement = agreementPrivate.getEncoded();
+        byte[] plain = null;
+        try {
+            payload.put("version", 1);
+            payload.put("signingPrivate", Base64.encodeToString(signing, B64_FLAGS));
+            payload.put("signingPublic", publicKeyB64);
+            payload.put("agreementPrivate", Base64.encodeToString(agreement, B64_FLAGS));
+            payload.put("agreementPublic", agreementPublic);
+            payload.put("contacts", new JSONObject(prefs.getString(PREF_CONTACTS, "{}")));
+            plain = payload.toString().getBytes(StandardCharsets.UTF_8);
+            return IdentityBackup.encrypt(plain, password);
+        } finally {
+            Arrays.fill(signing, (byte) 0);
+            Arrays.fill(agreement, (byte) 0);
+            if (plain != null) Arrays.fill(plain, (byte) 0);
+        }
+    }
+
+    /**
+     * Caller must stop mesh and require empty history before replacing an installation identity.
+     */
+    public synchronized void restoreIdentity(byte[] encrypted, char[] password) throws Exception {
+        byte[] plain = IdentityBackup.decrypt(encrypted, password);
+        byte[] signing = null, agreement = null;
+        try {
+            JSONObject payload = new JSONObject(new String(plain, StandardCharsets.UTF_8));
+            if (payload.getInt("version") != 1)
+                throw new GeneralSecurityException("Unsupported identity version");
+            signing = Base64.decode(payload.getString("signingPrivate"), B64_FLAGS);
+            agreement = Base64.decode(payload.getString("agreementPrivate"), B64_FLAGS);
+            String signingPublic = payload.getString("signingPublic");
+            String newAgreementPublic = payload.getString("agreementPublic");
+            PrivateKey newSigning = validatePair(signing, signingPublic);
+            PrivateKey newAgreement = validatePair(agreement, newAgreementPublic);
+            JSONObject savedContacts = payload.getJSONObject("contacts");
+            if (savedContacts.length() > MAX_CONTACTS)
+                throw new GeneralSecurityException("Too many contacts");
+            Iterator<String> ids = savedContacts.keys();
+            while (ids.hasNext()) {
+                String id = ids.next();
+                JSONObject contact = savedContacts.getJSONObject(id);
+                byte[] raw = Base64.decode(contact.getString("k"), B64_FLAGS);
+                if (!deriveId(raw).equals(id))
+                    throw new GeneralSecurityException("Invalid contact identity");
+                decodePublicKey(raw);
+                if (!contact.isNull("agreement"))
+                    decodePublicKey(Base64.decode(contact.getString("agreement"), B64_FLAGS));
+                contact.put("nickname", normalizeNickname(contact.optString("nickname", "")));
+            }
+            String epoch = java.util.UUID.randomUUID().toString().replace("-", "");
+            if (!prefs.edit()
+                    .putString(
+                            PREF_PRIVATE_WRAPPED, Base64.encodeToString(wrap(signing), B64_FLAGS))
+                    .putString(PREF_PUBLIC, signingPublic)
+                    .putString(
+                            "agreement_wrapped", Base64.encodeToString(wrap(agreement), B64_FLAGS))
+                    .putString("agreement_public", newAgreementPublic)
+                    .putString(PREF_CONTACTS, savedContacts.toString())
+                    .putString("send_epoch", epoch)
+                    .putLong("sequence_reserved", 0)
+                    .commit())
+                throw new GeneralSecurityException("Could not save restored identity");
+            setIdentity(newSigning, Base64.decode(signingPublic, B64_FLAGS));
+            agreementPrivate = newAgreement;
+            agreementPublic = newAgreementPublic;
+            sendEpoch = epoch;
+            nextSequence = reservedUntil = 0;
+            contactBundle = null;
+            contacts.clear();
+            loadContacts();
+        } finally {
+            Arrays.fill(plain, (byte) 0);
+            if (signing != null) Arrays.fill(signing, (byte) 0);
+            if (agreement != null) Arrays.fill(agreement, (byte) 0);
+        }
+    }
+
+    private PrivateKey validatePair(byte[] privateBytes, String publicB64)
+            throws GeneralSecurityException {
+        PrivateKey key =
+                KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(privateBytes));
+        ECPublicKey pub = decodePublicKey(Base64.decode(publicB64, B64_FLAGS));
+        byte[] challenge = new byte[32];
+        secureRandom.nextBytes(challenge);
+        // Mathematical pair check only; agreement keys are never used to sign network traffic.
+        java.security.Signature proof = java.security.Signature.getInstance("SHA256withECDSA");
+        proof.initSign(key);
+        proof.update(challenge);
+        byte[] signature = proof.sign();
+        proof.initVerify(pub);
+        proof.update(challenge);
+        if (!proof.verify(signature))
+            throw new GeneralSecurityException("Mismatched identity keys");
+        return key;
+    }
+
     // ------------------------------------------------------------------
     // Key derivation
     // ------------------------------------------------------------------
 
-    private byte[] deriveKey(ECPublicKey peer, String senderId, String targetId, String purpose)
+    private byte[] deriveKey(
+            PrivateKey ownKey, ECPublicKey peer, String senderId, String targetId, String purpose)
             throws GeneralSecurityException {
         KeyAgreement agreement = KeyAgreement.getInstance("ECDH");
-        agreement.init(privateKey);
+        agreement.init(ownKey);
         agreement.doPhase(peer, true);
         byte[] shared = agreement.generateSecret();
         try {
             byte[] info =
                     (("control".equals(purpose)
-                                            ? "offgrid-control-v1|"
+                                            ? "offgrid-control-v5|"
                                             : "ack".equals(purpose)
-                                                    ? "offgrid-ack-v1|"
-                                                    : "offgrid-e2ee-v1|")
+                                                    ? "offgrid-ack-v5|"
+                                                    : "offgrid-e2ee-v5|")
                                     + senderId
                                     + ">"
                                     + targetId)
@@ -606,11 +751,133 @@ public final class CryptoManager {
         return true;
     }
 
+    private synchronized String importBundle(String bundle) {
+        try {
+            String[] parts = bundle.substring("offgrid5:".length()).split("\\.", -1);
+            if (parts.length != 3
+                    || parts[0].length() != 87
+                    || parts[1].length() != 87
+                    || parts[2].length() > 104) return null;
+            ECPublicKey signing = decodePublicKey(Base64.decode(parts[0], B64_FLAGS));
+            decodePublicKey(Base64.decode(parts[1], B64_FLAGS));
+            java.security.Signature verify = java.security.Signature.getInstance("SHA256withECDSA");
+            verify.initVerify(signing);
+            verify.update(
+                    ("offgrid-contact-v5|" + parts[0] + "." + parts[1])
+                            .getBytes(StandardCharsets.UTF_8));
+            if (!verify.verify(Base64.decode(parts[2], B64_FLAGS))) return null;
+            String id = deriveId(Base64.decode(parts[0], B64_FLAGS));
+            return registerAgreement(id, parts[0], parts[1], true) ? id : null;
+        } catch (GeneralSecurityException | IllegalArgumentException bad) {
+            return null;
+        }
+    }
+
+    /** Only a verified packet may bind a new agreement key to a signing identity. */
+    public boolean registerPacketKeys(MeshMessage packet) {
+        return verifyPacket(packet)
+                && registerAgreement(
+                        packet.getSenderId(),
+                        packet.getSenderKey(),
+                        packet.getAgreementKey(),
+                        false);
+    }
+
+    private synchronized boolean registerAgreement(
+            String id, String signing, String agreement, boolean manual) {
+        try {
+            decodePublicKey(Base64.decode(agreement, B64_FLAGS));
+        } catch (GeneralSecurityException | IllegalArgumentException bad) {
+            return false;
+        }
+        if (!registerKey(id, signing, manual)) return false;
+        ContactRecord record = contacts.get(id);
+        if (!agreement.equals(record.agreementB64)) {
+            record.agreementB64 = agreement;
+            record.verified = false;
+            persistContacts();
+        }
+        return true;
+    }
+
+    private static KeyPair newEcPair() throws GeneralSecurityException {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+        generator.initialize(new ECGenParameterSpec("secp256r1"));
+        return generator.generateKeyPair();
+    }
+
+    private void loadAgreementIdentity() throws GeneralSecurityException {
+        String stored = prefs.getString("agreement_wrapped", null);
+        agreementPublic = prefs.getString("agreement_public", null);
+        if (stored != null && agreementPublic != null) {
+            byte[] plain = unwrap(Base64.decode(stored, B64_FLAGS));
+            try {
+                agreementPrivate =
+                        KeyFactory.getInstance("EC")
+                                .generatePrivate(new PKCS8EncodedKeySpec(plain));
+            } finally {
+                Arrays.fill(plain, (byte) 0);
+            }
+            decodePublicKey(Base64.decode(agreementPublic, B64_FLAGS));
+        } else {
+            KeyPair pair = newEcPair();
+            agreementPrivate = pair.getPrivate();
+            agreementPublic =
+                    Base64.encodeToString(
+                            encodePublicKey((ECPublicKey) pair.getPublic()), B64_FLAGS);
+            byte[] plain = agreementPrivate.getEncoded();
+            try {
+                if (!prefs.edit()
+                        .putString(
+                                "agreement_wrapped", Base64.encodeToString(wrap(plain), B64_FLAGS))
+                        .putString("agreement_public", agreementPublic)
+                        .commit())
+                    throw new GeneralSecurityException("Could not persist agreement key");
+            } finally {
+                Arrays.fill(plain, (byte) 0);
+            }
+        }
+        sendEpoch = prefs.getString("send_epoch", null);
+        if (sendEpoch == null) {
+            sendEpoch = java.util.UUID.randomUUID().toString().replace("-", "");
+            if (!prefs.edit()
+                    .putString("send_epoch", sendEpoch)
+                    .putLong("sequence_reserved", 0)
+                    .commit())
+                throw new GeneralSecurityException("Could not persist sequence epoch");
+        }
+        nextSequence = reservedUntil = prefs.getLong("sequence_reserved", 0);
+    }
+
+    private synchronized String currentEpoch() {
+        return sendEpoch;
+    }
+
+    private synchronized long allocateSequence() throws GeneralSecurityException {
+        // Reserve before use; a process crash may leave gaps but cannot reuse a signed sequence.
+        if (nextSequence == reservedUntil) {
+            if (reservedUntil > Long.MAX_VALUE - 64)
+                throw new GeneralSecurityException("Sequence exhausted");
+            long persisted = prefs.getLong("sequence_reserved", 0);
+            nextSequence = Math.max(nextSequence, persisted);
+            if (nextSequence > Long.MAX_VALUE - 64)
+                throw new GeneralSecurityException("Sequence exhausted");
+            reservedUntil = nextSequence + 64;
+            if (!prefs.edit().putLong("sequence_reserved", reservedUntil).commit()) {
+                reservedUntil = nextSequence;
+                throw new GeneralSecurityException("Could not reserve sequence block");
+            }
+        }
+        return ++nextSequence;
+    }
+
     private synchronized ECPublicKey getContactKey(String id) throws GeneralSecurityException {
         ContactRecord record = contacts.get(id);
         if (record == null) throw new GeneralSecurityException("no public key for " + id);
         try {
-            return decodePublicKey(Base64.decode(record.keyB64, B64_FLAGS));
+            if (record.agreementB64 == null)
+                throw new GeneralSecurityException("Contact needs a new QR exchange");
+            return decodePublicKey(Base64.decode(record.agreementB64, B64_FLAGS));
         } catch (IllegalArgumentException e) {
             throw new GeneralSecurityException("stored key is corrupt", e);
         }
@@ -640,7 +907,11 @@ public final class CryptoManager {
                     decodePublicKey(raw);
                     ContactRecord record =
                             new ContactRecord(key, o.optBoolean("m", false), o.optLong("t", 0L));
-                    record.verified = o.optBoolean("verified", false);
+                    record.agreementB64 = o.optString("agreement", null);
+                    if (record.agreementB64 != null)
+                        decodePublicKey(Base64.decode(record.agreementB64, B64_FLAGS));
+                    record.verified =
+                            record.agreementB64 != null && o.optBoolean("verified", false);
                     record.nickname = normalizeNickname(o.optString("nickname", ""));
                     contacts.put(id, record);
                 }
@@ -656,6 +927,7 @@ public final class CryptoManager {
             for (Map.Entry<String, ContactRecord> e : contacts.entrySet()) {
                 JSONObject o = new JSONObject();
                 o.put("k", e.getValue().keyB64);
+                o.put("agreement", e.getValue().agreementB64);
                 o.put("m", e.getValue().manual);
                 o.put("verified", e.getValue().verified);
                 o.put("nickname", e.getValue().nickname);

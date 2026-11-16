@@ -60,6 +60,11 @@ public final class RoomMeshStorage implements MeshStorage {
     }
 
     @Override
+    public boolean canAcceptSequence(MeshMessage packet) {
+        return store.canAcceptSequence(packet);
+    }
+
+    @Override
     public boolean clockSafe(long now) {
         return store.clockSafe(now);
     }

@@ -216,7 +216,28 @@ public class RelaySchedulerTest {
         assertEquals("wifi:weak", transport.calls.get(0).peer);
     }
 
-    private static final class FakeTimer implements RelayScheduler.Timer {
+    @Test
+    public void inventorySuppressesKnownIdsAcrossAuthenticatedRadioAliases() {
+        MeshMessage known = queued(0);
+        MeshMessage missing = queued(0);
+        peer("ble:phone", -20);
+        peer("wifi:phone", -40);
+        scheduler.inventory(
+                "ble:phone", sender, java.util.Collections.singletonList(known.getMessageId()));
+        scheduler.inventory(
+                "wifi:phone", sender, java.util.Collections.singletonList(known.getMessageId()));
+        scheduler.start();
+        time.runDue();
+        assertEquals(1, transport.calls.size());
+        assertEquals("wifi:phone", transport.calls.get(0).peer);
+        assertEquals(missing.getMessageId(), transport.calls.get(0).packets.get(0).id);
+        transport.calls.get(0).listener.onForwarded(missing.getMessageId());
+        transport.calls.get(0).listener.onComplete(null, false);
+        time.advance(100);
+        assertEquals(1, transport.calls.size());
+    }
+
+    static final class FakeTimer implements RelayScheduler.Timer {
         long elapsed;
         final long wallBase = System.currentTimeMillis();
         final Map<Runnable, Long> tasks = new LinkedHashMap<>();
@@ -305,7 +326,7 @@ public class RelaySchedulerTest {
         }
     }
 
-    private static final class FakeStorage implements MeshStorage {
+    static class FakeStorage implements MeshStorage {
         final Map<String, Integer> progress = new HashMap<>();
         final Map<String, String> discarded = new HashMap<>();
 

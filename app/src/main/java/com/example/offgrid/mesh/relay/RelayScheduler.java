@@ -52,6 +52,12 @@ public final class RelayScheduler {
     private final LinkedHashMap<String, Buffered> queue = new LinkedHashMap<>();
     private final Runnable connectPass = this::connect;
     private final java.util.ArrayDeque<String> recentFailures = new java.util.ArrayDeque<>();
+    private java.util.function.Predicate<String> inventoryReady = peer -> true;
+
+    public void inventoryReady(java.util.function.Predicate<String> ready) {
+        inventoryReady = ready;
+    }
+
     private boolean active;
     private boolean scheduled;
     private int publishedPeerCount;
@@ -137,6 +143,32 @@ public final class RelayScheduler {
         if (source != null) source.remember(id);
     }
 
+    /** IDs are hints from a challenge-authenticated endpoint; never delivery receipts. */
+    public void inventory(String address, String identity, java.util.Collection<String> ids) {
+        Peer peer = peers.get(address);
+        if (peer == null) return;
+        peer.identity = identity;
+        for (String id : ids) peer.remember(id);
+        for (Peer sibling : peers.values()) {
+            if (identity.equals(sibling.identity)) {
+                for (String id : ids) sibling.remember(id);
+            }
+        }
+        publishPeerCount();
+    }
+
+    public java.util.List<String> inventoryIds(int cursor, int limit) {
+        java.util.List<String> all = new java.util.ArrayList<>(queue.keySet());
+        java.util.List<String> page = new java.util.ArrayList<>();
+        for (int i = 0; i < Math.min(limit, all.size()); i++)
+            page.add(all.get((cursor + i) % all.size()));
+        return page;
+    }
+
+    private String logical(Peer p) {
+        return p.identity == null ? p.address : "identity:" + p.identity;
+    }
+
     public void maintenance() {
         long now = timer.elapsed();
         peers.entrySet()
@@ -202,7 +234,8 @@ public final class RelayScheduler {
         long now = timer.elapsed();
         List<Peer> candidates = new ArrayList<>();
         for (Peer peer : peers.values()) {
-            if (!sessions.containsKey(peer.address)
+            if (inventoryReady.test(peer.address)
+                    && !sessions.containsKey(peer.address)
                     && now - peer.lastSeen <= PEER_FRESH_MS
                     && now >= peer.backoffUntil
                     && !pendingFor(peer, 1).isEmpty()) candidates.add(peer);
@@ -216,6 +249,12 @@ public final class RelayScheduler {
         });
         for (Peer peer : candidates) {
             if (sessions.size() >= MAX_CONNECTIONS) break;
+            boolean sameIdentityBusy = false;
+            for (String endpoint : sessions.keySet()) {
+                Peer other = peers.get(endpoint);
+                if (other != null && logical(peer).equals(logical(other))) sameIdentityBusy = true;
+            }
+            if (sameIdentityBusy) continue;
             List<MeshTransport.Packet> batch = pendingFor(peer, MAX_BATCH);
             if (batch.isEmpty()) continue;
             Object session = new Object();
@@ -238,6 +277,10 @@ public final class RelayScheduler {
                             if (!current()) return;
                             forwarded++;
                             peer.remember(id);
+                            if (peer.identity != null)
+                                for (Peer sibling : peers.values())
+                                    if (peer.identity.equals(sibling.identity))
+                                        sibling.remember(id);
                             Buffered buffered = queue.get(id);
                             if (buffered != null) {
                                 try {
@@ -293,6 +336,8 @@ public final class RelayScheduler {
                 .append("\n")
                 .append("Discovered transport endpoints: ")
                 .append(peers.size())
+                .append("\nLogical peers (unverified endpoints counted separately): ")
+                .append(publishedPeerCount)
                 .append("\n");
         long now = timer.elapsed();
         for (Peer peer : peers.values()) {
@@ -329,8 +374,10 @@ public final class RelayScheduler {
     }
 
     private void publishPeerCount() {
-        if (publishedPeerCount == peers.size()) return;
-        publishedPeerCount = peers.size();
+        Set<String> unique = new java.util.HashSet<>();
+        for (Peer peer : peers.values()) unique.add(logical(peer));
+        if (publishedPeerCount == unique.size()) return;
+        publishedPeerCount = unique.size();
         listener.onPeerCount(publishedPeerCount);
     }
 
@@ -348,6 +395,7 @@ public final class RelayScheduler {
 
     private static final class Peer {
         final String address;
+        String identity;
         long lastSeen, backoffUntil;
         int rssi, failures;
         final Set<String> deliveredIds = new LinkedHashSet<>();

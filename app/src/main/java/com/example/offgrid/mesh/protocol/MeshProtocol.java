@@ -134,6 +134,11 @@ public final class MeshProtocol {
                         localId, crypto.getPublicKeyBase64(), MeshConfig.KEY_ANNOUNCE_TTL));
     }
 
+    public MeshMessage inventory(String target, String body) throws GeneralSecurityException {
+        return crypto.signPacket(
+                MeshMessage.createInventory(localId, target, body, crypto.getPublicKeyBase64()));
+    }
+
     public boolean validPending(MeshMessage packet, long now) {
         return crypto.verifyPacket(packet)
                 && PacketSecurity.namespaced(packet)
@@ -170,15 +175,9 @@ public final class MeshProtocol {
                 || !crypto.verifyPacket(packet)
                 || !flood.allowSender(packet.getSenderId(), stream && packet.isControl()))
             return Incoming.IGNORED;
-        if (!storage.clockSafe(now)) {
-            String error =
-                    clockWarningShown
-                            ? null
-                            : "Receiving paused: device time moved backwards; check system time";
-            clockWarningShown = true;
-            return new Incoming(null, null, null, null, error);
-        }
-        clockWarningShown = false;
+        if (packet.isInventory()) return new Incoming(packet, null, null, null, null);
+        boolean sequenceNew = storage.canAcceptSequence(packet);
+        if (sequenceNew && !crypto.registerPacketKeys(packet)) return Incoming.IGNORED;
         if (extensions != null && localId.equals(packet.getTargetId())) {
             if (packet.isControl()) return extensions.control(packet, now);
             if (packet.isPrivate()) {
@@ -194,7 +193,7 @@ public final class MeshProtocol {
             storage.save(ack, null, false, ack, now);
             return new Incoming(packet, null, ack, null, null);
         }
-        if (storage.replayed(packet.getMessageId())) return Incoming.IGNORED;
+        if (!sequenceNew || storage.replayed(packet.getMessageId())) return Incoming.IGNORED;
         if (packet.isAcknowledgement() && localId.equals(packet.getTargetId())) {
             try {
                 String id =

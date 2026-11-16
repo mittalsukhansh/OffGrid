@@ -84,6 +84,8 @@ android {
 }
 
 dependencies {
+    implementation("org.bouncycastle:bcprov-jdk18on:1.83")
+    testImplementation("org.json:json:20250517")
     implementation(libs.zxing.embedded)
     implementation(libs.zxing.core)
     implementation(libs.room.runtime)

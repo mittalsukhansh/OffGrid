@@ -36,6 +36,10 @@ public interface MeshStorage {
 
     boolean replayed(String id);
 
+    default boolean canAcceptSequence(MeshMessage packet) {
+        return true;
+    }
+
     boolean clockSafe(long now);
 
     MeshMessage cachedReceipt(MeshMessage packet, long now) throws Exception;

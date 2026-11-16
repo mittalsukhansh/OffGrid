@@ -247,10 +247,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Run A–B–C and three repetitions per radio on actual phones; attach exports and receiver completion measurements. Continue protocol/backup/release work.
 - **Sources:** This change; [testing](TESTING.md)
 
+## D026 — 2026-11-16 — Protocol 5 replay, key separation, identity backup and inventory
+
+- **Status:** Implemented; local validation complete at commit; emulator validation pending
+- **Work:** Added separate signing/agreement identities, ephemeral-static ECDH per encrypted packet, signed contact bundles, durable sender epochs/reserved sequences and atomic Room 5 replay windows. Added encrypted identity/contact export/restore with fixed scrypt/AES-GCM and empty/stopped restore gating. Added bounded signed nonce inventory, endpoint identity coalescing and duplicate-send suppression. Added parser nesting bounds, seeded parser/framing fuzz smoke tests, deterministic production-relay partition/loss/reordering/restart simulation and migration/crypto/backup regressions. Updated current specifications/review and preserved the old protocol reference.
+- **Decision / reason:** Preserve signing IDs/history across upgrade; require new contact exchange and fingerprint comparison, and fail old pending wire versions closed. Replay evidence is independent of wall time and never silently evicted; cap/reordering tradeoffs are documented. Fresh restore epochs avoid sender sequence reuse from stale backups. Inventory hints are never delivery evidence. Ephemeral-static encryption does not provide full forward secrecy; reviewed session integration remains assessed/deferred.
+- **Validation / evidence:** Local debug build/lint/64 passing JVM tests/instrumentation compilation, including seeded production parser/framing and relay tests. Android runtime/physical results are not yet claimed. Prepared an older signed code-7 baseline and opt-in upgrade fixture locally; this is not yet upgrade-success evidence.
+- **Open items:** Run hosted Android runtime tests, signed in-place upgrade and release verification. Actual phones, upstream written consent and admin-only metadata/secrets remain open. Backup excludes history/media and inbound replay windows; concurrent identity clones unsupported. Audit custom protocol externally before security-critical use.
+- **Sources:** This change; [protocol](PACKET_FORMAT.md); [security](SECURITY.md); [backup](IDENTITY_BACKUP.md); [review](docs/REVIEW_REPORT.md)
+
 ## Template for the next work set
 
 ```markdown
-## D026 — YYYY-MM-DD HH:MM UTC — Short title
+## D027 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

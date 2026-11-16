@@ -31,7 +31,9 @@ public final class DeliveryReceipt {
         int separator = plaintext.lastIndexOf('|');
         String id = plaintext.substring(PREFIX.length(), Math.max(PREFIX.length(), separator));
         String hash = plaintext.substring(separator + 1);
-        if (id.isEmpty() || id.length() > MeshMessage.MAX_ID_LENGTH || !hash.matches("[0-9a-f]{64}")) {
+        if (id.isEmpty()
+                || id.length() > MeshMessage.MAX_ID_LENGTH
+                || !hash.matches("[0-9a-f]{64}")) {
             throw new IllegalArgumentException("Invalid receipt reference");
         }
         return new DeliveryReceipt(id, hash);
@@ -39,8 +41,10 @@ public final class DeliveryReceipt {
 
     /** Caller must authenticate/decrypt the ACK first. Never trust its cleartext envelope alone. */
     public boolean matches(MeshMessage acknowledgement, MeshMessage original) {
-        return acknowledgement.isAcknowledgement() && original.isPrivate()
-                && original.isPayloadEncrypted() && originalId.equals(original.getMessageId())
+        return acknowledgement.isAcknowledgement()
+                && original.isPrivate()
+                && original.isPayloadEncrypted()
+                && originalId.equals(original.getMessageId())
                 && original.getTargetId().equals(acknowledgement.getSenderId())
                 && original.getSenderId().equals(acknowledgement.getTargetId())
                 && fingerprint.equals(fingerprint(original));
@@ -51,6 +55,12 @@ public final class DeliveryReceipt {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             DataOutputStream data = new DataOutputStream(bytes);
+            if (message.getProtocolVersion() >= 5) {
+                data.writeInt(message.getProtocolVersion());
+                data.writeUTF(message.getEpoch() == null ? "" : message.getEpoch());
+                data.writeLong(message.getSequence());
+                data.writeUTF(message.getAgreementKey() == null ? "" : message.getAgreementKey());
+            }
             data.writeInt(message.getType());
             data.writeUTF(message.getMessageId());
             data.writeUTF(message.getSenderId());

@@ -13,6 +13,20 @@ public interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     void putWithdrawal(WithdrawalRecord row);
 
+    @Query(
+            "DELETE FROM replay_ledger WHERE id IN (SELECT id FROM replay_ledger ORDER BY"
+                + " expiresAtMs DESC LIMIT -1 OFFSET 10000)")
+    void trimReplayHints();
+
+    @Query("SELECT * FROM sequence_windows WHERE id = :id")
+    SequenceRecord sequence(String id);
+
+    @Query("SELECT COUNT(*) FROM sequence_windows")
+    int sequenceCount();
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    void saveSequence(SequenceRecord row);
+
     @Query("SELECT * FROM withdrawals WHERE id = :id")
     WithdrawalRecord withdrawal(String id);
 

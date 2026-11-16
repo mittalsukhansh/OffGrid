@@ -98,4 +98,24 @@ public class SecurityMigrationTest {
             InstrumentationRegistry.getInstrumentation().getTargetContext().deleteDatabase(name);
         }
     }
+
+    @Test
+    public void sequenceMigrationPreservesHistory() throws Exception {
+        String name = "sequence-migration-" + UUID.randomUUID();
+        try {
+            SupportSQLiteDatabase db = helper.createDatabase(name, 4);
+            db.execSQL(
+                    "INSERT INTO messages VALUES"
+                        + " ('old-message','public',X'010203',0,1,100,'RECEIVED','text',0)");
+            db.close();
+            db = helper.runMigrationsAndValidate(name, 5, true, MessageDatabase.MIGRATION_4_5);
+            try (android.database.Cursor rows = db.query("SELECT hex(content) FROM messages")) {
+                assertTrue(rows.moveToFirst());
+                assertEquals("010203", rows.getString(0));
+            }
+            db.close();
+        } finally {
+            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteDatabase(name);
+        }
+    }
 }

@@ -1,251 +1,61 @@
-# OffGrid packet format, version 4
+# OffGrid packet format, version 5
 
-This describes the current custom BLE/GATT protocol, not Bluetooth SIG Mesh.
-See `MeshMessage`, `PacketSecurity`, `DeliveryReceipt`, `CryptoManager` and
-`mesh/transport/FrameCodec` for executable definitions. No packet or schema version
-change is introduced by the component refactor.
+Executable definitions: `MeshMessage`, `PacketSecurity`, `CryptoManager`, `SequenceWindow`, `InventoryExchange` and the transport codecs. This custom protocol is not Bluetooth SIG Mesh. [Version 4](docs/PROTOCOL_V4.md) documents the previous format, including unchanged media controls/framing details; its static encryption and clock admission sections do not apply to version 5.
 
-## Discovery and byte transport
+## Envelope and signature
 
-- Advertised service UUID: `b8f1a2c4-6d3e-4f70-9a15-2e8c7d4b1f93`.
-- Writable GATT characteristic: `b8f1a2c5-6d3e-4f70-9a15-2e8c7d4b1f93`.
-- Advertisements discover peers; they do not contain chat messages.
-- Nodes act as both GATT server and client. A client writes one packet at a time
-  using writes with response, waiting for each write callback before the next
-  frame. Replies/ACKs use the receiver's own outbound client session.
+Compact UTF-8 JSON: `v`, `id`, `sid`, `typ`, optional `tid`, `txt`, `spk`, `apk`, `epoch`, `seq`, `sig`, `ttl`, `ts`.
 
-Each characteristic value is `flags:1 byte || raw packet slice`. Only two flag bits
-are defined: `0x01` FIRST, `0x02` LAST. A one-frame packet uses `0x03`; an interior
-frame uses `0x00`. Empty payloads, values under two bytes, reserved flag bits and
-values over 512 bytes are rejected. There are no sequence numbers or packet IDs
-in the frame header, so writes from one peer must not interleave different packets.
-
-For negotiated ATT MTU `m`, value capacity is `min(m - 3, 512)`, and each slice
-contains at most `min(m - 3, 512) - 1` bytes after the flag:
-
-| MTU | Maximum characteristic value | Packet bytes per frame |
-| --- | --- | --- |
-| 23 (default) | 20 | 19 |
-| 247 (requested) | 244 | 243 |
-| 517 | 512 | 511 |
-
-The fragmenter accepts MTUs 23–517 and packets 1–2,048 bytes. The receiver buffers
-at most sixteen peer assemblies, bounded to 2,048 bytes each, for twelve seconds
-from FIRST; continuations do not extend that deadline. A new FIRST replaces that
-peer's incomplete packet. Continuations without FIRST are ignored. Invalid input,
-oversize data or disconnect discards that peer's partial assembly. Expired entries
-are reclaimed on frame admission/maintenance. Completed bytes are decoded as a
-single UTF-8 JSON document, so split UTF-8 characters are never decoded per frame.
-
-Framing does not authenticate anything or detect every lost interior frame.
-Ordered GATT writes supply transport ordering; JSON validation, signatures and
-AES-GCM reject malformed/altered completed packets.
-
-## JSON envelope
-
-The sender emits compact UTF-8 JSON, at most 2,048 bytes including its envelope.
-This abbreviated public example is illustrative, **not** a valid signature vector:
-
-```json
-{"v":4,"id":"<64 lowercase hex>","sid":"<32 lowercase hex>","typ":0,"txt":"Hello","spk":"<public key>","sig":"<signature>","ttl":7,"ts":1770000000000}
-```
-
-| Key | Emitted type | Meaning |
-| --- | --- | --- |
-| `v` | integer | `4` for live traffic. The data model can also read saved version 2/3 history. |
-| `id` | string | 64 lowercase hex characters: sender ID followed by 32 random UUID hex characters. |
-| `sid` | string | 32 lowercase hex characters: first 16 bytes of SHA-256 of the raw public key. |
-| `typ` | integer | 0 public chat, 1 private chat, 2 key announcement, 3 ACK, 4 private control, 5 private media offer. |
-| `tid` | string, optional | Recipient's 32-hex ID for types 1, 3, 4 and 5; omitted for 0 and 2. |
-| `txt` | string | Type-specific plaintext, encrypted payload or announcement public key. |
-| `spk` | string | Sender's uncompressed P-256 public key, Base64url without padding. |
-| `sig` | string | DER-encoded SHA256withECDSA signature, Base64url without padding. |
-| `ttl` | integer | Mutable remaining hop budget, constrained to 0–15. |
-| `ts` | positive integer | Sender wall-clock creation time, epoch milliseconds. |
-
-The raw public key is 65 bytes: `0x04 || X(32) || Y(32)`, encoded as 87 Base64url
-characters. `spk` and `sig` are mandatory for accepted live traffic, including
-public chat and announcements. The parser's legacy allowances and default fields
-are for data/model compatibility; successful parsing alone is not network admission.
-Unknown versions/types, invalid structural constraints and oversize packets fail
-parsing; signature/namespace/time checks are an additional acceptance stage.
-
-Type 0 carries up to 280 Java UTF-16 code units of nonblank public text. It has no
-target and is signed, not encrypted. Type 1 carries Base64url `IV || ciphertext ||
-GCM tag`; its encoded payload is bounded to 1,600 characters. The plaintext is
-bounded to 280 UTF-16 code units at the chat API and 1,120 UTF-8 bytes at encryption.
-Type 2 carries the sender's 87-character public key in `txt` as well as `spk`.
-Type 3 carries encrypted receipt plaintext and is never displayed as a chat bubble.
-
-## Canonical signature bytes
-
-Verify the key's hash against `sid`, decode its P-256 point, then verify the DER
-signature over the following ordered bytes. JSON property order and whitespace
-are not signed directly.
-
-1. `writeUTF("offgrid-signed-packet-v1")`
-2. `writeInt(v)`, `writeInt(typ)`
-3. `writeUTF(id)`, `writeUTF(sid)`, `writeUTF(tid or "")`, `writeUTF(spk or "")`
-4. `writeLong(ts)`
-5. `writeUTF(txt)`
-
-These are **Java DataOutputStream encodings**: signed 32/64-bit big-endian integers,
-and a two-byte unsigned byte length followed by Java **modified UTF-8** for
-`writeUTF`. Modified UTF-8 differs from ordinary UTF-8 for NUL and supplementary
-characters. Implementations in another language must reproduce those bytes.
-The signature itself and TTL are excluded. Relays may decrement TTL without
-invalidating identity/content authentication; TTL remains a bounded mutable field.
-
-## Private encryption and authenticated receipts
-
-P-256 ECDH uses the static local private key and the recipient's public key.
-HKDF-SHA256 (zero salt, one 32-byte output block) derives a direction-specific key:
-
-- Chat info: `"offgrid-e2ee-v1|" + senderId + ">" + targetId`.
-- ACK info: `"offgrid-ack-v1|" + senderId + ">" + targetId`.
-
-The literal `>` occurs once between the two IDs. AES-256-GCM uses a random 12-byte IV and a 16-byte tag. AAD is
-the ordinary UTF-8 encoding of `id|sid|tid|ts`. The wire `txt` is unpadded Base64url
-of `IV || ciphertext || tag`. Separate HKDF purposes prevent retyping chat
-ciphertext as a receipt. All packets are also signed at the envelope layer.
-
-ACK plaintext is `offgrid-receipt-v1|<original-id>|<fingerprint>`; the fingerprint
-is 64 lowercase SHA-256 hex characters. Split at the last `|` after the prefix.
-Its hashed bytes are `writeInt(original typ)`, then `writeUTF(id)`, `writeUTF(sid)`,
-`writeUTF(tid or "")`, `writeUTF(spk or "")`, `writeLong(ts)`, `writeUTF(txt)` using
-the same DataOutputStream conventions. TTL/signature/version are not in this
-receipt fingerprint. The ACK's own envelope signature still binds its version,
-type, endpoints, time and ciphertext.
-
-The sender only marks Delivered after authenticating/decrypting the ACK and
-matching its sender/target, referenced original ID and fingerprint against a saved
-outgoing private message. Receipt acceptance, replay evidence, status change and
-original outbox deletion are atomic. The recipient atomically saves the incoming
-message and its receipt outbox entry. A cached receipt can be reused for an exact
-duplicate original without re-displaying it or resetting the ACK's deadline/count.
-Decrypted private display copies refuse serialization; relays retain ciphertext.
-
-Static ECDH does not provide forward secrecy. See SECURITY.md for the session
-protocol assessment and trust limitations.
-
-## TTL, time, replay and scheduling
-
-A receiver may deliver an accepted packet locally, then computes `max(0, ttl - 1)`
-and relays only if the result is greater than zero. TTL 0 and 1 therefore stop at
-that receiver. Private recipients emit a fresh signed ACK with its own default
-TTL 7 instead of continuing to flood the original. Announcements start with TTL 4;
-normal outgoing chat starts with TTL 7. Maximum accepted TTL is 15.
-
-Admission requires a version 4 signature, a sender-prefixed ID and creation time
-within ten minutes past / two minutes future relative to the receiver. The durable
-replay ledger records accepted IDs for thirty minutes with a 10,000-entry cap;
-full capacity rejects new work rather than deleting unexpired evidence. A durable
-wall-clock floor rejects significant clock rollback. Exact private duplicates
-addressed to this device have only the cached-receipt exception described above.
-
-Relay policy is separate from the wire format: 200 queued packets, original
-ten-minute deadlines, six-forward eligibility, at most three concurrent outbound
-sessions, 20 packets per session, bounded peer history, jitter and backoff. Reboot
-recovery preserves remaining lifetime and forwarding count. A successful GATT
-write means Forwarded, not Delivered. Radio errors can be retried; expiration is
-lack of confirmation, not proof of non-receipt. Flood limits are in SECURITY.md.
-
-## Version 4 offline actions
-
-Type 4 is a signed encrypted private control packet. Its HKDF info is
-`"offgrid-control-v1|" + senderId + ">" + targetId`; the IV, AES-GCM tag and AAD
-layout match the existing private encryption, but the distinct purpose prevents
-chat/receipt/control reflection. Its decrypted JSON has a `kind` and a `mid`
-referencing a 64-hex original message/transfer ID:
-
-| Kind | Additional fields / behavior |
+| Field | Definition |
 | --- | --- |
-| `withdraw` | `when`: original timestamp. Only the original author may withdraw a private message for that target. |
-| `withdraw_ack` | `request`: withdrawal packet ID. Only the intended recipient may confirm it. |
-| `media_query` | Ask for the persisted receiver bitmap, or a final receipt when complete. |
-| `media_missing` | Ask the source to retransmit an unaccepted offer within its original admission window. |
-| `media_offer` | `wire`: complete signed type-5 offer. The inner signature, endpoints, time and ID are revalidated; this permits recovery without resetting the original identity. |
-| `media_status` | `bits`: unpadded Base64url of Java BitSet.toByteArray (least significant bit first per byte); `failed`: boolean. This is progress, never proof of Delivered. |
-| `media_chunk` | `index`: zero-based part; `data`: unpadded Base64url of at most 640 file bytes. Exact last-part length is checked. |
+| `v` | Integer 5 required for live packets. Saved versions 2/3/4 remain readable. |
+| `sid` | First 16 bytes of SHA-256(raw signing public key), 32 lowercase hex. Existing signing identity is retained on upgrade. |
+| `id` | `sid` followed by 32 random UUID hex characters. |
+| `spk`, `apk` | Distinct signing/agreement P-256 public points: uncompressed 65 bytes, Base64url, no padding (87 characters). |
+| `epoch` | Signed 32-hex random installation/restore epoch. Persisted across ordinary process restarts. |
+| `seq` | Positive signed 64-bit sender sequence, reserved durably in blocks of 64 before use; unused numbers may be skipped. |
+| `sig` | DER SHA256withECDSA signature, Base64url. |
+| `ttl` | Mutable 0–15, normally 7; signatures deliberately exclude this relay budget. |
+| `ts` | Positive sender wall-clock milliseconds for display; not the replay authority. |
 
-Type 5 is an encrypted private media manifest using the existing chat HKDF purpose;
-the envelope signature binds its distinct packet type. The plaintext JSON contains
-`mime` (`image/jpeg` or `video/mp4`), `size`, `parts = ceil(size/640)`, and `sha256`
-(the whole-file digest, 64 lowercase hex). It is saved as a conversation entry,
-but its ordinary private ACK is withheld until all bytes pass length/hash and media
-validation and the encrypted file commits to Room. That final normal ACK refers to
-the exact type-5 original; a progress bitmap cannot mark it Delivered.
+The canonical signature is Java `DataOutputStream`: `writeUTF("offgrid-signed-packet-v1")`, int version, int type, UTF id, UTF sender, UTF target (empty if absent), UTF signing public key, UTF epoch, long sequence, UTF agreement public key, long timestamp, UTF text. `writeUTF` is Java's length-prefixed modified UTF-8. All fields other than TTL are bound. Validate public curve points, self-derived sender ID, namespace, signature, ingress limits and replay policy before acceptance. Receipt fingerprints also bind version, epoch, sequence and agreement key.
 
-Outgoing parts have a four-part in-flight window, fresh signed packet IDs on retry
-after 45 seconds, and persisted send times/receiver bitmaps. The worker prepares
-at most two chunks per five-second pump across transfers, sharing the existing
-flood budgets. Initial offer admission expires after ten minutes; an accepted
-transfer can run for one hour. Restart recovery retains progress. Network delivery
-is still best-effort, including withdrawals.
+| Type | Payload and target |
+| --- | --- |
+| 0 public | Signed plaintext, at most 280 UTF-16 units; no target. |
+| 1 private | Encrypted chat addressed to a recipient ID. |
+| 2 announcement | Signing public key in text; authenticated agreement key in envelope. |
+| 3 receipt | Purpose-separated encrypted receipt for the exact immutable original packet. |
+| 4 control | Encrypted withdrawal/media control JSON; maximum 12 KiB plaintext. |
+| 5 media | Encrypted attachment manifest/offer, with resumable canonical 640-byte blocks. |
+| 6 inventory | Signed plaintext request/response, TTL zero; never relayed, displayed, persisted in outbox or treated as a receipt. |
 
-Withdrawal markers survive the temporary replay window. A valid deletion request
-may arrive before the original; later copies cannot resurrect it. Existing
-message content, partial files and app cache are removed at application level;
-this is not guaranteed secure erasure of SQLite/WAL/storage remnants or external
-copies. Acknowledgements to older withdrawal attempts do not confirm a newer
-retry. Ordinary late message ACKs cannot undo an unsend.
+Ordinary packets including inventory remain bounded to 2,048 serialized bytes; controls allow 32,768. Ordinary encrypted payloads allow 1,800 Base64url characters; encrypted control ceiling is 16,512. Chat encryption is bounded to 1,120 plaintext UTF-8 bytes; actual UI text is also limited to 280 UTF-16 units. Untrusted JSON has at most 16 nesting levels and 32 KiB; transport byte limits apply before allocation/parsing. Larger media ranges use control packets on stream transports, never oversized GATT frames.
 
-Wire version 4 is required on every endpoint and relay. Saved history from versions
-2 and 3 remains readable. Room schema 3 adds withdrawal/media/part tables plus
-message kind/progress with a non-destructive 2→3 migration. Forward secrecy remains
-unimplemented.
+## Encryption
 
-## Optional local Wi-Fi framing (0.3-dev)
+Each private/control/receipt encryption generates a fresh P-256 ephemeral pair. Compute ECDH(ephemeral private, recipient agreement public), then HKDF-SHA256 with zero salt and info `offgrid-e2ee-v5|sender>target` for chat/media, `offgrid-ack-v5|sender>target` for receipts or `offgrid-control-v5|sender>target` for controls. Produce a 32-byte AES key. Payload is Base64url(`ephemeral_public(65) || iv(12) || AES-256-GCM ciphertext || tag(16)`). AAD is UTF-8 `messageId|senderId|targetId|timestamp`. The outer signature authenticates the ephemeral point and ciphertext. Signing keys never perform live ECDH.
 
-The signed JSON packet and wire version 4 are unchanged. DNS-SD advertises
-`_offgrid._tcp.` with a random service-instance name, a dynamic TCP port and
-`framing=1`. Discovery does not establish contact trust. TCP is bound to the
-selected local Wi-Fi IPv4 address/network, with same-subnet peer admission.
+This ephemeral-static construction is **not full forward secrecy**: later compromise of the recipient agreement private key permits recorded-message decryption. There is no ratchet or post-compromise recovery. See [security](SECURITY.md).
 
-Each connection starts with two big-endian 32-bit integers: magic `0x4f474c31`
-(`OGL1`), then a packet count from 1 through 20. Each packet is a big-endian 32-bit
-length from 1 through 2048 followed by exactly that many signed-JSON bytes. The
-receiver passes it through the normal protocol/flood/replay pipeline and writes
-one byte `0x01` as a **transport** confirmation. This is not signed and proves
-neither recipient identity nor message delivery. Delivered still requires the
-existing encrypted authenticated message receipt, queued in the reverse direction.
-Bad lengths, truncated frames, invalid headers and timed-out sessions are closed.
-An unsent or canceled item can terminate a batch; remaining durable items can retry.
-Public message content remains plaintext on Wi-Fi, just as it is over BLE.
+## Durable replay protection
 
-## Negotiated range extension (current development)
+Room schema 5 stores `(senderId, epoch) → highest sequence + 4,096-bit sliding receive window` in the same transaction as history, queue, media/control and delivery changes. Out-of-order packets within the window are accepted once. Sequences older than the window are rejected. Evidence is never time-expired or silently evicted. The global 4,096 sender-epoch capacity fails closed when full; discovering enough distinct identities/epochs can exhaust it. Clearing application data removes local evidence; identity backup does not restore inbound replay windows.
 
-Normal wire envelopes remain version 4. A new receiver advertises `ranges: true`
-inside its signed encrypted `media_status` control body. Legacy senders ignore the
-extra field; a new sender without that authenticated capability keeps `media_chunk`
-at 640-byte/GATT pacing. The manifest and bitmap still describe 640-byte blocks.
+The temporary ID ledger is only a duplicate-handling hint. Wall-clock rollback no longer pauses version 5 reception. Local queue expiry/display/deadline behavior still uses wall time, so clock changes can affect delivery timing. A first-seen old signed packet cannot be proven recent from sequence alone; timestamps do not constitute a freshness guarantee.
 
-`media_range` is a control kind with `mid`, a starting canonical `index` and Base64url
-`data` for 1–12 adjacent blocks (at most 7,680 file bytes). Non-final ranges must be
-block aligned; an ending partial block must match the exact remaining file length.
-Only the original file author/target may send/accept it. All added blocks, replay
-evidence and progress are committed atomically; failure rolls back the whole range.
-Each range receives a progress response. Full length/hash/media validation and the
-ordinary final authenticated receipt remain mandatory for Delivered.
+Legacy pending packets fail live-version validation and are marked Failed; existing history stays readable. Every endpoint/relay must upgrade, and old contacts must exchange a version-5 contact bundle before private sending. Reverification is required because the displayed fingerprint now covers both keys.
 
-Only control envelopes can now use up to 12 KiB plaintext / 32 KiB serialized
-packet bounds. Ordinary packet limits stay 2,048 bytes. GATT framing stays capped
-at 2,048; TCP and CoC OGL1 framing permit 32 KiB packets. Older relays cannot carry
-these large envelopes. Direct-ingress hints select profiles; unknown/relayed paths
-stay conservative, and missing range blocks can be regenerated as smaller packets
-on retry. Details and limits are in THROUGHPUT.md. CoC service-data advertisements
-are `4f 01 psmHi psmLo` in a scan response; PSM is a dynamic LE value 128–255.
+## Inventory and logical peers
 
-## AP-free Wi-Fi Direct link
+Before ordinary forwarding to a newly seen endpoint, exchange signed request/response packets containing `{kind, nonce, ids}`. Request target equals its sender (unknown remote identity); response target equals the challenger. A response must echo the exact random 128-bit challenge issued to that endpoint within five monotonic seconds. Only that response associates an endpoint with its signer and supplies inventory hints. A request alone never establishes an endpoint identity.
 
-WifiP2p DNS-SD advertises `OffGrid` / `_offgrid._tcp` with link revision 1 before
-pairing. Android forms the group. TCP binds the group's actual private IPv4 address
-at port 39997; no owner IP is hardcoded. The client sends an 8-byte discovery hello:
-32-bit big-endian magic `0x4f475031` and version `1`. The owner replies identically,
-learning the client's TCP source address for reverse sessions. This hello is
-unauthenticated link discovery, not an identity, key exchange or Delivered receipt.
+Each page advertises up to 12 exact packet IDs from the current relay queue. Pages rotate; requests are bounded to one per endpoint per 15 seconds, responses one per second, and state to 200 endpoints. No Bloom false positives; the inventory is partial, not complete history synchronization. Failure/old peers fall back to ordinary bounded forwarding after five seconds. Inventory consumes the normal cryptographic ingress flood budget and can be visible to observers.
 
-Data sessions use existing OGL1 framing and unchanged signed version-4 packets,
-control/range caps, crypto domains, TTL/replay and final-receipt rules. Groups use
-an owner/client star: the owner can relay between clients, and evidently relayed
-routes can retain conservative media pacing. See WIFI_DIRECT.md.
+Known inventory/forwarded IDs are shared across authenticated aliases of the same identity. Peer counts coalesce those aliases; unverified endpoints count separately. Scheduler permits at most one concurrent data session per logical identity and prefers stream profiles. Endpoint proof means a signer is reachable through that path, not physical proximity or a verified human. A peer can suppress traffic to itself by lying about its inventory. It cannot mark anything Delivered.
+
+## Byte transports
+
+GATT uses FIRST/LAST flag fragments, ordered writes with response, 2,048-byte reassembly, 16 active assemblies, 12-second deadline and negotiated MTU 23–517 (characteristic values at most 512). See the historical framing specification for exact unchanged flags/UUIDs.
+
+LAN/Direct/CoC use bounded OGL1 framing: magic `0x4f474c31`, batch count 1–20, then positive 32-bit lengths up to 32,768 and raw packets. Transport confirmations mean Forwarded. Direct uses OGP1 hello/version 1 for endpoint discovery; that hello is not authenticated identity exchange. Only signed nonce inventory establishes the logical-peer mapping. Wi-Fi Direct uses actual Android P2P group interfaces/addresses; no shared AP or internet is required. See [Wi-Fi Direct](WIFI_DIRECT.md) and [throughput](THROUGHPUT.md).

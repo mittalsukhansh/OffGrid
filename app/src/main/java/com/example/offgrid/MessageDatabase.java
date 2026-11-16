@@ -9,6 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 @Database(
         entities = {
             ChatRecord.class,
+            SequenceRecord.class,
             PendingRecord.class,
             ReplayRecord.class,
             SecurityClock.class,
@@ -16,9 +17,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
             MediaRecord.class,
             MediaPart.class
         },
-        version = 4,
+        version = 5,
         exportSchema = true)
 public abstract class MessageDatabase extends RoomDatabase {
+    public static final Migration MIGRATION_4_5 =
+            new Migration(4, 5) {
+                @Override
+                public void migrate(@NonNull SupportSQLiteDatabase db) {
+                    db.execSQL(
+                            "CREATE TABLE IF NOT EXISTS sequence_windows (id TEXT NOT NULL PRIMARY"
+                                    + " KEY, highest INTEGER NOT NULL, bits BLOB NOT NULL)");
+                }
+            };
     public static final Migration MIGRATION_3_4 =
             new Migration(3, 4) {
                 @Override

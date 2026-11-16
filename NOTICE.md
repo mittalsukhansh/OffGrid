@@ -25,3 +25,7 @@ ownership of upstream work.
 Third-party libraries and tools retain their respective authorship and licensing.
 The dependency inventory starts in `gradle/libs.versions.toml` and the Gradle build
 files. This notice is not a complete dependency license inventory or legal review.
+
+Identity backup uses Bouncy Castle bcprov-jdk18on 1.83 (SCrypt), under its
+MIT-style license: https://www.bouncycastle.org/licence.html .
+This dependency license does not grant rights to inherited OffGrid source.
