@@ -1,0 +1,13 @@
+# OffGrid 1.1.2 experimental queue fairness evidence
+
+Published 17 November 2026 from source `001e9a379e6708804772f079ae838287796686b0`, versionName `1.1.2-experimental`, versionCode 112. Application ID, pinned certificate, Room schema 6 and protocol 5 are unchanged.
+
+- [Source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44072897339) passed build/lint, 82 JVM/six host tests and Android runtime suites. Added boundary/queue-retention/unsend/slow-solo/pause/progress/fallback/alias/retry-completion/cancellation-metric regressions. A new test reproduced the two-slow-packet endless-abort risk on an intermediate source before the final guard correction; no intermediate APK was released.
+- Android tests use a real loopback socket to show targeted cancellation releases a stalled send without stopping the P2P link. Actual Room/Keystore tests verify a successful durable chat save emits its completion independently of history rendering and an outer transaction rollback cannot emit a false saved event. These are not Bluetooth-radio tests.
+- [Signed upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44073685324) installed actual published v1.1.1/code111 plus matching fixture2, seeded/reopened data, then performed signed `adb install -r` to code112 and verified identity/signing key, verified dual-key contact/fingerprint, nickname and encrypted history. No uninstall occurred.
+- Independently downloaded the [public release APK](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.2), checked SHA-256 `ad384a4d27007ff2a867ba1aef7d9c06cdde975555ed9137647b74ab8ac86aee` against staging/published checksums, and verified pinned signer, package, version/code and embedded source.
+- Before staging, signing/history audit checked 579 reachable blobs and two public current signing files with zero findings. No private signing material was staged/released.
+
+Archived [manifest](manifest.json), [upgrade transcript](upgrade.txt), [checksum](SHA256SUMS), [signature report](signature.txt).
+
+The three-second rule applies when another untried chat/receipt is ready. Original packets remain queued on yield; removing an active original cancels it promptly. Once all queued chats have had a first opportunity, normal retry timeouts allow slow working links to complete; new untried chats still trigger yielding. A sole slow packet is not repeatedly aborted. Native cancellation, reconnection and discovery can still take time. The composer waits for durable save, never recipient delivery. Radio range and measured timing are not established by these tests. Use [the phone retest](../../../TESTING.md#three-second-queue-and-unsend-retest-112); retain the existing licensing/security/offline-backup limitations.

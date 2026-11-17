@@ -508,10 +508,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Final exact-source CI, signed upgrade/publication, downloaded-APK verification and cleanup. Owner physical BLE/unsend/weak-link timing remains required; no radio reliability/speedup claim is made.
 - **Sources:** This change; D052–D053; https://github.com/mittalsukhansh/OffGrid/actions/runs/44071132534; THROUGHPUT.md; TESTING.md.
 
+## D055 — 2026-11-17 UTC — Consolidate and stage signed three-second queue patch
+
+- **Status:** Source integrated and checks passed; signed upgrade/publication pending
+- **Work:** Fast-forwarded tested queue-turn source 001e9a3 into main. Staged exact-source signed code112/1.1.2-experimental APK, matching fixture2 and the actual published v1.1.1/code111 baseline plus its matching fixture on one temporary release-assets/v1.1.2 commit. Publish=true/tag v1.1.2 delivers the owner's requested queue/unsend fix as an in-place experimental patch. No private material is staged.
+- **Decision / reason:** Retain the original queue while giving new text its first send opportunity, cancel unsent active work promptly and protect eventual completion of slow retries. Require real signed install-r continuity before publication; the three-second rule is scheduling policy, not a radio-delivery claim.
+- **Validation / evidence:** Final source 001e9a3 passed both hosted jobs in run 44072897339: build/lint, 82 JVM/six host tests and Android runtime suites, including native socket cancellation and durable-save/rollback. Signed assembly/lint/test-fixture compilation and standalone APK pin/package/code/version/source checks passed. Public signing/history scan: 579 blobs, two current public files, zero findings. Baseline is the downloaded public release, not a rebuilt replacement.
+- **Open items:** Signed v1.1.1→1.1.2 upgrade/publication, independent download verification, evidence archive and branch cleanup. Owner actual phone unsend/queue/weak-link/alias tests and prior legal/admin/offline-media limits remain open.
+- **Sources:** This change; D052–D054; https://github.com/mittalsukhansh/OffGrid/actions/runs/44072897339; RELEASE_NOTES_1.1.2.md.
+
+## D056 — 2026-11-17 UTC — Publish verified 1.1.2 queue fairness patch
+
+- **Status:** Published experimental v1.1.2; source consolidated on main; public APK verified
+- **Work:** Successful workflow 44073685324 seeded/reopened the actual signed v1.1.1/code111 baseline, installed code112/1.1.2-experimental with install-r and verified identity, verified dual-key contact/fingerprint, nickname and encrypted history. Published tag v1.1.2 from 001e9a3 and applied notes to explicitly targeted mittalsukhansh/OffGrid. Independently downloaded/verified the APK and archived public manifest/hash/signature/upgrade evidence. Preserved D055 preparation log, updated current docs and removed merged feature/temporary artifact branches; origin has only main and no binary artifact commits were merged.
+- **Decision / reason:** Deliver three-second first-opportunity scheduling without discarding originals or creating an endless retry-reset loop. Immediate unsend/removal cancellation and durable-save composer release address separate sources of blocking. Actual native/radio delivery is not guaranteed in three seconds; no phone speed/range claim is inferred.
+- **Validation / evidence:** Exact-source CI 44072897339 passed build/lint, 82 JVM/six host tests and Android runtime suites, including real socket cancellation and transactional saved-event/rollback. Signed upgrade/publication 44073685324 passed. Downloaded APK SHA-256 ad384a4d27007ff2a867ba1aef7d9c06cdde975555ed9137647b74ab8ac86aee matches staged/published checksums; pin/package/code/version/source verified. Pre-stage signing audit: 579 blobs, two public files, zero findings. Final public evidence/local links/diff checks performed; documentation-only evidence commit skips redundant Android CI.
+- **Open items:** Owner real BLE/GATT/CoC/Wi-Fi queue/unsend/alias/weak-link timing, actual third-phone relay and throughput results; prior security/licensing/admin/offline-media responsibilities remain documented. Three seconds is an opportunity for untried chat, not an authenticated Delivered/Failed deadline.
+- **Sources:** This change; D052–D055; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.2; https://github.com/mittalsukhansh/OffGrid/actions/runs/44073685324; docs/audits/release-1.1.2/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D055 — YYYY-MM-DD HH:MM UTC — Short title
+## D057 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

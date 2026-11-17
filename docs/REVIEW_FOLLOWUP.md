@@ -43,3 +43,8 @@ The signed code-100→101 experimental candidate passed the API-30 in-place upda
 ## Published 1.1.1 latency follow-up
 
 [Experimental patch 1.1.1](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.1), code111, prioritizes next-batch receipts/text and removes recurring inventory forwarding pauses. Chat can proceed during the initial inventory exchange; cryptographic/replay/flood admission is unchanged. Owner reports distance-related text/media delays without timings or a confirmed third-phone path. [Automated and signed-upgrade evidence](audits/release-1.1.1/README.md) does not establish measured radio speed/range. Compare the same payload/transport and record near/far completion times before tuning radio rates.
+
+
+## Published 1.1.2 queue/unsend follow-up
+
+[Patch 1.1.2](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.2), code112, adds conditional three-second first send turns, shared alias deferral, targeted native connection cancellation and composer release after a durable save. Unsend/removal cancels active original work immediately; original undelivered messages remain queued on yield. Retried slow packets can complete once queued chats have had first opportunities. [Hosted/native-socket/signed-upgrade evidence](audits/release-1.1.2/README.md) is available; actual BLE/GATT/CoC timing, weak links and third-phone behavior still need owner testing.

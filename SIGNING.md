@@ -161,3 +161,8 @@ The [v1.1 publication workflow](https://github.com/mittalsukhansh/OffGrid/action
 ## Published 1.1.1 latency patch
 
 [Upgrade/publication workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44065763471) passed actual API-30 signed v1.1/code110→1.1.1-experimental/code111 continuity before publication. [Exact-source checks](https://github.com/mittalsukhansh/OffGrid/actions/runs/44065006584) passed for 2ba6336. The published APK was downloaded and independently checked for hash, pinned signer, package, version/code and signed source. [Public evidence](docs/audits/release-1.1.1/README.md). No phone throughput/range result is implied.
+
+
+## Published 1.1.2 queue fairness patch
+
+[Upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44073685324) passed an actual API-30 signed v1.1.1/code111→1.1.2-experimental/code112 install-r, retaining identity, verified contact/fingerprint, nickname and encrypted history. [Exact-source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44072897339) passed for 001e9a3 (82 JVM/six host tests and Android runtime suites). The public APK was independently downloaded and checked for hash, pin, package, version/code and source. [Evidence](docs/audits/release-1.1.2/README.md). Real phone cancellation timing remains separate.
