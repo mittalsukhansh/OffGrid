@@ -544,10 +544,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Exact-source hosted tests, consolidation into main and deleting merged origin/ui/integration branches; record actual final evidence after success. Existing physical/legal/admin/offline-media limits remain open. No new release requested/published here.
 - **Sources:** This merge; ui commit 6f736021f68372e870651cb128bb9f97c8a099df; main 86d4c66; D057; README.md.
 
+## D059 — 2026-11-17 UTC — Align QR round-trip tests with production scan formats
+
+- **Status:** Test fixture corrected; hosted rerun pending
+- **Work:** Integrated source 0f9b445 passed build/lint/82 JVM/host checks and Android UI navigation/name/diagnostics assertions. One QR round-trip test failed because its unrestricted MultiFormatReader classified a random QR pattern as a different barcode (05113491). Production ScanOptions already requests QR_CODE only. Use the explicit QRCodeReader in both signed named/legacy QR round-trip tests, retaining exact payload equality and import/crypto assertions.
+- **Decision / reason:** Test the same permitted format as the real scanner rather than accept a 1D false positive or relax signed-contact equality. This changes test decoding only; production contact exchange and crypto are unchanged.
+- **Validation / evidence:** Inspected the failed run's XML: one actual payload-mismatch failure plus four intentional opt-in assumption entries; UI tests were not the failure. Original exact bundle comparison remains in place. Compile and hosted rerun cover the corrected reader.
+- **Open items:** Passing final exact-source rerun, main consolidation/branch cleanup/evidence recording. No new APK release is implied.
+- **Sources:** This change; https://github.com/mittalsukhansh/OffGrid/actions/runs/44075748030; D058; MainActivity.scanContact ScanOptions.QR_CODE.
+
 ## Template for the next work set
 
 ```markdown
-## D059 — YYYY-MM-DD HH:MM UTC — Short title
+## D060 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

@@ -12,9 +12,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.google.zxing.BinaryBitmap;
-import com.google.zxing.MultiFormatReader;
 import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
+import com.google.zxing.qrcode.QRCodeReader;
 
 import org.junit.After;
 import org.junit.Before;
@@ -77,7 +77,7 @@ public class TrustSecurityTest {
         int[] pixels = new int[512 * 512];
         qr.getPixels(pixels, 0, 512, 0, 0, 512, 512);
         String decoded =
-                new MultiFormatReader()
+                new QRCodeReader()
                         .decode(
                                 new BinaryBitmap(
                                         new HybridBinarizer(
@@ -165,7 +165,7 @@ public class TrustSecurityTest {
         int[] pixels = new int[512 * 512];
         bitmap.getPixels(pixels, 0, 512, 0, 0, 512, 512);
         String decoded =
-                new MultiFormatReader()
+                new QRCodeReader()
                         .decode(
                                 new BinaryBitmap(
                                         new HybridBinarizer(
