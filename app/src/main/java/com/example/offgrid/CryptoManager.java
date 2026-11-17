@@ -303,6 +303,12 @@ public final class CryptoManager {
         return (name.isEmpty() ? "" : name + " · ") + formatId(id, 8);
     }
 
+    /** Discovery alone is unknown; only owner import/verification grants replay reservations. */
+    public synchronized int replayPriority(String id) {
+        ContactRecord record = contacts.get(id);
+        return record == null ? 0 : record.verified ? 2 : record.manual ? 1 : 0;
+    }
+
     public synchronized boolean isVerified(String id) {
         ContactRecord record = contacts.get(id);
         return record != null && record.verified;

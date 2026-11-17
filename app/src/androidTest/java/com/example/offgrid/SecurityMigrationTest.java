@@ -106,12 +106,41 @@ public class SecurityMigrationTest {
             SupportSQLiteDatabase db = helper.createDatabase(name, 4);
             db.execSQL(
                     "INSERT INTO messages VALUES"
-                        + " ('old-message','public',X'010203',0,1,100,'RECEIVED','text',0)");
+                            + " ('old-message','public',X'010203',0,1,100,'RECEIVED','text',0)");
             db.close();
             db = helper.runMigrationsAndValidate(name, 5, true, MessageDatabase.MIGRATION_4_5);
             try (android.database.Cursor rows = db.query("SELECT hex(content) FROM messages")) {
                 assertTrue(rows.moveToFirst());
                 assertEquals("010203", rows.getString(0));
+            }
+            db.close();
+        } finally {
+            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteDatabase(name);
+        }
+    }
+
+    @Test
+    public void replayReservationMigrationRetainsWindowBytes() throws Exception {
+        String name = "replay-reservation-migration-" + UUID.randomUUID();
+        String sender = "11111111111111111111111111111111";
+        try {
+            SupportSQLiteDatabase db = helper.createDatabase(name, 5);
+            db.execSQL(
+                    "INSERT INTO sequence_windows VALUES ('"
+                            + sender
+                            + ":22222222222222222222222222222222',42,X'01')");
+            db.close();
+            db = helper.runMigrationsAndValidate(name, 6, true, MessageDatabase.MIGRATION_5_6);
+            try (android.database.Cursor row =
+                    db.query(
+                            "SELECT senderId,highest,hex(bits),priority,lastUsed FROM"
+                                + " sequence_windows")) {
+                assertTrue(row.moveToFirst());
+                assertEquals(sender, row.getString(0));
+                assertEquals(42, row.getLong(1));
+                assertEquals("01", row.getString(2));
+                assertEquals(0, row.getInt(3));
+                assertEquals(0, row.getLong(4));
             }
             db.close();
         } finally {

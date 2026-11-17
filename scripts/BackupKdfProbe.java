@@ -15,7 +15,7 @@ public final class BackupKdfProbe {
             long end = System.nanoTime();
             if (!Arrays.equals(plain, decoded)) throw new AssertionError("Round-trip failed");
             if (i == -1) {
-                System.out.println("{\"scope\":\"Host JVM only; not Android or radio performance\",\"capturedUtc\":\"" + Instant.now() + "\",\"javaVersion\":\"" + System.getProperty("java.version") + "\",\"format\":\"OGB1\",\"N\":32768,\"r\":8,\"p\":1,\"derivedKeyBytes\":32,\"coreMemoryBytes\":33554432,\"samples\":[");
+                System.out.println("{\"scope\":\"Host JVM only; not Android or radio performance\",\"capturedUtc\":\"" + Instant.now() + "\",\"javaVersion\":\"" + System.getProperty("java.version") + "\",\"format\":\"OGB2\",\"N\":32768,\"r\":8,\"p\":1,\"derivedKeyBytes\":32,\"coreMemoryBytes\":33554432,\"samples\":[");
             } else {
                 System.out.print((i == 0 ? "" : ",") + "{\"encryptMs\":" + (middle - start) / 1_000_000 + ",\"decryptMs\":" + (end - middle) / 1_000_000 + "}");
             }

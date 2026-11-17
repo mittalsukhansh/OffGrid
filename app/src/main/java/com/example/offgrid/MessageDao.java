@@ -15,8 +15,36 @@ public interface MessageDao {
 
     @Query(
             "DELETE FROM replay_ledger WHERE id IN (SELECT id FROM replay_ledger ORDER BY"
-                + " expiresAtMs DESC LIMIT -1 OFFSET 10000)")
+                    + " expiresAtMs DESC LIMIT -1 OFFSET 10000)")
     void trimReplayHints();
+
+    @Query("SELECT COUNT(*) FROM sequence_windows WHERE priority = :priority")
+    int sequenceTierCount(int priority);
+
+    @Query("SELECT COUNT(*) FROM sequence_windows WHERE senderId = :sender")
+    int sequenceSenderCount(String sender);
+
+    @Query("SELECT COALESCE(MAX(priority),0) FROM sequence_windows WHERE senderId = :sender")
+    int sequenceSenderPriority(String sender);
+
+    @Query("SELECT COALESCE(MAX(lastUsed),0) FROM sequence_windows")
+    long sequenceOrdinal();
+
+    @Query("SELECT * FROM sequence_windows WHERE priority = 0 ORDER BY lastUsed,id LIMIT 1")
+    SequenceRecord sequenceVictim();
+
+    @Query(
+            "SELECT * FROM sequence_windows WHERE priority = 0 AND senderId = :sender ORDER BY"
+                + " lastUsed,id LIMIT 1")
+    SequenceRecord sequenceVictimForSender(String sender);
+
+    @Query(
+            "UPDATE sequence_windows SET priority = :priority WHERE senderId = :sender AND priority"
+                    + " < :priority")
+    void promoteSequences(String sender, int priority);
+
+    @Query("DELETE FROM sequence_windows WHERE id = :id AND priority = 0")
+    int deleteUnknownSequence(String id);
 
     @Query("SELECT * FROM sequence_windows WHERE id = :id")
     SequenceRecord sequence(String id);

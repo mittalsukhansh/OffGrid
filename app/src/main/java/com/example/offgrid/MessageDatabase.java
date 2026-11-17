@@ -17,9 +17,31 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
             MediaRecord.class,
             MediaPart.class
         },
-        version = 5,
+        version = 6,
         exportSchema = true)
 public abstract class MessageDatabase extends RoomDatabase {
+    public static final Migration MIGRATION_5_6 =
+            new Migration(5, 6) {
+                @Override
+                public void migrate(@NonNull SupportSQLiteDatabase db) {
+                    db.execSQL(
+                            "ALTER TABLE sequence_windows ADD COLUMN senderId TEXT NOT NULL DEFAULT"
+                                + " ''");
+                    db.execSQL(
+                            "ALTER TABLE sequence_windows ADD COLUMN priority INTEGER NOT NULL"
+                                + " DEFAULT 0");
+                    db.execSQL(
+                            "ALTER TABLE sequence_windows ADD COLUMN lastUsed INTEGER NOT NULL"
+                                + " DEFAULT 0");
+                    db.execSQL("UPDATE sequence_windows SET senderId = substr(id,1,32)");
+                    db.execSQL(
+                            "CREATE INDEX IF NOT EXISTS index_sequence_windows_senderId ON"
+                                + " sequence_windows(senderId)");
+                    db.execSQL(
+                            "CREATE INDEX IF NOT EXISTS index_sequence_windows_priority_lastUsed ON"
+                                + " sequence_windows(priority,lastUsed)");
+                }
+            };
     public static final Migration MIGRATION_4_5 =
             new Migration(4, 5) {
                 @Override

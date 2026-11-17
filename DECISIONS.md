@@ -382,10 +382,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Protected replay capacity, reusable release tooling, final integrated checks and documentation. Owner tests the unchanged published v1.0 baseline on compatible phones; the Android7.1.2 device remains ineligible. No new release is claimed.
 - **Sources:** This change; [backup](IDENTITY_BACKUP.md); [protocol](PACKET_FORMAT.md)
 
+## D041 — 2026-11-17 UTC — Reserve replay capacity for owner contacts
+
+- **Status:** Implemented; local checks completed, hosted Android runtime checks pending
+- **Work:** Room schema 6 adds indexed sender/trust/order metadata while preserving receive windows. Reserved 4,096 verified, 2,048 manually imported and 2,048 unknown sender-epochs (8,192 total); per-identity epoch caps are 8/4/2. Only unknown windows are eligible for LRU eviction, with contact trust rechecked under the identity monitor and all acceptance/eviction changes in one Room transaction. Added saturation, promotion, protected-limit, rollback and migration Android regressions. Active inventory deadlines now also survive endpoint churn; initialized trust before publishing the storage singleton. Updated security/backup/protocol/review docs and host probe format label.
+- **Decision / reason:** Unknown identities must not spend contact reservations. Protection is sticky; owner verification/import takes priority over eviction. Protected epoch limits intentionally fail closed rather than forget known evidence. Unknown replay guarantees weaken after eviction and duplicate-hint expiry. The owner explicitly lifted the previous work-order gate; physical testing remains required and unverified.
+- **Validation / evidence:** Final debug assembly, lint, JVM tests and Android-test compilation passed, including the singleton publication adjustment. Hosted Android execution is recorded separately when available. D040 source 6ba8ee7 also passed both hosted jobs (run 44054814322). New schema exported. Prior KDF/relay tests pass; no physical-device result claimed.
+- **Open items:** Hosted Android validation; reusable signed-upgrade candidate tooling; owner physical tests, offline-media restore check, licensing/admin actions. No new APK release published.
+- **Sources:** This change; D040; SECURITY.md; PACKET_FORMAT.md; docs/REVIEW_FOLLOWUP.md.
+
 ## Template for the next work set
 
 ```markdown
-## D041 — YYYY-MM-DD HH:MM UTC — Short title
+## D042 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

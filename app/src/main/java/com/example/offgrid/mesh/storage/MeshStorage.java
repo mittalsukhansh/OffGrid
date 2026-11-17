@@ -40,6 +40,8 @@ public interface MeshStorage {
         return true;
     }
 
+    default void replayTrust(java.util.function.ToIntFunction<String> trust, Object guard) {}
+
     boolean clockSafe(long now);
 
     MeshMessage cachedReceipt(MeshMessage packet, long now) throws Exception;

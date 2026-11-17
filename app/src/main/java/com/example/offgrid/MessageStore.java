@@ -33,7 +33,7 @@ public final class MessageStore {
             synchronized (MessageStore.class) {
                 if (instance == null) {
                     try {
-                        instance =
+                        MessageStore ready =
                                 new MessageStore(
                                         Room.databaseBuilder(
                                                         context.getApplicationContext(),
@@ -43,9 +43,13 @@ public final class MessageStore {
                                                         MessageDatabase.MIGRATION_1_2,
                                                         MessageDatabase.MIGRATION_2_3,
                                                         MessageDatabase.MIGRATION_3_4,
-                                                        MessageDatabase.MIGRATION_4_5)
+                                                        MessageDatabase.MIGRATION_4_5,
+                                                        MessageDatabase.MIGRATION_5_6)
                                                 .build(),
                                         new StorageCipher());
+                        CryptoManager identity = CryptoManager.getInstance(context);
+                        ready.replayTrust(identity::replayPriority, identity);
+                        instance = ready;
                     } catch (Exception e) {
                         throw new IllegalStateException("Encrypted message storage unavailable", e);
                     }
@@ -318,12 +322,111 @@ public final class MessageStore {
         dao().saveClock(clock);
     }
 
+    public static final int UNKNOWN_REPLAY_CAP = 2048;
+    public static final int IMPORTED_REPLAY_CAP = 2048;
+    public static final int VERIFIED_REPLAY_CAP = 4096;
+    public static final int TOTAL_REPLAY_CAP = 8192;
+    private volatile java.util.function.ToIntFunction<String> replayTrust = id -> 0;
+
+    private volatile Object replayTrustGuard = this;
+
+    public void replayTrust(java.util.function.ToIntFunction<String> trust) {
+        replayTrust(trust, this);
+    }
+
+    public void replayTrust(java.util.function.ToIntFunction<String> trust, Object guard) {
+        replayTrustGuard = guard;
+        replayTrust = trust;
+    }
+
+    private int priority(String sender) {
+        return Math.max(
+                Math.max(0, Math.min(2, replayTrust.applyAsInt(sender))),
+                dao().sequenceSenderPriority(sender));
+    }
+
+    private static int epochCap(int priority) {
+        return priority == 2 ? 8 : priority == 1 ? 4 : 2;
+    }
+
+    private static int tierCap(int priority) {
+        return priority == 2
+                ? VERIFIED_REPLAY_CAP
+                : priority == 1 ? IMPORTED_REPLAY_CAP : UNKNOWN_REPLAY_CAP;
+    }
+
     public boolean canAcceptSequence(MeshMessage packet) {
         if (packet.getEpoch() == null || packet.getSequence() < 1) return false;
         SequenceRecord state = dao().sequence(packet.getSenderId() + ":" + packet.getEpoch());
-        return state == null
-                ? dao().sequenceCount() < 4096
-                : new SequenceWindow(state.highest, state.bits).accept(packet.getSequence());
+        if (state != null)
+            return new SequenceWindow(state.highest, state.bits).accept(packet.getSequence());
+        int p = priority(packet.getSenderId());
+        if (dao().sequenceSenderCount(packet.getSenderId()) >= epochCap(p) && p != 0) return false;
+        if (p > 0 && dao().sequenceTierCount(p) >= tierCap(p)) return false;
+        // Read-only preflight; promotion/eviction are rechecked atomically on acceptance.
+        return dao().sequenceCount() < TOTAL_REPLAY_CAP || dao().sequenceTierCount(0) > 0;
+    }
+
+    private boolean evictUnknown(String sender) {
+        for (int checked = 0; checked < TOTAL_REPLAY_CAP; checked++) {
+            SequenceRecord row =
+                    sender.isEmpty()
+                            ? dao().sequenceVictim()
+                            : dao().sequenceVictimForSender(sender);
+            if (row == null) return false;
+            int trust = priority(row.senderId);
+            if (trust > 0) {
+                dao().promoteSequences(row.senderId, trust);
+                continue;
+            }
+            return dao().deleteUnknownSequence(row.id) == 1;
+        }
+        return false;
+    }
+
+    /** Only invoked inside the same transaction as message acceptance. Never evict trusted rows. */
+    private SequenceRecord admitSequence(MeshMessage packet) {
+        // Serialize victim classification/deletion with owner contact edits in CryptoManager.
+        synchronized (replayTrustGuard) {
+            return admitSequenceLocked(packet);
+        }
+    }
+
+    private SequenceRecord admitSequenceLocked(MeshMessage packet) {
+        String sender = packet.getSenderId(), key = sender + ":" + packet.getEpoch();
+        SequenceRecord state = dao().sequence(key);
+        int p = priority(sender);
+        if (p > 0) dao().promoteSequences(sender, p);
+        if (state == null) {
+            if (dao().sequenceSenderCount(sender) >= epochCap(p)) {
+                if (p > 0 || !evictUnknown(sender))
+                    throw new IllegalStateException(
+                            "Sender replay epoch capacity reached; protected evidence retained");
+            }
+            if (p > 0 && dao().sequenceTierCount(p) >= tierCap(p))
+                throw new IllegalStateException(
+                        "Contact replay reservation full; protected evidence retained");
+            if (p == 0) {
+                while (dao().sequenceTierCount(0) >= UNKNOWN_REPLAY_CAP) {
+                    if (!evictUnknown("")) break;
+                }
+                // A promotion can move the sender to a higher tier only via owner contact state.
+                p = priority(sender);
+                if (p == 0 && dao().sequenceTierCount(0) >= UNKNOWN_REPLAY_CAP)
+                    throw new IllegalStateException("Unknown replay budget unavailable");
+            }
+            while (dao().sequenceCount() >= TOTAL_REPLAY_CAP) {
+                if (!evictUnknown(""))
+                    throw new IllegalStateException(
+                            "Replay reservations full; protected evidence retained");
+            }
+            state = new SequenceRecord();
+            state.id = key;
+            state.senderId = sender;
+        }
+        state.priority = Math.max(state.priority, p);
+        state.lastUsed = Math.addExact(dao().sequenceOrdinal(), 1L);
+        return state;
     }
 
     /** Called only inside the same transaction as history/outbox/status changes. */
@@ -331,15 +434,7 @@ public final class MessageStore {
         if (packet.getProtocolVersion() >= 5) {
             if (packet.getEpoch() == null || packet.getSequence() < 1)
                 throw new IllegalStateException("Missing replay sequence");
-            String key = packet.getSenderId() + ":" + packet.getEpoch();
-            SequenceRecord state = dao().sequence(key);
-            if (state == null) {
-                if (dao().sequenceCount() >= 4096)
-                    throw new IllegalStateException(
-                            "Replay identity capacity reached; evidence preserved");
-                state = new SequenceRecord();
-                state.id = key;
-            }
+            SequenceRecord state = admitSequence(packet);
             SequenceWindow window = new SequenceWindow(state.highest, state.bits);
             if (!window.accept(packet.getSequence()))
                 throw new IllegalStateException("Sequence replay or outside window");

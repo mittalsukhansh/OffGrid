@@ -17,6 +17,11 @@ public final class RoomMeshStorage implements MeshStorage {
         this.localId = localId;
     }
 
+    @Override
+    public void replayTrust(java.util.function.ToIntFunction<String> trust, Object guard) {
+        store.replayTrust(trust, guard);
+    }
+
     private Pending decode(PendingRecord row) throws Exception {
         return row == null
                 ? null

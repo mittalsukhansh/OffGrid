@@ -79,6 +79,7 @@ public final class MeshProtocol {
         this.storage = storage;
         this.flood = flood;
         localId = crypto.getLocalId();
+        storage.replayTrust(crypto::replayPriority, crypto);
     }
 
     public String localId() {

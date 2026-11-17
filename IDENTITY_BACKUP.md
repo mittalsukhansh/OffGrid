@@ -8,4 +8,6 @@ To restore, install the new app on a fresh/empty installation, keep mesh stopped
 
 Changing app ID/signing certificate still prevents in-place Android upgrades. Export before uninstalling when moving from older debug packages. If you uninstall without an identity backup, your keys/contacts may be lost; even with this backup, local history/files are not recovered. A backup of the app release-signing keystore is a separate owner responsibility and never belongs in a user identity backup.
 
+New exports use OGB2 with authenticated, bounded scrypt parameters. This app still reads OGB1 backups, but the published v1.0 app cannot read new OGB2 files. A database upgraded to schema 6 also cannot be downgraded to v1.0 in place. Keep backups and finish updates before relying on restore.
+
 See [SECURITY.md](SECURITY.md) for format, parameters, threat model, restore epochs and replay limitations.

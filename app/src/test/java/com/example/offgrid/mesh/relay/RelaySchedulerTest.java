@@ -278,6 +278,22 @@ public class RelaySchedulerTest {
         assertFalse(transport.calls.isEmpty());
     }
 
+    @Test
+    public void disconnectedIdentityCannotRestartSuppressionWithANewEndpoint() {
+        MeshMessage packet = queued(0);
+        peer("ble:old", -20);
+        scheduler.inventory("ble:old", sender, Collections.singletonList(packet.getMessageId()));
+        time.advance(RelayScheduler.PEER_TIMEOUT_MS + 1);
+        scheduler.maintenance();
+        peer("wifi:returning", -20);
+        scheduler.inventory(
+                "wifi:returning", sender, Collections.singletonList(packet.getMessageId()));
+        scheduler.start();
+        time.runDue();
+        assertEquals(1, transport.calls.size());
+        assertEquals("wifi:returning", transport.calls.get(0).peer);
+    }
+
     static final class FakeTimer implements RelayScheduler.Timer {
         long elapsed;
         final long wallBase = System.currentTimeMillis();

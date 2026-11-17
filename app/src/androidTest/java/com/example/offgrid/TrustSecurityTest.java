@@ -175,25 +175,133 @@ public class TrustSecurityTest {
     }
 
     @Test
-    public void fullSequenceCapacityPreservesEvidenceAndRejectsNewEpochs() throws Exception {
+    public void fullProtectedTierRejectsNewEpochsWithoutEvictingEvidence() throws Exception {
+        store.replayTrust(id -> id.equals(alice.getLocalId()) ? 2 : 0);
         database.runInTransaction(() -> {
-            for (int i = 0; i < 4096; i++) {
+            for (int i = 0; i < MessageStore.VERIFIED_REPLAY_CAP; i++) {
                 SequenceRecord row = new SequenceRecord();
-                row.id = "existing-" + i;
+                row.senderId = String.format(java.util.Locale.ROOT, "%032x", i + 100);
+                row.id = row.senderId + ":" + "11111111111111111111111111111111";
+                row.priority = 2;
                 store.dao().saveSequence(row);
             }
         });
         MeshMessage packet =
-                alice.signPacket(MeshMessage.create(alice.getLocalId(), "Full ledger"));
-        long now = System.currentTimeMillis();
+                alice.signPacket(MeshMessage.create(alice.getLocalId(), "Protected capacity"));
         assertFalse(store.canAcceptSequence(packet));
         try {
-            store.save(packet, packet, false, now, packet, now, now + 600000, true);
+            accept(packet);
+            fail("Protected evidence must not be evicted");
+        } catch (IllegalStateException expected) {
+        }
+        assertEquals(MessageStore.VERIFIED_REPLAY_CAP, store.dao().sequenceCount());
+        assertTrue(store.dao().history().isEmpty());
+    }
+
+    private void accept(MeshMessage packet) throws Exception {
+        long now = System.currentTimeMillis();
+        store.save(packet, packet, false, now, packet, now, now + 600000, true);
+    }
+
+    private String fillUnknown(int count, long start) {
+        String first =
+                String.format(java.util.Locale.ROOT, "%032x", 100)
+                        + ":"
+                        + "22222222222222222222222222222222";
+        database.runInTransaction(() -> {
+            for (int i = 0; i < count; i++) {
+                SequenceRecord row = new SequenceRecord();
+                row.senderId = String.format(java.util.Locale.ROOT, "%032x", 100 + i);
+                row.id = row.senderId + ":" + "22222222222222222222222222222222";
+                row.lastUsed = start + i;
+                store.dao().saveSequence(row);
+            }
+        });
+        return first;
+    }
+
+    @Test
+    public void unknownFloodCannotConsumeImportedAndVerifiedReservations() throws Exception {
+        store.replayTrust(
+                id -> id.equals(alice.getLocalId()) ? 2 : id.equals(bob.getLocalId()) ? 1 : 0);
+        String oldest = fillUnknown(MessageStore.UNKNOWN_REPLAY_CAP, 1);
+        MeshMessage verified =
+                alice.signPacket(MeshMessage.create(alice.getLocalId(), "Verified contact"));
+        MeshMessage imported =
+                bob.signPacket(MeshMessage.create(bob.getLocalId(), "Imported contact"));
+        accept(verified);
+        accept(imported);
+        assertEquals(1, store.dao().sequenceTierCount(2));
+        assertEquals(1, store.dao().sequenceTierCount(1));
+        CryptoManager attacker = peer("attacker");
+        accept(attacker.signPacket(MeshMessage.create(attacker.getLocalId(), "Unknown")));
+        assertNull(store.dao().sequence(oldest));
+        assertEquals(MessageStore.UNKNOWN_REPLAY_CAP, store.dao().sequenceTierCount(0));
+        assertFalse(store.canAcceptSequence(verified));
+        assertFalse(store.canAcceptSequence(imported));
+    }
+
+    @Test
+    public void newlyVerifiedContactIsPromotedBeforeUnknownEviction() throws Exception {
+        store.replayTrust(bob::replayPriority, bob);
+        MeshMessage known =
+                alice.signPacket(MeshMessage.create(alice.getLocalId(), "Initially discovered"));
+        accept(known);
+        fillUnknown(MessageStore.UNKNOWN_REPLAY_CAP - 1, 2);
+        bob.importContact(alice.getContactString());
+        assertTrue(
+                bob.setVerified(
+                        alice.getLocalId(), bob.contactFingerprint(alice.getLocalId()), true));
+        CryptoManager attacker = peer("attacker");
+        accept(attacker.signPacket(MeshMessage.create(attacker.getLocalId(), "Unknown churn")));
+        SequenceRecord protectedRow =
+                store.dao().sequence(known.getSenderId() + ":" + known.getEpoch());
+        assertNotNull(protectedRow);
+        assertEquals(2, protectedRow.priority);
+        assertFalse(store.canAcceptSequence(known));
+    }
+
+    @Test
+    public void failedAcceptanceRollsBackUnknownEviction() throws Exception {
+        String oldest = fillUnknown(MessageStore.UNKNOWN_REPLAY_CAP, 1);
+        database.getOpenHelper()
+                .getWritableDatabase()
+                .execSQL(
+                        "CREATE TRIGGER reject_reserved_pending BEFORE INSERT ON pending_messages"
+                                + " BEGIN SELECT RAISE(ABORT,'storage failure'); END");
+        MeshMessage packet =
+                alice.signPacket(MeshMessage.create(alice.getLocalId(), "Rollback eviction"));
+        try {
+            accept(packet);
+            fail();
+        } catch (android.database.sqlite.SQLiteException expected) {
+        }
+        assertNotNull(store.dao().sequence(oldest));
+        assertNull(store.dao().sequence(packet.getSenderId() + ":" + packet.getEpoch()));
+        assertEquals(MessageStore.UNKNOWN_REPLAY_CAP, store.dao().sequenceCount());
+    }
+
+    @Test
+    public void trustedEpochLimitDoesNotForgetEarlierWindows() throws Exception {
+        store.replayTrust(id -> 2);
+        database.runInTransaction(() -> {
+            for (int i = 0; i < 8; i++) {
+                SequenceRecord row = new SequenceRecord();
+                row.senderId = alice.getLocalId();
+                row.priority = 2;
+                row.id = row.senderId + ":" + String.format(java.util.Locale.ROOT, "%032x", i + 1);
+                store.dao().saveSequence(row);
+            }
+        });
+        MeshMessage packet =
+                alice.signPacket(MeshMessage.create(alice.getLocalId(), "Ninth epoch"));
+        assertFalse(store.canAcceptSequence(packet));
+        try {
+            accept(packet);
             fail();
         } catch (IllegalStateException expected) {
         }
-        assertEquals(4096, store.dao().sequenceCount());
-        assertTrue(store.dao().history().isEmpty());
+        assertEquals(8, store.dao().sequenceCount());
     }
 
     @Test

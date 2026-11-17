@@ -51,6 +51,7 @@ public final class RelayScheduler {
     private final Function<MeshMessage, byte[]> encoder;
     private final Map<String, Peer> peers = new HashMap<>();
     private final Map<String, Object> sessions = new HashMap<>();
+    private final Map<String, Map<String, Hint>> identityHints = new LinkedHashMap<>();
     private final LinkedHashMap<String, Buffered> queue = new LinkedHashMap<>();
     private final Runnable connectPass = this::connect;
     private final java.util.ArrayDeque<String> recentFailures = new java.util.ArrayDeque<>();
@@ -95,6 +96,7 @@ public final class RelayScheduler {
     public void clear() {
         pause();
         queue.clear();
+        identityHints.clear();
     }
 
     public void add(MeshStorage.Pending pending) {
@@ -151,7 +153,11 @@ public final class RelayScheduler {
         if (peer == null) return;
         if (peer.identity != null && !identity.equals(peer.identity)) peer.hints.clear();
         peer.identity = identity;
-        Map<String, Hint> shared = new LinkedHashMap<>();
+        pruneIdentityHints();
+        Map<String, Hint> remembered = identityHints.get(identity);
+        boolean acceptClaims = remembered != null || identityHints.size() < MAX_PEERS;
+        Map<String, Hint> shared =
+                remembered == null ? new LinkedHashMap<>() : new LinkedHashMap<>(remembered);
         for (Peer sibling : peers.values())
             if (identity.equals(sibling.identity)) {
                 for (Map.Entry<String, Hint> entry : sibling.hints.entrySet()) {
@@ -166,14 +172,24 @@ public final class RelayScheduler {
         // A peer cannot fill the hint table with invented IDs or renew a known claim forever.
         shared.keySet().removeIf(id -> !queue.containsKey(id));
         for (String id : ids)
-            if (queue.containsKey(id))
+            if (acceptClaims && queue.containsKey(id))
                 shared.putIfAbsent(id, new Hint(timer.elapsed() + INVENTORY_HINT_MS, 0));
+        if (acceptClaims) identityHints.put(identity, shared);
         for (Peer sibling : peers.values())
             if (identity.equals(sibling.identity)) {
                 sibling.hints.clear();
                 sibling.hints.putAll(shared);
             }
         publishPeerCount();
+    }
+
+    private void pruneIdentityHints() {
+        identityHints
+                .values()
+                .removeIf(hints -> {
+                    hints.keySet().removeIf(id -> !queue.containsKey(id));
+                    return hints.isEmpty();
+                });
     }
 
     public java.util.List<String> inventoryIds(int cursor, int limit) {
@@ -190,6 +206,7 @@ public final class RelayScheduler {
 
     public void maintenance() {
         long now = timer.elapsed();
+        pruneIdentityHints();
         for (Peer peer : peers.values()) peer.hints.keySet().removeIf(id -> !queue.containsKey(id));
         peers.entrySet()
                 .removeIf(entry ->
@@ -304,6 +321,8 @@ public final class RelayScheduler {
                                             RETRY_BASE_MS << Math.min(attempt - 1, 2));
                             Hint sent = new Hint(timer.elapsed() + retry, attempt);
                             peer.hints.put(id, sent);
+                            if (peer.identity != null && identityHints.containsKey(peer.identity))
+                                identityHints.get(peer.identity).put(id, sent);
                             if (peer.identity != null)
                                 for (Peer sibling : peers.values())
                                     if (peer.identity.equals(sibling.identity))
