@@ -1,6 +1,6 @@
 # OffGrid repository review report — 1.0 experimental release
 
-Post-release maintenance: see [review follow-up](REVIEW_FOLLOWUP.md) for explicit next-build labeling, the real process-death regression, owner key custody and the physical-test gate. The published 1.0 snapshot described here remains immutable.
+Post-release maintenance: see [review follow-up](REVIEW_FOLLOWUP.md) for explicit next-build labeling, the real process-death regression, owner key custody and subsequent replay/inventory/backup fixes. The owner later lifted the work-order gate; physical results remain required. The published 1.0 snapshot described here remains immutable.
 
 Updated 16 November 2026 from the current source changes. This report separates implementation, automated evidence, physical evidence and external blockers. Consult [DECISIONS.md](../DECISIONS.md) for append-only validation/publication records.
 

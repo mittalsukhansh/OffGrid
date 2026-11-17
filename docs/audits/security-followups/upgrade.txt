@@ -1,0 +1,56 @@
+OffGrid signed in-place upgrade: emulator evidence (not a physical radio test)
+2026-11-17T09:50:32Z
+{
+  "schema": 2,
+  "version": "1.0.1-experimental",
+  "versionCode": 101,
+  "baselineVersion": "1.0",
+  "baselineVersionCode": 100,
+  "sourceCommit": "febba6bebcad8f96a4dde4797d00c2b737b3a4cb",
+  "baselineSource": "061e5fa8cdf27f8dddd87d83c3313333894c1886",
+  "publish": false,
+  "sha256": {
+    "baseline-test.apk": "13ea900a0ec1e0e6ed582f08724a36b963a1e6417f0b4a74bd94e2b0acc7fe6c",
+    "baseline.apk": "c35a0cfb427e0cb6d527d9944ba1e19eea0ab04b2e83cb4a40e863d0ae180698",
+    "offgrid-1.0.1-experimental.apk": "be9fc87086d9b1bb138cce4fffa7b561878706e052dabfa748258d6098a602ef",
+    "upgrade-test.apk": "be33ac4a8922196749b8aac48c82bd7f3f931cb712521bc2a9eb9c4ad321c923"
+  }
+}
+Android SDK built for x86_64
+30
+Performing Streamed Install
+Success
+Performing Streamed Install
+Success
+
+com.example.offgrid.UpgradeContinuityTest:.
+
+Time: 0.047
+
+OK (1 test)
+
+
+OK (1 test)
+
+com.example.offgrid.UpgradeContinuityTest:.
+
+Time: 0.025
+
+OK (1 test)
+
+
+OK (1 test)
+Performing Streamed Install
+Success
+Performing Streamed Install
+Success
+
+com.example.offgrid.UpgradeContinuityTest:.
+
+Time: 0.028
+
+OK (1 test)
+
+
+OK (1 test)
+PASSED: package/signature accepted in place; identity, signing public key, contact nickname and encrypted history preserved; contact trust matches the baseline key format.

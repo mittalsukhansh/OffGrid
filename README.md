@@ -153,7 +153,7 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 | Message protocol | JSON packet types, TTL, signatures, private encryption, authenticated acknowledgements and replay rejection | Android tests run the production protocol/storage components across three logical nodes; parser and security regressions | This simulation does not use Bluetooth |
 | Persistence and delivery | Encrypted Room history/queues, atomic message/receipt/replay writes, restart recovery, honest delivery states | Emulator SQLite/Keystore, rollback, migration and restart tests | Manufacturer-specific process/service recovery unverified |
 | Contact trust | QR exchange, full fingerprint comparison and a persistent Verified indicator | QR image round trip and contact-state tests | Physical camera scanning and the complete UI flow need device checks |
-| Abuse protection | Packet signatures, timestamp admission, persistent replay ledger and bounded flood budgets | JVM rules and emulator security tests | No independent security audit or radio-level denial-of-service guarantee |
+| Abuse protection | Packet signatures, durable sequence windows, reserved contact capacity and bounded flood budgets | JVM rules and emulator security tests | No independent security audit or radio-level denial-of-service guarantee |
 | Background operation | Connected-device foreground service, radio-state handling and maintenance | Component tests and compilation; no physical screen-off evidence | Screen off, battery optimization and Bluetooth toggling await the checklist |
 | Offline sharing | Local nicknames, private withdrawals, encrypted image/short-video transfers | Emulator regression tests for authorization, tombstones, integrity, resumption and size/duration bounds | Camera/gallery/player UI and real media throughput need phones |
 | Conversations and unread notifications | Per-contact/public histories, durable unread flags, generic notification routing | SQLite filtering/read/migration regressions and Espresso conversation/navigation checks | Notification permissions and OEM background behavior need phones |
@@ -220,9 +220,9 @@ signing/agreement keys are now separate; compare the new full fingerprint. Every
 ## 1.0 additions
 
 - Separate signing/agreement keys; fresh ephemeral ECDH per encrypted packet. Recipient-key compromise still exposes recorded traffic; full forward secrecy is not implemented.
-- Durable sender epoch/sequence replay windows, atomic with Room acceptance. Old replay windows never expire by clock; new-identity capacity is bounded and fails closed.
-- Signed nonce inventory exchange, rotating exact-ID pages and logical identity association across radios. Inventory reduces some repeated forwarding; it is not full history sync or a delivery receipt.
-- [Encrypted identity backup/restore](IDENTITY_BACKUP.md), including contacts/nicknames/verification, without hosting. History/files remain local and are not exported.
+- Durable sender epoch/sequence replay windows, atomic with Room acceptance. Schema 6 reserves verified/imported-contact capacity; only unknown windows can be evicted. Protected capacity fails closed; unknown replay guarantees weaken after eviction. See SECURITY.md.
+- Signed nonce inventory exchange, rotating exact-ID pages and logical identity association across radios. Inventory is a non-renewable hint with bounded forwarding retries; it is not full history sync or a delivery receipt.
+- [Encrypted identity backup/restore](IDENTITY_BACKUP.md), including contacts/nicknames/verification, without hosting. New OGB2 backups authenticate bounded scrypt cost fields and retain OGB1 read support. History/files remain local and are not exported.
 - Network aggregate measurement export and a three-phone capture harness. Physical results remain **NOT RUN** until real phones provide evidence.
 - Seeded parser/framing fuzz smoke tests and a deterministic production-relay simulator; existing Android unsend-before-original coverage remains.
 

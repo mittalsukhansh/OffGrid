@@ -1,0 +1,8 @@
+
+com.example.offgrid.UpgradeContinuityTest:.
+
+Time: 0.025
+
+OK (1 test)
+
+

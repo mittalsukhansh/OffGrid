@@ -1,0 +1,14 @@
+# Security follow-ups and signed update evidence
+
+Recorded 17 November 2026. This is automated evidence, not a physical-radio test or security audit.
+
+- Integrated source: `febba6bebcad8f96a4dde4797d00c2b737b3a4cb`, merged into main. [Source checks](https://github.com/mittalsukhansh/OffGrid/actions/runs/44058403649) passed build/lint, 71 JVM tests, six host tests and Android runtime checks. Ordinary Android tests exclude the four opt-in fixture methods; the dedicated crash/reinstall harnesses invoke those separately.
+- Replay-specific [Android run](https://github.com/mittalsukhansh/OffGrid/actions/runs/44057790344) covers schema 5→6 byte preservation, unknown capacity saturation, verified/manual reservations, contact promotion before eviction, trusted epoch limits and rollback of an attempted eviction when message persistence fails.
+- [Signed candidate workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44059024185) passed on API 30. Publication was explicitly disabled and its publish job skipped. The actual published v1.0/code-100 APK was installed and seeded with fixture version 2, reopened, then updated in place to code 101/name 1.0.1-experimental. No uninstall occurred. The same signing identity, verified dual-key contact/fingerprint, nickname and encrypted history survived. Separate migration tests cover existing receive-window bytes.
+- [Download candidate artifact](https://github.com/mittalsukhansh/OffGrid/actions/runs/44059024185/artifacts/14317576270) (GitHub login and artifact retention apply). The ZIP contains the installable APK and public verification/evidence material; it is not a GitHub Release. After downloading that hosted ZIP, the APK hash, pinned signer, package, version/code and signed source provenance were independently rechecked.
+- Candidate SHA-256: `be9fc87086d9b1bb138cce4fffa7b561878706e052dabfa748258d6098a602ef`.
+- Signing audit after staging: 496 reachable blobs, two current public signing files, zero findings. No keystore, credential JSON or owner handoff material was staged.
+
+Raw public upgrade output is [upgrade.txt](upgrade.txt), with separate [seed](seed.txt), [baseline reopening](baseline-reopen.txt), [candidate verification](verify.txt), [APK checksum](SHA256SUMS) and [signature report](signature.txt). Baseline and fixture hashes are embedded in the upgrade output.
+
+The published [v1.0](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0) remains unchanged and is the initial two-phone measurement baseline. Test both phones on that identical APK first; the candidate can then exercise an in-place update. Do not uninstall to update, and record which version produced each result. New OGB2 backups cannot be read by v1.0; schema 6 cannot be downgraded to schema 5 in place. Identity export excludes history/media. See [phone steps](../../../TESTING.md) and [security limits](../../../SECURITY.md).

@@ -400,10 +400,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Signed v1.0→1.0.1-experimental candidate upgrade proof; physical phones; deferred offline-media check and licensing/admin actions. No new release published by this work set.
 - **Sources:** This change; SIGNING.md; TESTING.md; scripts/verify-staged-release.py; .github/workflows/publish-pre-signed.yml.
 
+## D043 — 2026-11-17 UTC — Stage public signed 1.0.1 upgrade candidate
+
+- **Status:** Public signed candidate prepared; hosted install-r proof pending
+- **Work:** Built locally signed code-101 1.0.1-experimental from exact source febba6b. Staged that APK, actual published signed v1.0/code-100 APK and separately built, matching fixture-2 test APKs on a one-commit artifact branch. Explicit publish=false; no release creation. No private key/credentials/owner backup material is staged.
+- **Decision / reason:** Test the real published baseline rather than a rebuilt substitute. Reuse the pinned certificate and preserve the experimental baseline release. Artifact branches are temporary and never merged as binary commits into main.
+- **Validation / evidence:** Source febba6b passed both hosted jobs (44058403649); 71 JVM tests and six host tests pass. Signed release assembly/lint/test-fixture compilation passed locally. Both app APKs passed certificate, application ID, version/code and embedded source checks. Preceding replay source 0bb1d55 passed Android migration/reservation/rollback tests (44057790344). Signed version-transition evidence remains pending until the candidate workflow actually passes.
+- **Open items:** Candidate workflow result and archived evidence; real phone tests; owner offline-media verification and legal/admin actions. Nothing new published in Releases.
+- **Sources:** This change; https://github.com/mittalsukhansh/OffGrid/actions/runs/44058403649; https://github.com/mittalsukhansh/OffGrid/actions/runs/44057790344.
+
+## D044 — 2026-11-17 UTC — Archive verified signed candidate and consolidate main
+
+- **Status:** Integrated, automated checks passed; candidate verified, not published as a release
+- **Work:** Fast-forwarded the tested feature work into main. Archived actual signed upgrade seed/reopen/install-r/verify output, public hash and signature report. Downloaded the hosted installable artifact and independently rechecked APK hash, certificate, package, version/code and embedded source. Updated current README security claims and review/signing follow-up links while preserving the historical v1.0 report. Preserved D043 preparation log in main; binary staging commits are not merged. Cleaned temporary feature/artifact branches after evidence capture.
+- **Decision / reason:** Separate implementation, emulator upgrade proof, an Actions candidate and a published release. Keep unchanged v1.0 for initial phone comparisons; a later candidate update must be installed without uninstalling. User handles deferred USB backup; do not treat it as verified.
+- **Validation / evidence:** Source febba6b passed exact-source CI 44058403649 (71 JVM/six host tests and Android runtime checks). Signed candidate workflow 44059024185 passed API-30 code100→101 continuity with fixture2; publisher skipped as intended. Hosted APK SHA-256 be9fc87086d9b1bb138cce4fffa7b561878706e052dabfa748258d6098a602ef matches the manifest and pinned signer. Signing history scan: 496 blobs, two public current signing files, zero findings. Public evidence, local links and diff formatting checked; documentation-only evidence commit avoids redundant Android reruns.
+- **Open items:** Physical BLE/CoC/Direct and three-phone relay results; owner offline-media restore verification, upstream written license consent, admin-only metadata/optional Actions secrets. Unknown replay protection weakens after eviction; protected epoch limits fail closed; full forward secrecy remains absent. No new release was published.
+- **Sources:** This change; D040–D043; https://github.com/mittalsukhansh/OffGrid/actions/runs/44059024185; docs/audits/security-followups/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D043 — YYYY-MM-DD HH:MM UTC — Short title
+## D045 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
