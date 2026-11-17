@@ -194,9 +194,11 @@ After the ordinary emulator suite, CI seeds current debug state, reinstalls the 
 The same-protocol reinstall check passed on API-30 in [run 43940312162](https://github.com/mittalsukhansh/OffGrid/actions/runs/43940312162); [raw evidence](docs/audits/same-protocol-reinstall/README.md). This does not change the physical-device NOT RUN entries above.
 
 
-## Owner quick start: first two-phone baseline
+## Historical v1.0 two-phone baseline
 
-Use [v1.0 → offgrid-1.0.apk](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0) on **both** phones. This is the currently published experimental snapshot; source version 1.0.1-experimental is not a published release. Keep the APK unchanged during baseline comparisons. S23 FE is eligible; Redmi 4A on Android 7.1.2 is below the API-26 minimum. Borrow an Android 8+ second phone (Android 10+ on both is needed for BLE CoC).
+This preserves the original baseline procedure. For current testing, use the published v1.1 release and the 1.1 retest below.
+
+Use [v1.0 → offgrid-1.0.apk](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0) on **both** phones. This is the historical experimental snapshot; 1.0.1-experimental was an unpublished intermediate candidate. Keep the APK unchanged during baseline comparisons. S23 FE is eligible; Redmi 4A on Android 7.1.2 is below the API-26 minimum. Borrow an Android 8+ second phone (Android 10+ on both is needed for BLE CoC).
 
 1. Record model/Android version and APK SHA-256. Install, allow requested nearby-device/location permissions and enable Location services for discovery where Android requires it. Start mesh on both phones. Exchange QR contacts and compare fingerprints directly.
 2. **BLE:** disable Wi-Fi and mobile data on both phones; keep Bluetooth on. Send private text in both directions, then a JPEG near the 48 KiB limit. Confirm the recipient sees it and the sender eventually says Delivered. Forwarded alone is insufficient.

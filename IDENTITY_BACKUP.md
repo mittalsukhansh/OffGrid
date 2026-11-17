@@ -2,7 +2,7 @@
 
 Open **My contact → Identity backup / restore → Export encrypted backup**. Pick a destination with Android's document picker, enter a strong passphrase of at least 12 characters, and keep that passphrase separately. The `.ogb` file is encrypted using scrypt and AES-256-GCM; there is no password reset or hosted account.
 
-The backup contains signing/encryption identities, contacts, nicknames and verification state. It does **not** contain chat history, media, unread state or received-packet replay evidence. Identity export is not a complete application backup.
+The backup contains signing/encryption identities, the device display name, contacts, nicknames and verification state. Older backup files without a display name restore with an empty name and prompt when the app opens. It does **not** contain chat history, media, unread state or received-packet replay evidence. Identity export is not a complete application backup.
 
 To restore, install the new app on a fresh/empty installation, keep mesh stopped, open the same screen, choose Restore, select the file and enter the passphrase. Existing history/outbox causes restoration to fail without replacing identity. Confirm the displayed ID/fingerprint afterwards and test a private message. Stop using the previous installation; concurrent identity clones are unsupported.
 

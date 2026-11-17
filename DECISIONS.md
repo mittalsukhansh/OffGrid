@@ -436,10 +436,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Passing runtime rerun and signed v1.0→1.1 upgrade/publication, branch consolidation, physical relay retest. Legal/admin and owner offline backup remain separate.
 - **Sources:** This change; https://github.com/mittalsukhansh/OffGrid/actions/runs/44061318744; D045.
 
+## D047 — 2026-11-17 UTC — Consolidate 1.1 and stage authorized signed release
+
+- **Status:** Source integrated and checks passed; signed upgrade/publication pending
+- **Work:** Merged tested source 16d8592 into main. Detached preserved historical v1.0 artifact worktrees and deleted their obsolete local branch names; their public snapshots/untracked generated reports remain intact. No unmerged production features existed on those branches, and APK commits were not merged into main. Prepared exact-source signed code-110 APK and pinned fixture2 APKs with the actual published v1.0/code-100 baseline on one temporary release-assets/v1.1 commit. Explicit publish=true/tag v1.1 follows the owner's release instruction; application label remains 1.1-experimental.
+- **Decision / reason:** Keep one development baseline and preserve update identity while distinguishing experimental status from a stable version promise. Publication must depend on successful real emulator install-r continuity. Release notes document named-QR compatibility and the still-open physical relay report.
+- **Validation / evidence:** Corrected source passed both hosted jobs in run 44062366988, including the retained small-screen Close-button regression, QR signature/tamper/legacy/name/backup tests, production three-logical-node protocol/receipt tests, 72 JVM and six host tests. Signed release build/lint/test-fixture assembly and local APK certificate/package/code/version/source verification passed. Signing scan: 521 reachable blobs, two current public signing files, zero findings. No field relay result is inferred.
+- **Open items:** Actual signed v1.0→1.1 upgrade, release publication and independent download verification; final feature/artifact branch cleanup/evidence archive. Owner three-phone radio retest and previously documented backup/legal/admin work remain open.
+- **Sources:** This change; https://github.com/mittalsukhansh/OffGrid/actions/runs/44062366988; RELEASE_NOTES_1.1.md; D045–D046.
+
+## D048 — 2026-11-17 UTC — Publish verified 1.1 and finish branch consolidation
+
+- **Status:** Published experimental v1.1; source consolidated on main; public download verified
+- **Work:** Successful workflow 44063108150 installed the actual v1.0/code100 app, seeded/reopened fixture2, performed signed install-r to code110/1.1-experimental and verified identity, verified dual-key contact/fingerprint, nickname and encrypted history. Published tag v1.1 from exact source 16d8592 with APK, public certificate, checksum/signature and upgrade report. Updated release notes using explicitly targeted mittalsukhansh/OffGrid. Downloaded the release APK and independently checked it. Archived only public manifest/upgrade/hash/signature evidence and D047 preparation log in main. Updated README/current test/review/signing/backup docs. Deleted merged feature and temporary public artifact branches; only main remains on origin, with old local artifact snapshots preserved detached and no binary artifact commits merged.
+- **Decision / reason:** Fulfill the owner's 1.1 request while retaining explicit experimental labeling and the existing signing identity. Named QRs are self-selected labels with signatures, not unique hosted usernames or automatic human verification. Explain direct-neighbor counts and retest automatic relay with mesh running on the middle phone. Do not claim the reported physical failure is fixed by logical simulations.
+- **Validation / evidence:** Source 16d8592 passed CI 44062366988: 72 JVM/six host tests and Android runtime suites, including the unchanged failing UI click assertion after the scroll/keyboard fix. Signed upgrade/publication passed 44063108150. Downloaded APK SHA-256 87cf629ea29c73448756c2a136478e61501d73255cd9ed36f1397552f40226cb matches staged and published checksums; pinned signer, package, code/name and embedded source verified. Public evidence/local-document links and diff formatting checked. This final change is documentation/evidence only and skips redundant Android CI.
+- **Open items:** Actual 1.1 A–B–C BLE bulk relay, photos, screen-off/restarts and Direct benchmarks need owner phone results. No quantitative phone benchmark or confirmed field fix is claimed. Offline-media restore, written upstream licensing consent and admin-only metadata/optional Actions secrets remain owner work; full forward secrecy and existing bounded replay/forwarding limits remain documented.
+- **Sources:** This change; D045–D047; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1; https://github.com/mittalsukhansh/OffGrid/actions/runs/44063108150; docs/audits/release-1.1/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D047 — YYYY-MM-DD HH:MM UTC — Short title
+## D049 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

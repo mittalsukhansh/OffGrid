@@ -1,0 +1,17 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=OffGrid Release, OU=OffGrid, O=mittalsukhansh
+Signer #1 certificate SHA-256 digest: cc5455152701c5ef521e5a08dc4cbc7795c6897cf09eff375740391e4da2cf27
+Signer #1 certificate SHA-1 digest: 880ea16ffdd3e0ff6117061be28f01e03b6babff
+Signer #1 certificate MD5 digest: 3724fb84f5d9151eb9ccbe81914ab68e
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 3072
+Signer #1 public key SHA-256 digest: 1873eef4df17c540855ace024375153b8713e8d359ce1c9f964afed8914a3fa5
+Signer #1 public key SHA-1 digest: 03aa5ac24aaa5649135db8b51bbb45bb488dabfa
+Signer #1 public key MD5 digest: e03b3f37a10f8b1c0ab73735b07cee06

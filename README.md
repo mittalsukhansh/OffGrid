@@ -6,17 +6,16 @@ media**. Phones exchange signed packets without a messaging server or shared
 access point. It uses a custom store-and-forward protocol; field reliability and
 radio throughput still require physical-device evidence.
 
-[Download OffGrid 1.0 — experimental prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0).
-Install the same APK on all test phones and follow [TESTING.md](TESTING.md).
-Development continues from `main` on short feature branches. The signed 1.0 APK
-comes from commit `061e5fa`; later documentation does not change that immutable APK.
-[Signed in-place emulator upgrade evidence](https://github.com/mittalsukhansh/OffGrid/releases/download/v1.0/upgrade.txt)
-confirms identity/contact/history continuity from a matching signed code-7 baseline.
-Upstream consent and physical-phone reliability/throughput are still pending.
+[Download OffGrid 1.1 — experimental prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1).
+Install the same release APK on all test phones, **without uninstalling** the existing signed app, and follow the [1.1 relay/name retest](TESTING.md#version-11-relay-and-name-retest). Development continues from `main` on short feature branches. Signed release source: `16d8592`; published v1.0 assets remain unchanged.
 
-## Next build and physical-test gate
+The [signed v1.0→1.1 emulator upgrade evidence](docs/audits/release-1.1/README.md) confirms identity, verified contact and encrypted history continuity. Source build/lint, 72 JVM tests, six host tests and Android runtime checks passed. This is automated evidence, not a confirmed fix of the owner's reported phone-radio failure.
 
-The next source build is **1.0.1-experimental**, version code **101**. The published v1.0 APK is unchanged. This source update adds a real process-kill/restart identity regression and explicit experimental labeling; protocol changes are deferred until the two-phone BLE/Direct photo test. See [review follow-up](docs/REVIEW_FOLLOWUP.md) and [private signing-key custody](KEY_CUSTODY.md). The key is verified in this environment and the owner confirmed the Windows copy; offline-media restore verification is pending.
+## Current release and physical testing
+
+Version **1.1-experimental**, code **110**, adds a device-name prompt and signed named QRs, preserves custom local contact aliases, improves relay retry fairness and includes the post-1.0 replay/inventory/backup fixes. Update all phones before scanning new named QRs; names can repeat and fingerprints remain the identity check. Wire protocol remains 5. Start mesh on all three phones when testing A–B–C; nearby peer counts show direct neighbors.
+
+The owner reports BLE bulk success and a third-phone relay failure on v1.0, without device models or diagnostic exports. Controlled three-phone/Direct/screen-off results and throughput measurements are still pending. See [review follow-up](docs/REVIEW_FOLLOWUP.md) and [private signing-key custody](KEY_CUSTODY.md). The owner confirmed the Windows signing backup; offline-media restore verification remains pending. Upstream licensing consent remains unresolved.
 
 ## Wi-Fi Direct without a router
 

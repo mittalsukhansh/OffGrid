@@ -1,11 +1,11 @@
 # Post-1.0 review: security follow-ups and physical testing
 
-This record distinguishes source changes, automated evidence and owner-only work. The published v1.0 APK remains an immutable experimental snapshot; the next source build is `1.0.1-experimental`, version code 101. It retains the app ID/certificate and protocol 5. No new release is implied by the source version update.
+This record distinguishes source changes, automated evidence and owner-only work. The published v1.0 APK remains an immutable experimental snapshot; the intermediate 1.0.1-experimental/code101 candidate was checked without publication. Current published v1.1 uses 1.1-experimental/code110, retaining the app ID/certificate and protocol 5. See the final release evidence below.
 
 | Finding | Current status |
 | --- | --- |
 | Release key custody | Environment private key successfully signs a challenge verified by the pinned certificate; local handoff archive matches. The owner has confirmed the Windows archive hash and created a passphrase-encrypted backup on that PC. The owner deferred separate offline-media copy/restore verification; it remains pending. See KEY_CUSTODY.md. |
-| Stable-looking versionName | Next build explicitly says `1.0.1-experimental`; code 101 allows a later update from published code 100. Existing v1.0 assets are not overwritten. |
+| Stable-looking versionName | Published v1.1 explicitly says `1.1-experimental`, code 110, and passed a signed update from v1.0/code100. Existing v1.0 assets are not overwritten. |
 | Identity after sudden process death | Added a host-orchestrated SIGKILL test with public expected identity captured outside the killed process, a new PID on reopening and a reloaded-private-key signing proof. Hosted API-30 outcomes: ten current passes, zero losses; ten losses on the untouched old constructor. See the investigation and committed summaries. |
 | Historical first-upgrade cause | Original transcript does not contain pre-load persisted-key state. The controlled reference reproduced missing persisted public keys before loading in all ten trials; current code passed all ten. Do not present that reproduction as retrospective proof of the exact first event. |
 | Replay-cap exhaustion | Implemented reserved verified/manual-contact pools, unknown-only LRU eviction, per-sender epoch caps and schema 6 migration. Protected windows fail closed; unknown replay evidence may be forgotten after eviction. Hosted Android migration, contact reservations, unknown eviction and transactional rollback tests passed (source 0bb1d55, run 44057790344); final integrated source febba6b also passed run 44058403649. |
@@ -33,3 +33,8 @@ Owner actions still pending: complete the deferred offline-media copy/restore ve
 ## Integrated follow-up evidence
 
 The signed code-100→101 experimental candidate passed the API-30 in-place update check, preserving identity, verified dual-key contact, nickname and encrypted history. It is an Actions candidate artifact, not a published release. See [evidence and download](audits/security-followups/README.md). Publication stayed disabled; v1.0 assets remain unchanged. Physical results remain NOT RUN.
+
+
+## Published 1.1 follow-up
+
+[Version 1.1](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1) is now an experimental prerelease. It adds named signed QR contacts and bounded per-neighbor relay retries with forwarding opportunity reserved for a newly appearing relay. The corrected small-screen contact dialog and QR-name tests passed hosted Android checks. [Signed update and independently verified public-download evidence](audits/release-1.1/README.md) covers v1.0→1.1 identity/contact/history continuity. The owner reports BLE bulk success but failed third-phone relay on v1.0; no exact models/logs or quantitative measurements were supplied. A field fix is not claimed until the 1.1 A–B–C retest succeeds. Use the 1.1 retest in TESTING.md, not the historical v1.0 baseline, for current debugging.

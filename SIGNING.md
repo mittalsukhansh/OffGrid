@@ -145,9 +145,14 @@ The [1.0 workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/439236
 
 ## Owner-machine custody gate
 
-See [KEY_CUSTODY.md](KEY_CUSTODY.md) for the recipient-encrypted handoff and offline-copy verification. Environment possession and a matching archive have been verified. The owner subsequently confirmed the decrypted Windows archive hash and created a passphrase-encrypted copy; separate offline-media restore verification remains pending. The next source version uses code 101/name 1.0.1-experimental; it does not overwrite published v1.0 assets.
+See [KEY_CUSTODY.md](KEY_CUSTODY.md) for the recipient-encrypted handoff and offline-copy verification. Environment possession and a matching archive have been verified. The owner subsequently confirmed the decrypted Windows archive hash and created a passphrase-encrypted copy; separate offline-media restore verification remains pending. The intermediate candidate used code 101/name 1.0.1-experimental. Published v1.1 now uses code 110/name 1.1-experimental; v1.0 assets remain unchanged.
 
 
 ## Signed 1.0.1 experimental candidate evidence
 
 The generalized [candidate workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44059024185) passed an actual signed v1.0/code-100→1.0.1-experimental/code-101 update on API 30, preserving the same identity, verified dual-key contact, nickname and encrypted history. Its publish job was skipped (`publish: false`). [Evidence and artifact link](docs/audits/security-followups/README.md). This is an Actions candidate, not a new GitHub Release or phone-radio result.
+
+
+## Published 1.1 upgrade evidence
+
+The [v1.1 publication workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44063108150) passed a signed API-30 v1.0/code100→1.1-experimental/code110 update before publishing. The [public release APK](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1) was downloaded again and checked against the staged hash, pinned certificate, release package/version/code and signed source 16d8592. [Archived evidence](docs/audits/release-1.1/README.md). No private signing material was uploaded; phone-radio reliability remains a separate test.
