@@ -255,3 +255,10 @@ GitHub Actions runs build/lint/JVM checks and an API 30 emulator test job. The
 separate test-release workflow only publishes a draft prerelease from a tested
 commit on `main`; it attaches an APK, checksum, certificate report and checklist.
 CI test artifacts do not replace the physical validation table above.
+
+
+### Version 1.1 phone follow-up
+
+Version 1.1-experimental (code 110) adds a device name prompt and signed named QR exchange. Scanning prefills the contact label; custom local nicknames are preserved. Names are not globally unique accounts. Update every phone before scanning new named QRs; old contacts and protocol-5 messaging remain supported.
+
+The owner reports BLE bulk working on v1.0 and a third-phone relay failure. Device models, exact transport negotiation, exports and three-phone reproduction details have not been supplied, so this is a reported direct-link result, not a completed benchmark. Version 1.1 includes the post-1.0 inventory/replay/backup fixes, bounds repeated sends to one neighbor and keeps forwarding budget for a newly appearing relay. Automated routing regressions cannot establish that the reported phone failure is fixed; retest A–B–C with mesh started on all three, A/C outside direct range and B able to reach both. Nearby peer counts show direct neighbors, not an end-to-end route map.

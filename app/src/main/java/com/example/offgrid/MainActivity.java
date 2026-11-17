@@ -396,6 +396,8 @@ public class MainActivity extends AppCompatActivity {
         updateRecipientButton();
         updateConversationVisibility();
         updateUi();
+        if (savedInstanceState == null && crypto().displayName().isEmpty())
+            showDisplayNameDialog(null);
     }
 
     @Override
@@ -779,7 +781,7 @@ public class MainActivity extends AppCompatActivity {
         final EditText input = new EditText(this);
         input.setHint(CryptoManager.CONTACT_PREFIX + "…");
         input.setMaxLines(4);
-        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(400)});
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(640)});
 
         String clip = readClipboardText();
         if (clip != null
@@ -985,9 +987,12 @@ public class MainActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("Verify contact")
                 .setMessage(
-                        "Compare this full fingerprint with the one shown in My contact on the"
-                            + " other person's phone, in person or over a trusted channel. Scanning"
-                            + " or importing alone does not verify who owns the contact.\n\n"
+                        crypto().contactLabel(id)
+                                + "\n\n"
+                                + "Compare this full fingerprint with the one shown in My contact"
+                                + " on the other person's phone, in person or over a trusted"
+                                + " channel. Scanning or importing alone does not verify who owns"
+                                + " the contact.\n\n"
                                 + CryptoManager.formatId(fingerprint, 64))
                 .setPositiveButton(
                         "Fingerprints match",
@@ -1008,8 +1013,44 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
+    private void showDisplayNameDialog(@Nullable Runnable afterSave) {
+        EditText input = new EditText(this);
+        input.setHint("Your name");
+        input.setSingleLine(true);
+        input.setFilters(new InputFilter[] {new InputFilter.LengthFilter(40)});
+        input.setText(crypto().displayName());
+        AlertDialog dialog =
+                new AlertDialog.Builder(this)
+                        .setTitle("Choose your OffGrid name")
+                        .setMessage(
+                                "Shared in your contact QR. Names can repeat; your fingerprint"
+                                        + " identifies you.")
+                        .setView(input)
+                        .setPositiveButton("Save name", null)
+                        .setNegativeButton("Later", null)
+                        .create();
+        dialog.setOnShowListener(ignored ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                        .setOnClickListener(v -> {
+                            try {
+                                crypto().setDisplayName(input.getText().toString());
+                                dialog.dismiss();
+                                updateRecipientButton();
+                                updateConversationList();
+                                if (afterSave != null) afterSave.run();
+                            } catch (IllegalArgumentException | IllegalStateException e) {
+                                input.setError(e.getMessage());
+                            }
+                        }));
+        dialog.show();
+    }
+
     private void showMyContactDialog() {
         final CryptoManager cm = crypto();
+        if (cm.displayName().isEmpty()) {
+            showDisplayNameDialog(this::showMyContactDialog);
+            return;
+        }
         ImageView qr = new ImageView(this);
         int size = (int) (240 * getResources().getDisplayMetrics().density);
         qr.setLayoutParams(new LinearLayout.LayoutParams(size, size));
@@ -1029,41 +1070,57 @@ public class MainActivity extends AppCompatActivity {
             identityBackup.show();
         });
         qrContainer.addView(backup);
-        new AlertDialog.Builder(this)
-                .setTitle("My contact")
-                .setMessage(
-                        "Your ID:\n"
-                                + CryptoManager.formatId(cm.getLocalId(), 32)
-                                + "\n\nFull fingerprint:\n"
-                                + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
-                                + "\n\n"
-                                + "Share your contact with people who should be able to message you"
-                                + " privately. Confirm the ID with them in person or on another"
-                                + " channel so you know the contact is really theirs.")
-                .setView(qrContainer)
-                .setPositiveButton(
-                        "Share",
-                        (d, w) -> {
-                            Intent send =
-                                    new Intent(Intent.ACTION_SEND)
-                                            .setType("text/plain")
-                                            .putExtra(Intent.EXTRA_TEXT, cm.getContactString());
-                            startActivity(Intent.createChooser(send, "Share contact"));
-                        })
-                .setNeutralButton(
-                        "Copy",
-                        (d, w) -> {
-                            ClipboardManager clipboard =
-                                    (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                            if (clipboard != null) {
-                                clipboard.setPrimaryClip(
-                                        ClipData.newPlainText(
-                                                "OffGrid contact", cm.getContactString()));
-                                Toast.makeText(this, "Contact copied", Toast.LENGTH_SHORT).show();
-                            }
-                        })
-                .setNegativeButton("Close", null)
-                .show();
+        Button editName = new Button(this);
+        editName.setText("Edit my name");
+        qrContainer.addView(editName);
+        AlertDialog dialog =
+                new AlertDialog.Builder(this)
+                        .setTitle("My contact")
+                        .setMessage(
+                                "Name: "
+                                        + cm.displayName()
+                                        + "\n\nYour ID:\n"
+                                        + CryptoManager.formatId(cm.getLocalId(), 32)
+                                        + "\n\nFull fingerprint:\n"
+                                        + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
+                                        + "\n\n"
+                                        + "Share your contact with people who should be able to"
+                                        + " message you privately. Confirm the ID with them in"
+                                        + " person or on another channel so you know the contact is"
+                                        + " really theirs.")
+                        .setView(qrContainer)
+                        .setPositiveButton(
+                                "Share",
+                                (d, w) -> {
+                                    Intent send =
+                                            new Intent(Intent.ACTION_SEND)
+                                                    .setType("text/plain")
+                                                    .putExtra(
+                                                            Intent.EXTRA_TEXT,
+                                                            cm.getContactString());
+                                    startActivity(Intent.createChooser(send, "Share contact"));
+                                })
+                        .setNeutralButton(
+                                "Copy",
+                                (d, w) -> {
+                                    ClipboardManager clipboard =
+                                            (ClipboardManager)
+                                                    getSystemService(Context.CLIPBOARD_SERVICE);
+                                    if (clipboard != null) {
+                                        clipboard.setPrimaryClip(
+                                                ClipData.newPlainText(
+                                                        "OffGrid contact", cm.getContactString()));
+                                        Toast.makeText(this, "Contact copied", Toast.LENGTH_SHORT)
+                                                .show();
+                                    }
+                                })
+                        .setNegativeButton("Close", null)
+                        .create();
+        editName.setOnClickListener(v -> {
+            dialog.dismiss();
+            showDisplayNameDialog(this::showMyContactDialog);
+        });
+        dialog.show();
     }
 
     @Nullable

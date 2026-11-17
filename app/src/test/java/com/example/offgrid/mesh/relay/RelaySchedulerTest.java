@@ -61,6 +61,35 @@ public class RelaySchedulerTest {
     }
 
     @Test
+    public void repeatedSendsLeaveBudgetForAThirdPhoneAfterLongPartition() {
+        MeshMessage packet = queued(0);
+        scheduler.start();
+        for (int i = 0; i < 7; i++) {
+            peer("ble:coc:old-neighbor", -10);
+            scheduler.inventory("ble:coc:old-neighbor", sender, Collections.emptyList());
+            time.runDue();
+            for (Call call : new ArrayList<>(transport.calls)) {
+                if (call.listener.shouldSend(packet.getMessageId())) {
+                    call.listener.onForwarded(packet.getMessageId());
+                    call.listener.onComplete(null, false);
+                }
+            }
+            time.advance(60_000);
+        }
+        assertEquals(Integer.valueOf(3), storage.progress.get(packet.getMessageId()));
+        assertTrue(scheduler.eligible(packet.getMessageId()));
+        peer("ble:coc:new-third-phone", -40);
+        scheduler.inventory(
+                "ble:coc:new-third-phone",
+                "22222222222222222222222222222222",
+                Collections.emptyList());
+        time.runDue();
+        Call next = transport.calls.get(transport.calls.size() - 1);
+        assertEquals("ble:coc:new-third-phone", next.peer);
+        assertTrue(next.listener.shouldSend(packet.getMessageId()));
+    }
+
+    @Test
     public void strongestPeersAreChosenAndConcurrentSessionsAreCapped() {
         queued(0);
         for (int i = 0; i < 8; i++) peer("peer" + i, -100 + i);
@@ -358,6 +387,8 @@ public class RelaySchedulerTest {
 
         @Override
         public com.example.offgrid.mesh.transport.TransferProfile profile(String peer) {
+            if (peer.startsWith("ble:coc:"))
+                return com.example.offgrid.mesh.transport.TransferProfile.COC;
             return peer.startsWith("wifi:")
                     ? com.example.offgrid.mesh.transport.TransferProfile.WIFI
                     : com.example.offgrid.mesh.transport.TransferProfile.GATT;

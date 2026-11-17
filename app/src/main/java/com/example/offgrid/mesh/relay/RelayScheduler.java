@@ -19,6 +19,7 @@ public final class RelayScheduler {
     public static final int MAX_CONNECTIONS = 3;
     public static final int MAX_BATCH = 20;
     public static final int MAX_FORWARDS = 6;
+    public static final int MAX_FORWARDS_PER_PEER = 3;
     public static final int MAX_QUEUE = 200;
     public static final long PEER_FRESH_MS = 10_000;
     public static final long PEER_TIMEOUT_MS = 30_000;
@@ -248,6 +249,16 @@ public final class RelayScheduler {
         }
     }
 
+    private boolean readyFor(Peer peer, String id) {
+        if (!eligible(id) || !peer.ready(id, timer.elapsed())) return false;
+        Hint hint = peer.hints.get(id);
+        int attempts = hint == null ? 0 : hint.forwards;
+        // Never spend the final global attempt retrying an already-served neighbor.
+        // Keep an opportunity for a new relay that appears after a partition.
+        return attempts < MAX_FORWARDS_PER_PEER
+                && (attempts == 0 || queue.get(id).forwardCount < MAX_FORWARDS - 1);
+    }
+
     private List<MeshTransport.Packet> pendingFor(Peer peer, int limit) {
         List<MeshTransport.Packet> result = new ArrayList<>();
         if (peer.address.startsWith("ble:coc:")
@@ -256,7 +267,7 @@ public final class RelayScheduler {
         for (Buffered buffered : queue.values()) {
             if (result.size() >= limit) break;
             String id = buffered.message.getMessageId();
-            if (eligible(id) && peer.ready(id, timer.elapsed())) {
+            if (readyFor(peer, id)) {
                 byte[] bytes = encoder.apply(buffered.message);
                 if (bytes.length <= transport.maxPacketBytes(peer.address))
                     result.add(new MeshTransport.Packet(id, bytes));
@@ -306,7 +317,7 @@ public final class RelayScheduler {
 
                         @Override
                         public boolean shouldSend(String id) {
-                            return current() && eligible(id) && peer.ready(id, timer.elapsed());
+                            return current() && readyFor(peer, id);
                         }
 
                         @Override
@@ -373,6 +384,9 @@ public final class RelayScheduler {
 
     public String diagnostics() {
         StringBuilder text = new StringBuilder();
+        text.append(
+                "Automatic relay: on while mesh is running\n"
+                    + "Nearby peers are direct neighbors, not all reachable contacts.\n");
         text.append("Relay queue: ")
                 .append(queue.size())
                 .append(" packets\n")

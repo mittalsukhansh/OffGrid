@@ -23,8 +23,28 @@ import java.util.*;
 @RunWith(AndroidJUnit4.class)
 public class ConversationsUiTest {
     @Test
+    public void asksForDeviceNameAndShowsItInMyContact() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        CryptoManager crypto = CryptoManager.getInstance(context);
+        String previous = crypto.displayName();
+        context.getSharedPreferences("offgrid_identity", 0).edit().remove("display_name").commit();
+        try (ActivityScenario<MainActivity> scenario =
+                ActivityScenario.launch(MainActivity.class)) {
+            onView(withHint("Your name")).perform(replaceText("Trail teammate"));
+            onView(withText("Save name")).perform(click());
+            assertEquals("Trail teammate", crypto.displayName());
+            onView(withId(R.id.contactButton)).perform(click());
+            onView(withText(containsString("Name: Trail teammate"))).check(matches(isDisplayed()));
+            onView(withText("Close")).perform(click());
+        } finally {
+            if (!previous.isEmpty()) crypto.setDisplayName(previous);
+        }
+    }
+
+    @Test
     public void opensSeparateChatsAndNetworkDiagnosticsWithoutStartingRadios() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        CryptoManager.getInstance(context).setDisplayName("UI test device");
         MessageStore store = MessageStore.get(context);
         String alice = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", bob = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         String me = CryptoManager.getInstance(context).getLocalId();

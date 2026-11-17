@@ -70,6 +70,56 @@ public class TrustSecurityTest {
     }
 
     @Test
+    public void signedNamedQrImportsDisplayNameWithoutOverwritingLocalAlias() throws Exception {
+        alice.setDisplayName("Sukhansh 🌲");
+        String bundle = alice.getContactString();
+        Bitmap qr = ContactQr.bitmap(bundle, 512);
+        int[] pixels = new int[512 * 512];
+        qr.getPixels(pixels, 0, 512, 0, 0, 512, 512);
+        String decoded =
+                new MultiFormatReader()
+                        .decode(
+                                new BinaryBitmap(
+                                        new HybridBinarizer(
+                                                new RGBLuminanceSource(512, 512, pixels))))
+                        .getText();
+        assertEquals(bundle, decoded);
+        String id = bob.importContact(decoded);
+        assertEquals(alice.getLocalId(), id);
+        assertEquals("Sukhansh 🌲", bob.nickname(id));
+        assertFalse(bob.isVerified(id));
+        assertTrue(bob.setNickname(id, "My hiking friend"));
+        alice.setDisplayName("New shared name");
+        assertEquals(id, bob.importContact(alice.getContactString()));
+        assertEquals("My hiking friend", bob.nickname(id));
+        assertEquals("New shared name", peer("alice").displayName());
+    }
+
+    @Test
+    public void nameTamperingCannotImportAContactAndLegacyQrStillWorks() throws Exception {
+        String legacy = alice.getContactString();
+        assertEquals(alice.getLocalId(), bob.importContact(legacy));
+        alice.setDisplayName("Alice");
+        String[] parts = alice.getContactString().split("\\.", -1);
+        parts[2] =
+                android.util.Base64.encodeToString(
+                        "Impersonated".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        android.util.Base64.URL_SAFE
+                                | android.util.Base64.NO_PADDING
+                                | android.util.Base64.NO_WRAP);
+        assertNull(bob.importContact(String.join(".", parts)));
+        try {
+            alice.setDisplayName("\u202Ehidden");
+            fail("Hidden formatting accepted");
+        } catch (IllegalArgumentException expected) {
+        }
+        char[] password = "public test passphrase".toCharArray();
+        byte[] backup = alice.exportIdentity(password);
+        bob.restoreIdentity(backup, password);
+        assertEquals("Alice", bob.displayName());
+    }
+
+    @Test
     public void signedBroadcastAuthenticatesIdentityAndAllowsHopChanges() throws Exception {
         MeshMessage signed =
                 alice.signPacket(MeshMessage.create(alice.getLocalId(), "Authentic broadcast"));

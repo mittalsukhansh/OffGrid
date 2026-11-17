@@ -418,10 +418,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Physical BLE/CoC/Direct and three-phone relay results; owner offline-media restore verification, upstream written license consent, admin-only metadata/optional Actions secrets. Unknown replay protection weakens after eviction; protected epoch limits fail closed; full forward secrecy remains absent. No new release was published.
 - **Sources:** This change; D040–D043; https://github.com/mittalsukhansh/OffGrid/actions/runs/44059024185; docs/audits/security-followups/README.md.
 
+## D045 — 2026-11-17 UTC — Version 1.1 relay fairness and named QR contacts
+
+- **Status:** Implemented and locally checked; hosted Android and signed release checks pending
+- **Work:** Owner reports BLE bulk working on published v1.0 but a third phone not relaying; exact models/logs and text versus media were not supplied. Added a long-partition relay regression, limited retries to three per remembered logical neighbor and reserved the final global forwarding attempt for a neighbor not yet served. Diagnostics explain automatic relay/direct-neighbor counts. Added durable device display-name prompt/editor, signed named QR export/import, normalized bounded names, tamper rejection, legacy contact read support and local-alias preservation. Identity backup now includes the own name. Added QR decode/crypto/name persistence/backup and first-launch UI regressions. Version code 110/name 1.1-experimental, protocol 5 unchanged. Prepared release notes and explicit v1.1 tag support in the reusable verifier.
+- **Decision / reason:** A new relay needs forwarding budget after a long partition; retries still cannot imply Delivered or become unbounded. This identifies a regression risk in newer retry logic, not a proven root cause of the user's v1.0 radio failure. Names are self-selected labels signed with the contact binding, not hosted/global usernames, and do not change identity/fingerprint or overwrite owner aliases. All phones must update before scanning new named QRs. Release 1.1 is explicitly authorized, but no publication is claimed before checks.
+- **Validation / evidence:** Debug assembly, lint, all 72 JVM tests and Android-test compilation passed. Six host harness/manifest tests pass, including matching optional experimental tag and invalid-tag rejection. The new fake-transport fixture was corrected to advertise CoC capability for CoC endpoint tests; no real-phone behavior inferred. Hosted Android runtime and signed v1.0→1.1 install-r validation remain pending.
+- **Open items:** Execute hosted checks, signed build/upgrade and v1.1 publication; consolidate temporary branches without merging historical binary artifact commits. User must retest the actual three-phone topology. Physical CoC/Direct benchmarks, owner offline-media backup and legal/admin items remain open.
+- **Sources:** This change; user v1.0 BLE/relay report in this session; TESTING.md; RELEASE_NOTES_1.1.md; PACKET_FORMAT.md.
+
 ## Template for the next work set
 
 ```markdown
-## D045 — YYYY-MM-DD HH:MM UTC — Short title
+## D046 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

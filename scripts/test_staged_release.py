@@ -20,12 +20,14 @@ class ManifestTests(unittest.TestCase):
 
     def test_default_is_candidate_only(self):
         self.assertEqual('false', staged.validate_manifest(self.manifest)['publish'])
+        self.manifest['tag'] = 'v1.0.1'
+        self.assertEqual('v1.0.1', staged.validate_manifest(self.manifest)['tag'])
         self.manifest['publish'] = True
         self.assertEqual('true', staged.validate_manifest(self.manifest)['publish'])
 
     def test_rejects_unsafe_versions_downgrades_and_unpinned_files(self):
         for field, value in (('version', '../secret'), ('version', '1.0\nother=x'),
-                             ('versionCode', 100), ('versionCode', True),
+                             ('tag', 'v9.0'), ('tag', '../unsafe'), ('versionCode', 100), ('versionCode', True),
                              ('baselineSource', 'main'), ('schema', 3), ('publish', 'false')):
             candidate = copy.deepcopy(self.manifest)
             candidate[field] = value

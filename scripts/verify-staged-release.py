@@ -43,6 +43,9 @@ def validate_manifest(manifest):
         # No stable-labelled publication until real-device evidence and a reviewed policy change.
         if publish and not version.endswith('-experimental'):
             raise ValueError('New publications must explicitly use an experimental version')
+    tag = manifest.get('tag', 'v' + version)
+    if tag not in ('v' + version, 'v' + version.removesuffix('-experimental')):
+        raise ValueError('Release tag must match the app version')
     apk = f'offgrid-{version}.apk'
     required = {apk, 'baseline.apk', 'baseline-test.apk', 'upgrade-test.apk'}
     hashes = manifest.get('sha256')
@@ -51,7 +54,7 @@ def validate_manifest(manifest):
     if any(not isinstance(h, str) or not DIGEST.fullmatch(h) for h in hashes.values()):
         raise ValueError('Invalid artifact digest')
     return dict(version=version, source=source, baseline=baseline, apk=apk,
-                tag='v' + version, publish=str(publish).lower())
+                tag=tag, publish=str(publish).lower())
 
 
 def main():

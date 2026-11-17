@@ -11,7 +11,7 @@ public final class ContactQr {
         if (contact == null
                 || !(contact.startsWith(CryptoManager.CONTACT_PREFIX)
                         || contact.startsWith("offgrid5:"))
-                || contact.length() > 400
+                || contact.length() > 640
                 || size < 64
                 || size > 1024) {
             throw new IllegalArgumentException("Invalid contact QR request");

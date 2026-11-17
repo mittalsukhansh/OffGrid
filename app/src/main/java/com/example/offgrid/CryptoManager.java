@@ -166,15 +166,38 @@ public final class CryptoManager {
         return publicKeyB64;
     }
 
+    public synchronized String displayName() {
+        return prefs.getString("display_name", "");
+    }
+
+    public synchronized void setDisplayName(String value) {
+        String name = normalizeNickname(value);
+        if (name.isEmpty()
+                || name.codePoints().anyMatch(c -> Character.getType(c) == Character.FORMAT))
+            throw new IllegalArgumentException(
+                    "Use a name of 1–40 characters without hidden formatting");
+        if (!prefs.edit().putString("display_name", name).commit())
+            throw new IllegalStateException("Could not save your name");
+        contactBundle = null;
+    }
+
     /** A string others can import to message this device privately. */
     @NonNull
     public synchronized String getContactString() {
         if (contactBundle != null) return contactBundle;
         try {
             String pair = publicKeyB64 + "." + agreementPublic;
+            String name = displayName();
+            if (!name.isEmpty())
+                pair +=
+                        "."
+                                + Base64.encodeToString(
+                                        name.getBytes(StandardCharsets.UTF_8), B64_FLAGS);
             java.security.Signature signer = java.security.Signature.getInstance("SHA256withECDSA");
             signer.initSign(privateKey, secureRandom);
-            signer.update(("offgrid-contact-v5|" + pair).getBytes(StandardCharsets.UTF_8));
+            signer.update(
+                    ((name.isEmpty() ? "offgrid-contact-v5|" : "offgrid-contact-name-v1|") + pair)
+                            .getBytes(StandardCharsets.UTF_8));
             return contactBundle =
                     "offgrid5:" + pair + "." + Base64.encodeToString(signer.sign(), B64_FLAGS);
         } catch (GeneralSecurityException e) {
@@ -210,7 +233,7 @@ public final class CryptoManager {
      */
     @Nullable
     public String importContact(@Nullable String contactString) {
-        if (contactString == null || contactString.length() > 400) return null;
+        if (contactString == null || contactString.length() > 640) return null;
         if (contactString.trim().startsWith("offgrid5:")) return importBundle(contactString.trim());
         String s = contactString.trim();
         if (!s.regionMatches(true, 0, CONTACT_PREFIX, 0, CONTACT_PREFIX.length())) return null;
@@ -573,6 +596,7 @@ public final class CryptoManager {
         byte[] plain = null;
         try {
             payload.put("version", 1);
+            payload.put("displayName", displayName());
             payload.put("signingPrivate", Base64.encodeToString(signing, B64_FLAGS));
             payload.put("signingPublic", publicKeyB64);
             payload.put("agreementPrivate", Base64.encodeToString(agreement, B64_FLAGS));
@@ -620,6 +644,9 @@ public final class CryptoManager {
                     decodePublicKey(Base64.decode(contact.getString("agreement"), B64_FLAGS));
                 contact.put("nickname", normalizeNickname(contact.optString("nickname", "")));
             }
+            String restoredName = normalizeNickname(payload.optString("displayName", ""));
+            if (restoredName.codePoints().anyMatch(c -> Character.getType(c) == Character.FORMAT))
+                throw new GeneralSecurityException("Invalid display name");
             String epoch = java.util.UUID.randomUUID().toString().replace("-", "");
             if (!prefs.edit()
                     .putString(
@@ -629,6 +656,7 @@ public final class CryptoManager {
                             "agreement_wrapped", Base64.encodeToString(wrap(agreement), B64_FLAGS))
                     .putString("agreement_public", newAgreementPublic)
                     .putString(PREF_CONTACTS, savedContacts.toString())
+                    .putString("display_name", restoredName)
                     .putString("send_epoch", epoch)
                     .putLong("sequence_reserved", 0)
                     .commit())
@@ -744,20 +772,35 @@ public final class CryptoManager {
     private synchronized String importBundle(String bundle) {
         try {
             String[] parts = bundle.substring("offgrid5:".length()).split("\\.", -1);
-            if (parts.length != 3
+            if ((parts.length != 3 && parts.length != 4)
                     || parts[0].length() != 87
                     || parts[1].length() != 87
-                    || parts[2].length() > 104) return null;
+                    || parts[parts.length - 1].length() > 104
+                    || (parts.length == 4 && parts[2].length() > 214)) return null;
             ECPublicKey signing = decodePublicKey(Base64.decode(parts[0], B64_FLAGS));
             decodePublicKey(Base64.decode(parts[1], B64_FLAGS));
+            String signed = parts[0] + "." + parts[1];
+            String name = "";
+            if (parts.length == 4) {
+                byte[] rawName = Base64.decode(parts[2], B64_FLAGS);
+                name = normalizeNickname(new String(rawName, StandardCharsets.UTF_8));
+                if (name.isEmpty()
+                        || name.codePoints().anyMatch(c -> Character.getType(c) == Character.FORMAT)
+                        || !Base64.encodeToString(name.getBytes(StandardCharsets.UTF_8), B64_FLAGS)
+                                .equals(parts[2])) return null;
+                signed += "." + parts[2];
+            }
             java.security.Signature verify = java.security.Signature.getInstance("SHA256withECDSA");
             verify.initVerify(signing);
             verify.update(
-                    ("offgrid-contact-v5|" + parts[0] + "." + parts[1])
+                    ((parts.length == 4 ? "offgrid-contact-name-v1|" : "offgrid-contact-v5|")
+                                    + signed)
                             .getBytes(StandardCharsets.UTF_8));
-            if (!verify.verify(Base64.decode(parts[2], B64_FLAGS))) return null;
+            if (!verify.verify(Base64.decode(parts[parts.length - 1], B64_FLAGS))) return null;
             String id = deriveId(Base64.decode(parts[0], B64_FLAGS));
-            return registerAgreement(id, parts[0], parts[1], true) ? id : null;
+            if (!registerAgreement(id, parts[0], parts[1], true)) return null;
+            if (contacts.get(id).nickname.isEmpty() && !name.isEmpty()) setNickname(id, name);
+            return id;
         } catch (GeneralSecurityException | IllegalArgumentException bad) {
             return null;
         }

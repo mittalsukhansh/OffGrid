@@ -205,3 +205,12 @@ Use [v1.0 → offgrid-1.0.apk](https://github.com/mittalsukhansh/OffGrid/release
 5. After basic success, repeat with screens off for five minutes, then Bluetooth toggles and a process restart. Keep failed runs and record recovery. Repeat controlled transfers three times if possible.
 
 Two phones validate a direct link only. Three-phone A–B–C relay testing still requires a third phone with A and C outside direct range. Do not report radio throughput or background reliability until these measurements actually exist.
+
+
+## Version 1.1 relay and name retest
+
+Owner report: BLE bulk works with v1.0; third-phone relaying did not. Exact models/logs and whether this involved text/media remain unspecified. This is not a measured throughput result or a confirmed root cause.
+
+Install the signed 1.1 experimental update on all three compatible phones **without uninstalling**. Choose a name on each phone. Exchange A/C named QR contacts and compare fingerprints; check names appear in contact/conversation labels and changing a local nickname survives rescanning. B does not need to read A/C private messages or import their QR contacts to relay ciphertext.
+
+Start mesh on A, B and C. Disable Wi-Fi/mobile data for an isolated BLE run. Establish that A/C cannot deliver directly with B stopped; keep them out of direct range. Start B within range of both. Send a new private text A→C, verify C's text and authenticated Delivered at A; repeat C→A. Inspect/export diagnostics on all three. Repeat by introducing C after several minutes of A/B connectivity, then repeat with B restarted and with screen-off operation. Keep within the ten-minute pending lifetime. Test a photo only after plain text succeeds; record GATT versus negotiated CoC. This distinguishes a topology, discovery or receipt failure from media throughput.
