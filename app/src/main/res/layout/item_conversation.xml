@@ -1,0 +1,4 @@
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/conversationLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:minHeight="64dp" android:padding="16dp" android:textColor="@color/og_text"
+    android:textSize="15sp" android:background="?attr/selectableItemBackground"/>

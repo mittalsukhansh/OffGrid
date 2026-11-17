@@ -1,37 +1,33 @@
 package com.example.offgrid;
 
 import android.content.Context;
-import android.graphics.drawable.GradientDrawable;
+import android.content.res.ColorStateList;
 import android.text.format.DateFormat;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.widget.TextViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
-/**
- * Renders chat bubbles: own messages on the right, messages from peers on the left. Private
- * (end-to-end encrypted) messages are marked with a lock and show who they are addressed to. The
- * adapter displays the list it is given; the owner mutates the list and calls the matching
- * notifyItem* method.
- */
 public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
 
-    /** One row in the chat history. */
     public static final class ChatEntry {
         public final MeshMessage message;
         public final boolean outgoing;
 
-        /** Time shown in the bubble (send time for own messages, receive time for peers'). */
         public final long displayTimeMs;
 
         public final String status;
@@ -67,16 +63,19 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         }
     }
 
-    private static final int OUT_BG = 0xFF1565C0;
     private static final int OUT_TEXT = 0xFFFFFFFF;
     private static final int OUT_META = 0xCCFFFFFF;
-    private static final int IN_BG = 0xFFE3E3E8;
-    private static final int IN_TEXT = 0xFF1B1B1F;
-    private static final int IN_META = 0x991B1B1F;
-    private static final float CORNER_RADIUS_DP = 16f;
-    private static final String LOCK = " \uD83D\uDD12"; // lock emoji
+    private static final int OUT_SENDER = 0xE6FFFFFF;
+    private static final int OUT_BADGE = 0xFFE0F7FA;
+    private static final int IN_TEXT = 0xFFF3F4F6;
+    private static final int IN_META = 0xFF9CA3AF;
+    private static final int PUBLIC_ACCENT = 0xFF34D399;
+    private static final int PRIVATE_ACCENT = 0xFF22D3EE;
+    private static final int WARN = 0xFFF59E0B;
+    private static final int DANGER = 0xFFF87171;
 
     private final List<ChatEntry> entries;
+    private final Set<String> animated = new HashSet<>();
 
     public interface Interaction {
         void open(ChatEntry entry);
@@ -107,9 +106,14 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         ChatEntry entry = entries.get(position);
         Context context = holder.itemView.getContext();
+        MeshMessage message = entry.message;
+        boolean outgoing = entry.outgoing;
+        boolean secure = message.isPrivate();
+        float density = context.getResources().getDisplayMetrics().density;
 
         holder.senderText.setText(senderLabel(entry, context));
-        holder.messageText.setText(entry.message.getText());
+        holder.messageText.setText(message.getText());
+        holder.preview.setClipToOutline(true);
         holder.preview.setVisibility(entry.thumbnail == null ? View.GONE : View.VISIBLE);
         holder.preview.setImageBitmap(entry.thumbnail);
         View.OnClickListener open =
@@ -134,22 +138,71 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
                                                 : "")
                                 : ""));
 
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(
-                CORNER_RADIUS_DP * context.getResources().getDisplayMetrics().density);
-        background.setColor(entry.outgoing ? OUT_BG : IN_BG);
-        holder.bubble.setBackground(background);
+        int background;
+        if (outgoing) {
+            background =
+                    secure ? R.drawable.bg_bubble_out_private : R.drawable.bg_bubble_out_public;
+        } else {
+            background = secure ? R.drawable.bg_bubble_in_private : R.drawable.bg_bubble_in_public;
+        }
+        holder.bubble.setBackgroundResource(background);
 
-        int textColor = entry.outgoing ? OUT_TEXT : IN_TEXT;
-        int metaColor = entry.outgoing ? OUT_META : IN_META;
-        holder.messageText.setTextColor(textColor);
-        holder.senderText.setTextColor(metaColor);
-        holder.timeText.setTextColor(metaColor);
+        int metaColor = outgoing ? OUT_META : IN_META;
+        holder.messageText.setTextColor(outgoing ? OUT_TEXT : IN_TEXT);
+        holder.senderText.setTextColor(
+                outgoing ? OUT_SENDER : (secure ? PRIVATE_ACCENT : PUBLIC_ACCENT));
+        holder.hopText.setTextColor(metaColor);
+        boolean failed =
+                entry.status.equals("FAILED")
+                        || entry.status.equals("EVICTED")
+                        || entry.status.equals("EXPIRED")
+                        || entry.status.equals("UNSEND_EXPIRED");
+        holder.timeText.setTextColor(failed ? DANGER : metaColor);
+
+        if (outgoing) {
+            holder.trustText.setVisibility(View.GONE);
+            holder.hopText.setText("TTL " + message.getTtl());
+        } else {
+            CryptoManager crypto = CryptoManager.getInstance(context);
+            boolean legacy = message.isPublic() && message.getSignature() == null;
+            boolean verified = crypto.isVerified(message.getSenderId());
+            holder.trustText.setVisibility(View.VISIBLE);
+            holder.trustText.setText(
+                    legacy ? "Legacy unsigned" : verified ? "✓ Verified" : "Unverified");
+            holder.trustText.setTextColor(legacy || !verified ? WARN : PUBLIC_ACCENT);
+            // Relay TTL is mutable and cannot prove route length or physical proximity.
+            holder.hopText.setText("TTL " + message.getTtl());
+        }
+
+        holder.e2eeBadge.setVisibility(secure ? View.VISIBLE : View.GONE);
+        int badgeColor = outgoing ? OUT_BADGE : PRIVATE_ACCENT;
+        holder.e2eeBadge.setTextColor(badgeColor);
+        TextViewCompat.setCompoundDrawableTintList(
+                holder.e2eeBadge, ColorStateList.valueOf(badgeColor));
 
         LinearLayout.LayoutParams params =
                 (LinearLayout.LayoutParams) holder.bubble.getLayoutParams();
-        params.gravity = entry.outgoing ? Gravity.END : Gravity.START;
+        params.gravity = outgoing ? Gravity.END : Gravity.START;
         holder.bubble.setLayoutParams(params);
+
+        holder.itemView.animate().cancel();
+        holder.itemView.setAlpha(1f);
+        holder.itemView.setTranslationY(0f);
+        if (position == entries.size() - 1 && animated.add(message.getMessageId())) {
+            if (animated.size() > 1000) {
+                animated.clear();
+                animated.add(message.getMessageId());
+            }
+            holder.itemView.setAlpha(0f);
+            holder.itemView.setTranslationY(14f * density);
+            holder.itemView
+                    .animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(220)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
     }
 
     @Override
@@ -159,21 +212,11 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
 
     private static String senderLabel(ChatEntry entry, Context context) {
         MeshMessage m = entry.message;
+        CryptoManager crypto = CryptoManager.getInstance(context);
         if (entry.outgoing) {
-            return m.isPrivate()
-                    ? "You \u2192 "
-                            + CryptoManager.getInstance(context).contactLabel(m.getTargetId())
-                            + LOCK
-                    : "You";
+            return m.isPrivate() ? "You \u2192 " + crypto.contactLabel(m.getTargetId()) : "You";
         }
-        String trust =
-                CryptoManager.getInstance(context).isVerified(m.getSenderId())
-                        ? " · ✓ Verified contact"
-                        : " · Unverified contact";
-        if (m.isPublic() && m.getSignature() == null) trust = " · Legacy unsigned message";
-        return CryptoManager.getInstance(context).contactLabel(m.getSenderId())
-                + (m.isPrivate() ? " · private" + LOCK : "")
-                + trust;
+        return crypto.contactLabel(m.getSenderId());
     }
 
     private static String statusLabel(String status) {
@@ -213,7 +256,10 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
     static final class ViewHolder extends RecyclerView.ViewHolder {
         final View bubble;
         final TextView senderText;
+        final TextView trustText;
+        final TextView e2eeBadge;
         final TextView messageText;
+        final TextView hopText;
         final TextView timeText;
         final ImageView preview;
 
@@ -221,7 +267,10 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
             super(itemView);
             bubble = itemView.findViewById(R.id.bubble);
             senderText = itemView.findViewById(R.id.senderText);
+            trustText = itemView.findViewById(R.id.trustText);
+            e2eeBadge = itemView.findViewById(R.id.e2eeBadge);
             messageText = itemView.findViewById(R.id.messageText);
+            hopText = itemView.findViewById(R.id.hopText);
             timeText = itemView.findViewById(R.id.timeText);
             preview = itemView.findViewById(R.id.mediaPreview);
         }

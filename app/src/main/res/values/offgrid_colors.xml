@@ -1,0 +1,13 @@
+<resources>
+    <color name="og_bg">#080C11</color>
+    <color name="og_surface">#111B23</color>
+    <color name="og_text">#F3F4F6</color>
+    <color name="og_muted">#9CA3AF</color>
+    <color name="og_hint">#8793A0</color>
+    <color name="og_on_accent">#04130E</color>
+    <color name="og_send_icon">#04130E</color>
+    <color name="og_emerald_soft">#D1FAE5</color>
+    <color name="og_cyan_soft">#A5F3FC</color>
+    <color name="og_accent">#34D399</color>
+    <color name="og_border">#293741</color>
+</resources>

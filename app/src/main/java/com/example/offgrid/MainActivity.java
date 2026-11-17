@@ -1,16 +1,26 @@
 package com.example.offgrid;
 
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.text.InputFilter;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -18,6 +28,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -48,32 +59,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Chat screen for the OffGrid mesh.
- *
- * <p>Flow when the user taps "Start Mesh":
- *
- * <ol>
- *   <li>{@link BlePermissionHelper#requestPermissions()} - runtime permissions
- *   <li>{@link BlePermissionHelper#requestEnableBluetooth()} - Bluetooth on
- *   <li>{@link MeshService#start(android.content.Context)} - foreground service starts and the
- *       already-registered binding connects to it
- * </ol>
- *
- * <p>The Activity binds <em>without</em> BIND_AUTO_CREATE, so the binding never keeps the service
- * alive and the UI always mirrors the real service state. Leaving the app does not stop the mesh.
- *
- * <p>Private messaging: the "To:" button picks "Everyone" or a contact. Contacts are added by
- * importing a contact string ("My contact" on the other phone) or appear automatically once their
- * key has been heard on the mesh.
- */
 public class MainActivity extends AppCompatActivity {
 
-    /** Keeps chat history and the selected recipient across configuration changes. */
     public static class ChatViewModel extends ViewModel {
         final List<ChatAdapter.ChatEntry> entries = new ArrayList<>();
 
-        /** Device ID of the selected private recipient, or null for "Everyone". */
         @Nullable String recipientId;
 
         boolean listVisible = true;
@@ -85,15 +75,37 @@ public class MainActivity extends AppCompatActivity {
         @Nullable String mediaMime;
     }
 
-    // Views
+    private static final int COLOR_ACTIVE = 0xFF10B981;
+    private static final int COLOR_WAITING = 0xFFF59E0B;
+    private static final int COLOR_OFFLINE = 0xFF6B7280;
+    private static final int COLOR_TEXT = 0xFFF3F4F6;
+    private static final int COLOR_MUTED = 0xFF9CA3AF;
+    private static final int COLOR_STOP = 0xFFF87171;
+    private static final int COLOR_ON_ACCENT = 0xFF04130E;
+    private static final int COLOR_CHIP_SELECTED = 0xFF34D399;
+
     private TextView statusText;
     private Button toggleButton;
-    private Button sendButton;
+    private ImageButton sendButton;
     private Button recipientButton;
     private Button contactButton;
     private EditText messageInput;
     private RecyclerView chatRecycler;
     private LinearLayoutManager layoutManager;
+    private View statusDot;
+    private View statusGlow;
+    private TextView nodeIdBadge;
+    private TextView eventPill;
+    private LinearLayout targetChips;
+    private ObjectAnimator glowAnimator;
+    private final Runnable hideEvent =
+            () ->
+                    eventPill
+                            .animate()
+                            .alpha(0f)
+                            .setDuration(220)
+                            .withEndAction(() -> eventPill.setVisibility(View.GONE))
+                            .start();
 
     private ChatAdapter adapter;
     private ChatViewModel chatViewModel;
@@ -114,17 +126,13 @@ public class MainActivity extends AppCompatActivity {
     private final java.util.concurrent.ExecutorService mediaWorker =
             java.util.concurrent.Executors.newSingleThreadExecutor();
 
-    // Service connection state (main thread only)
     private IdentityBackupUi identityBackup;
-    private MeshService mesh; // non-null == service is running and connected
+    private MeshService mesh;
     private boolean bound;
-
-    // ------------------------------------------------------------------
-    // Lifecycle
-    // ------------------------------------------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.Theme_OffGrid);
         super.onCreate(savedInstanceState);
         identityBackup = new IdentityBackupUi(this, MeshService::identityRestoreSafe);
         diagnosticsExport =
@@ -243,6 +251,11 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         statusText = findViewById(R.id.statusText);
+        statusDot = findViewById(R.id.statusDot);
+        statusGlow = findViewById(R.id.statusGlow);
+        nodeIdBadge = findViewById(R.id.nodeIdBadge);
+        eventPill = findViewById(R.id.eventPill);
+        targetChips = findViewById(R.id.targetChips);
         toggleButton = findViewById(R.id.toggleButton);
         sendButton = findViewById(R.id.sendButton);
         recipientButton = findViewById(R.id.recipientButton);
@@ -259,6 +272,7 @@ public class MainActivity extends AppCompatActivity {
             setRecipient(conversation.equals("public") ? null : conversation);
         });
         findViewById(R.id.diagnosticsButton).setOnClickListener(v -> showDiagnostics());
+        nodeIdBadge.setOnClickListener(v -> copyNodeId());
         getOnBackPressedDispatcher()
                 .addCallback(
                         this,
@@ -355,8 +369,7 @@ public class MainActivity extends AppCompatActivity {
                             if (messageId.equals(chatViewModel.pendingMessageId)) {
                                 chatViewModel.pendingMessageId = null;
                                 chatViewModel.pendingText = null;
-                                updateUi(); // leave the draft available, even if failure happened
-                                // off-screen
+                                updateUi();
                             }
                         });
         store.dao()
@@ -379,13 +392,18 @@ public class MainActivity extends AppCompatActivity {
             }
             return false;
         });
-        sendButton.setOnClickListener(v -> sendCurrentMessage());
+        sendButton.setOnClickListener(v -> {
+            pulse(v);
+            sendCurrentMessage();
+        });
         findViewById(R.id.attachButton).setOnClickListener(v -> chooseAttachment());
-        toggleButton.setOnClickListener(v -> onToggleClicked());
+        toggleButton.setOnClickListener(v -> {
+            pulse(v);
+            onToggleClicked();
+        });
         recipientButton.setOnClickListener(v -> showRecipientDialog());
         contactButton.setOnClickListener(v -> showMyContactDialog());
 
-        // Must be created during onCreate (registers Activity Result launchers).
         permissionHelper = new BlePermissionHelper(this, permissionCallback);
 
         if (savedInstanceState != null) {
@@ -394,6 +412,7 @@ public class MainActivity extends AppCompatActivity {
             observeSelectedConversation();
         }
         openNotification(getIntent());
+        bindNodeBadge();
         updateRecipientButton();
         updateConversationVisibility();
         updateUi();
@@ -426,6 +445,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        updateUi();
+        refreshTargetChips();
         updateConversationVisibility();
         markDisplayedRead();
     }
@@ -433,12 +454,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         resumed = false;
+        stopGlow();
         MessageStore.get(this).visibleConversation(null);
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
+        stopGlow();
+        eventPill.removeCallbacks(hideEvent);
         identityBackup.close();
         mediaWorker.shutdown();
         super.onDestroy();
@@ -456,7 +480,6 @@ public class MainActivity extends AppCompatActivity {
                                         Toast.LENGTH_LONG)
                                 .show();
                 });
-        // flags = 0: connect if/when the service is running, never create or keep it alive.
         bound = bindService(new Intent(this, MeshService.class), serviceConnection, 0);
     }
 
@@ -474,10 +497,6 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
     }
 
-    // ------------------------------------------------------------------
-    // Service binding
-    // ------------------------------------------------------------------
-
     private final ServiceConnection serviceConnection =
             new ServiceConnection() {
                 @Override
@@ -485,39 +504,35 @@ public class MainActivity extends AppCompatActivity {
                     mesh = ((MeshService.LocalBinder) binder).getService();
                     mesh.addListener(meshListener);
                     updateUi();
+                    showEvent("Mesh online · " + mesh.getPeerCount() + " in range");
                 }
 
                 @Override
                 public void onServiceDisconnected(ComponentName name) {
-                    // Service stopped (Stop button, notification action, or process death).
                     mesh = null;
                     updateUi();
+                    showEvent("Mesh offline");
                 }
             };
 
     private final MeshService.MeshListener meshListener =
             new MeshService.MeshListener() {
                 @Override
-                public void onMessageReceived(@NonNull MeshMessage message) {
-                    // Public messages, and private messages already decrypted by the service.
-                    // Room updates the screen, including messages received while it was closed.
-                }
+                public void onMessageReceived(@NonNull MeshMessage message) {}
 
                 @Override
                 public void onPeerCountChanged(int peerCount) {
                     updateUi();
+                    showEvent(peerCount == 1 ? "1 node in range" : peerCount + " nodes in range");
                 }
 
                 @Override
                 public void onMeshError(@NonNull String description) {
                     Toast.makeText(MainActivity.this, description, Toast.LENGTH_LONG).show();
                     updateUi();
+                    showEvent(description);
                 }
             };
-
-    // ------------------------------------------------------------------
-    // Start / stop
-    // ------------------------------------------------------------------
 
     private void onToggleClicked() {
         if (mesh != null) {
@@ -530,7 +545,7 @@ public class MainActivity extends AppCompatActivity {
                 notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS);
             else startMeshService();
         } else {
-            permissionHelper.requestPermissions(); // -> permissionCallback
+            permissionHelper.requestPermissions();
         }
     }
 
@@ -539,7 +554,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onAllGranted() {
                     if (MeshService.hasWifiTransportEnabled(MainActivity.this)) startMeshService();
-                    else permissionHelper.requestEnableBluetooth(); // -> onBluetoothEnabled
+                    else permissionHelper.requestEnableBluetooth();
                 }
 
                 @Override
@@ -567,25 +582,23 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         MeshService.start(this);
-        if (!bound) { // safety net if the binding from onStart() was refused
+        if (!bound) {
             bound = bindService(new Intent(this, MeshService.class), serviceConnection, 0);
         }
         statusText.setText("Starting…");
+        applyStatus(COLOR_WAITING, COLOR_WAITING, false);
         promptLocationIfNeeded();
     }
 
     private void stopMeshService() {
         MeshService.stop(this);
-        if (mesh != null) { // reflect immediately; onServiceDisconnected() may lag
+        if (mesh != null) {
             mesh.removeListener(meshListener);
             mesh = null;
         }
         updateUi();
+        showEvent("Mesh stopped");
     }
-
-    // ------------------------------------------------------------------
-    // Sending
-    // ------------------------------------------------------------------
 
     private void sendCurrentMessage() {
         if (chatViewModel.pendingMessageId != null) return;
@@ -612,7 +625,6 @@ public class MainActivity extends AppCompatActivity {
             }
             sent = result.message;
         }
-        // Display only after the service has committed the message and pending packet to Room.
         chatViewModel.pendingMessageId = sent.getMessageId();
         chatViewModel.pendingText = text;
         updateUi();
@@ -638,10 +650,6 @@ public class MainActivity extends AppCompatActivity {
                 return "Couldn't send that message";
         }
     }
-
-    // ------------------------------------------------------------------
-    // Recipient + contacts
-    // ------------------------------------------------------------------
 
     private CryptoManager crypto() {
         return CryptoManager.getInstance(this);
@@ -686,14 +694,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateConversationList() {
-        List<String> labels = new ArrayList<>();
+        List<CharSequence> labels = new ArrayList<>();
         int unread = 0;
         for (ConversationSummary item : conversations) {
             String label =
                     item.conversationId.equals("public")
                             ? "Everyone · public"
                             : crypto().contactLabel(item.conversationId);
-            labels.add(
+            String text =
                     label
                             + (item.unread > 0 ? "  ·  " + item.unread + " unread" : "")
                             + "\n"
@@ -701,11 +709,29 @@ public class MainActivity extends AppCompatActivity {
                                     .format(new java.util.Date(item.lastTime))
                             + " "
                             + android.text.format.DateFormat.getTimeFormat(this)
-                                    .format(new java.util.Date(item.lastTime)));
+                                    .format(new java.util.Date(item.lastTime));
+            SpannableString styled = new SpannableString(text);
+            int split = text.lastIndexOf('\n');
+            if (split > 0) {
+                styled.setSpan(
+                        new StyleSpan(Typeface.BOLD), 0, split, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                styled.setSpan(
+                        new ForegroundColorSpan(COLOR_MUTED),
+                        split + 1,
+                        text.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                styled.setSpan(
+                        new RelativeSizeSpan(0.8f),
+                        split + 1,
+                        text.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            labels.add(styled);
             unread += item.unread;
         }
         conversationList.setAdapter(
-                new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels));
+                new ArrayAdapter<>(
+                        this, R.layout.item_conversation, R.id.conversationLabel, labels));
         conversationsButton.setText("Conversations" + (unread > 0 ? " (" + unread + ")" : ""));
     }
 
@@ -749,6 +775,49 @@ public class MainActivity extends AppCompatActivity {
                         : "To: \uD83D\uDD12 "
                                 + crypto().contactLabel(id)
                                 + (crypto().isVerified(id) ? " · ✓ Verified" : " · Unverified"));
+        refreshTargetChips();
+    }
+
+    private void refreshTargetChips() {
+        if (targetChips == null || chatViewModel == null) return;
+        targetChips.removeAllViews();
+        String selected = chatViewModel.recipientId;
+        targetChips.addView(buildChip("Broadcast", selected == null, () -> setRecipient(null)));
+        int shown = 0;
+        for (CryptoManager.Contact c : crypto().getContacts()) {
+            if (shown >= 12 && !c.id.equals(selected)) continue;
+            shown++;
+            final String contactId = c.id;
+            targetChips.addView(
+                    buildChip(
+                            (c.verified ? "✓ " : "") + crypto().contactLabel(contactId),
+                            contactId.equals(selected),
+                            () -> setRecipient(contactId)));
+        }
+        targetChips.addView(buildChip("+ Add", false, this::showAddContactDialog));
+    }
+
+    private TextView buildChip(String label, boolean selected, Runnable action) {
+        float density = getResources().getDisplayMetrics().density;
+        TextView chip = new TextView(this);
+        chip.setText(label);
+        chip.setSingleLine(true);
+        chip.setEllipsize(TextUtils.TruncateAt.END);
+        chip.setMaxWidth((int) (150 * density));
+        chip.setTextSize(12);
+        chip.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        chip.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        chip.setPadding((int) (12 * density), 0, (int) (12 * density), 0);
+        chip.setBackgroundResource(R.drawable.bg_chip);
+        chip.setSelected(selected);
+        chip.setTextColor(selected ? COLOR_CHIP_SELECTED : COLOR_MUTED);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, (int) (48 * density));
+        params.setMarginEnd((int) (8 * density));
+        chip.setLayoutParams(params);
+        chip.setOnClickListener(v -> action.run());
+        return chip;
     }
 
     private void showRecipientDialog() {
@@ -796,7 +865,7 @@ public class MainActivity extends AppCompatActivity {
         String clip = readClipboardText();
         if (clip != null
                 && clip.trim().toLowerCase(Locale.ROOT).startsWith(CryptoManager.CONTACT_PREFIX)) {
-            input.setText(clip.trim()); // convenience: they probably just copied it
+            input.setText(clip.trim());
         }
 
         int pad = (int) (20 * getResources().getDisplayMetrics().density);
@@ -1159,10 +1228,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Chat list
-    // ------------------------------------------------------------------
-
     private void showStoredHistory(List<ChatAdapter.ChatEntry> entries, boolean unreadable) {
         boolean nearBottom = isNearBottom();
         chatViewModel.entries.clear();
@@ -1192,10 +1257,6 @@ public class MainActivity extends AppCompatActivity {
         int count = adapter.getItemCount();
         return count == 0 || layoutManager.findLastVisibleItemPosition() >= count - 2;
     }
-
-    // ------------------------------------------------------------------
-    // UI state
-    // ------------------------------------------------------------------
 
     private void setWifiEnabled(boolean enabled) {
         getSharedPreferences("offgrid-network", MODE_PRIVATE)
@@ -1477,19 +1538,91 @@ public class MainActivity extends AppCompatActivity {
     private void updateUi() {
         boolean running = mesh != null;
         toggleButton.setText(running ? "Stop Mesh" : "Start Mesh");
+        toggleButton.setBackgroundResource(
+                running ? R.drawable.bg_button_stop : R.drawable.bg_button_start);
+        toggleButton.setTextColor(running ? COLOR_STOP : COLOR_ON_ACCENT);
         sendButton.setEnabled(running && chatViewModel.pendingMessageId == null);
 
         if (!running) {
             statusText.setText("Mesh stopped");
+            applyStatus(COLOR_OFFLINE, COLOR_MUTED, false);
         } else {
-            String state = mesh.isMeshActive() ? "Mesh active" : "Waiting for Bluetooth or Wi-Fi";
+            boolean active = mesh.isMeshActive();
+            String state = active ? "Mesh active" : "Waiting for Bluetooth or Wi-Fi";
             statusText.setText(state + " · " + mesh.getPeerCount() + " nearby");
+            applyStatus(
+                    active ? COLOR_ACTIVE : COLOR_WAITING,
+                    active ? COLOR_TEXT : COLOR_WAITING,
+                    active);
         }
     }
 
-    // ------------------------------------------------------------------
-    // Dialogs
-    // ------------------------------------------------------------------
+    private void applyStatus(int dotColor, int textColor, boolean pulsing) {
+        ColorStateList tint = ColorStateList.valueOf(dotColor);
+        statusDot.setBackgroundTintList(tint);
+        statusGlow.setBackgroundTintList(tint);
+        statusText.setTextColor(textColor);
+        if (pulsing && resumed) startGlow();
+        else stopGlow();
+    }
+
+    private void startGlow() {
+        if (glowAnimator != null && glowAnimator.isRunning()) return;
+        statusGlow.setVisibility(View.VISIBLE);
+        glowAnimator =
+                ObjectAnimator.ofPropertyValuesHolder(
+                        statusGlow,
+                        PropertyValuesHolder.ofFloat(View.SCALE_X, 0.6f, 1.5f),
+                        PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.6f, 1.5f),
+                        PropertyValuesHolder.ofFloat(View.ALPHA, 0.7f, 0f));
+        glowAnimator.setDuration(1400);
+        glowAnimator.setRepeatCount(ObjectAnimator.INFINITE);
+        glowAnimator.start();
+    }
+
+    private void stopGlow() {
+        if (glowAnimator != null) {
+            glowAnimator.cancel();
+            glowAnimator = null;
+        }
+        statusGlow.setAlpha(0f);
+        statusGlow.setVisibility(View.INVISIBLE);
+    }
+
+    private void showEvent(String text) {
+        if (eventPill == null || isDestroyed()) return;
+        float density = getResources().getDisplayMetrics().density;
+        eventPill.removeCallbacks(hideEvent);
+        eventPill.animate().cancel();
+        eventPill.setText(text);
+        eventPill.setVisibility(View.VISIBLE);
+        eventPill.setAlpha(0f);
+        eventPill.setTranslationY(-8f * density);
+        eventPill.animate().alpha(1f).translationY(0f).setDuration(200).start();
+        eventPill.postDelayed(hideEvent, 3500);
+    }
+
+    private void pulse(View view) {
+        view.animate().cancel();
+        view.animate()
+                .scaleX(0.92f)
+                .scaleY(0.92f)
+                .setDuration(70)
+                .withEndAction(() -> view.animate().scaleX(1f).scaleY(1f).setDuration(120).start())
+                .start();
+    }
+
+    private void bindNodeBadge() {
+        nodeIdBadge.setText("ID  " + CryptoManager.formatId(crypto().getLocalId(), 8));
+    }
+
+    private void copyNodeId() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        clipboard.setPrimaryClip(ClipData.newPlainText("OffGrid node ID", crypto().getLocalId()));
+        pulse(nodeIdBadge);
+        Toast.makeText(this, "Node ID copied", Toast.LENGTH_SHORT).show();
+    }
 
     private void showPermissionDeniedDialog(boolean permanentlyDenied) {
         String permissionName =
@@ -1512,7 +1645,6 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
-    /** Android 6-11 returns no BLE scan results while the Location toggle is off. */
     private void promptLocationIfNeeded() {
         if (!BlePermissionHelper.isLocationServiceRequiredAndOff(this)) return;
         new AlertDialog.Builder(this)
@@ -1525,10 +1657,6 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Not now", null)
                 .show();
     }
-
-    // ------------------------------------------------------------------
-    // Edge-to-edge insets (status bar, nav bar, keyboard)
-    // ------------------------------------------------------------------
 
     private void applyWindowInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(

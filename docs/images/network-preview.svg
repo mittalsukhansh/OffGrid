@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1140" viewBox="0 0 640 1140" role="img" aria-labelledby="title description">
+  <title id="title">OffGrid network diagnostics preview</title>
+  <desc id="description">Illustrative OffGrid network diagnostics panel with Wi-Fi Direct, shared Wi-Fi, BLE bulk options, and sample diagnostics.</desc>
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17212b"/>
+      <stop offset="1" stop-color="#080c11"/>
+    </linearGradient>
+    <style>
+      text { font-family: "Segoe UI", Roboto, Arial, sans-serif; }
+      .muted { fill: #9ca3af; }
+      .white { fill: #f3f4f6; }
+    </style>
+  </defs>
+  <rect x="28" y="12" width="584" height="1116" rx="66" fill="url(#frame)" stroke="#35414b" stroke-width="3"/>
+  <rect x="46" y="30" width="548" height="1080" rx="50" fill="#0b1117"/>
+  <rect x="241" y="30" width="158" height="22" rx="11" fill="#05080b"/>
+  <text x="78" y="78" class="white" font-size="16" font-weight="600">9:41</text>
+  <g fill="#e6edf3">
+    <rect x="500" y="64" width="4" height="10" rx="2"/>
+    <rect x="508" y="60" width="4" height="14" rx="2"/>
+    <rect x="516" y="56" width="4" height="18" rx="2"/>
+    <path d="M530 62q12-12 24 0l-12 14z"/>
+    <rect x="565" y="58" width="18" height="16" rx="4" fill="none" stroke="#e6edf3" stroke-width="2"/>
+    <rect x="583" y="63" width="3" height="6" rx="1"/>
+    <rect x="568" y="61" width="10" height="10" rx="2"/>
+  </g>
+  <rect x="46" y="90" width="548" height="176" fill="#101a22"/>
+  <text x="72" y="131" class="white" font-size="28" font-weight="700" letter-spacing=".8">OffGrid</text>
+  <rect x="72" y="145" width="168" height="30" rx="10" fill="#18232c" stroke="#293741"/>
+  <text x="86" y="165" class="muted" font-size="14" font-family="monospace">ID ········</text>
+  <rect x="413" y="107" width="76" height="38" rx="12" fill="#17232b" stroke="#2a3a43"/>
+  <text x="451" y="132" text-anchor="middle" fill="#a5f3fc" font-size="14" font-weight="600">My QR</text>
+  <rect x="498" y="107" width="82" height="38" rx="12" fill="#34d399"/>
+  <text x="539" y="132" text-anchor="middle" fill="#04130e" font-size="13" font-weight="700">Start Mesh</text>
+  <circle cx="83" cy="214" r="6" fill="#6b7280"/>
+  <text x="102" y="219" class="muted" font-size="16" font-weight="600">Mesh stopped</text>
+  <rect x="475" y="194" width="98" height="34" rx="11" fill="#17232b" stroke="#2a3a43"/>
+  <text x="524" y="216" text-anchor="middle" class="muted" font-size="14">Network</text>
+  <rect x="62" y="302" width="516" height="220" rx="24" fill="#111b23" stroke="#26353f"/>
+  <text x="84" y="347" class="white" font-size="22" font-weight="700">Network diagnostics</text>
+  <text x="84" y="377" class="muted" font-size="14">Transport controls and live status</text>
+  <rect x="82" y="398" width="476" height="52" rx="14" fill="#18252e" stroke="#2c3b45"/>
+  <text x="104" y="430" fill="#a5f3fc" font-size="15" font-weight="600">Wi-Fi Direct · no access point</text>
+  <path d="M530 419l7 7-7 7" fill="none" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="86" y="482" class="white" font-size="15">Same-LAN Wi-Fi</text>
+  <text x="86" y="501" class="muted" font-size="12">Optional shared network</text>
+  <rect x="504" y="463" width="46" height="26" rx="13" fill="#293741"/>
+  <circle cx="517" cy="476" r="10" fill="#d1d5db"/>
+
+  <rect x="62" y="548" width="516" height="380" rx="24" fill="#111b23" stroke="#26353f"/>
+  <text x="86" y="591" class="white" font-size="20" font-weight="700">BLE bulk streams</text>
+  <text x="86" y="618" class="muted" font-size="14">L2CAP on Android 10+</text>
+  <rect x="504" y="579" width="46" height="26" rx="13" fill="#065f46"/>
+  <circle cx="537" cy="592" r="10" fill="#34d399"/>
+  <line x1="86" y1="642" x2="554" y2="642" stroke="#293741"/>
+
+  <rect x="84" y="666" width="218" height="42" rx="12" fill="#17232b" stroke="#2a3a43"/>
+  <text x="193" y="692" text-anchor="middle" class="white" font-size="14" font-weight="600">Reset measurements</text>
+  <rect x="314" y="666" width="240" height="42" rx="12" fill="#17232b" stroke="#2a3a43"/>
+  <text x="434" y="692" text-anchor="middle" class="white" font-size="14" font-weight="600">Export measurements</text>
+
+  <text x="86" y="755" fill="#34d399" font-size="13" font-weight="700" letter-spacing=".7">SAMPLE DIAGNOSTICS</text>
+  <rect x="84" y="773" width="470" height="126" rx="14" fill="#0b1218" stroke="#23313a"/>
+  <text x="104" y="804" class="white" font-size="14">Mesh stopped. Start the mesh to</text>
+  <text x="104" y="828" class="white" font-size="14">inspect live peers, queues and errors.</text>
+  <text x="104" y="864" class="muted" font-size="13">Wi-Fi Direct pairing works without</text>
+  <text x="104" y="885" class="muted" font-size="13">an access point. Internet is not required.</text>
+
+  <rect x="62" y="957" width="516" height="62" rx="18" fill="#18232c"/>
+  <text x="320" y="995" text-anchor="middle" class="muted" font-size="14">Illustrative UI · sample content</text>
+  <rect x="268" y="1086" width="104" height="5" rx="2.5" fill="#ecf1f5" opacity=".75"/>
+</svg>

@@ -535,10 +535,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Separate UI integration/review is outside this queue patch; prior physical/release limitations remain unchanged.
 - **Sources:** This change; D056; ui commit 6f736021f68372e870651cb128bb9f97c8a099df.
 
+## D058 — 2026-11-17 UTC — Integrate all unmerged origin branches and repair UI source
+
+- **Status:** Integration implemented/locally checked; final hosted Android validation pending
+- **Work:** Owner explicitly requests inspecting/merging all branches. Inspected origin/main and origin/ui plus the upstream tracking branch; upstream has no unique commits and ui is the sole unmerged feature. Merged ui 6f73602 into current main on a temporary integration branch, preserving the UI author's commit and queue/unsend/composer changes. Resolved README conflict by retaining illustrative previews alongside current release/evidence links. Added missing palette, theme/background/icon/conversation-row resources required by ui, fixed API26 theme compatibility and AppCompat tinting, kept custom control backgrounds and accessible touch sizes. Limited quick-contact views while retaining selected contact/full recipient picker. Pause/resume guards stop hidden status animations. Render mutable TTL as TTL rather than claiming authenticated direct/hop count. Adapted existing conversation UI regression to styled CharSequence rows and checked TTL/send accessibility labels.
+- **Decision / reason:** Consolidate implemented work into one baseline without dropping either contributor's changes or merging historical binary artifact branches. UI labels must not imply a route/proximity proof from mutable TTL. Published v1.1.2 APK/source remain immutable; merging source is not a new APK publication.
+- **Validation / evidence:** Debug assembly/lint, all 82 JVM tests and Android-test compilation passed after resource/theme/tint repairs. Six host checks are run with this commit; final hosted source checks include the added pause guard and Android conversation/name/diagnostics/storage/runtime regressions. Confirmed outgoingSaved observer/outgoingCommitted handler survived automatic Java merge and mesh queue/crypto code is unchanged. Physical radios/UI presentation across phones remain unverified.
+- **Open items:** Exact-source hosted tests, consolidation into main and deleting merged origin/ui/integration branches; record actual final evidence after success. Existing physical/legal/admin/offline-media limits remain open. No new release requested/published here.
+- **Sources:** This merge; ui commit 6f736021f68372e870651cb128bb9f97c8a099df; main 86d4c66; D057; README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D058 — YYYY-MM-DD HH:MM UTC — Short title
+## D059 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

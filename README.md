@@ -6,8 +6,21 @@ media**. Phones exchange signed packets without a messaging server or shared
 access point. It uses a custom store-and-forward protocol; field reliability and
 radio throughput still require physical-device evidence.
 
+## App previews
+
+Illustrative previews of the chat and network diagnostics screens, based on the
+merged UI source. The published v1.1.2 APK predates this UI merge. Message text and diagnostic values are sample content, not live
+device captures or evidence of a working connection.
+
+<p align="center">
+  <img src="docs/images/chat-preview.svg" alt="Illustrative OffGrid chat screen preview" width="42%">
+  &nbsp;&nbsp;
+  <img src="docs/images/network-preview.svg" alt="Illustrative OffGrid network diagnostics screen preview" width="42%">
+</p>
+
 [Download OffGrid 1.1.2 — experimental queue fairness patch](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.2).
 Install the same release APK on all test phones, **without uninstalling** the existing signed app, and follow the [1.1 relay/name retest](TESTING.md#version-11-relay-and-name-retest). Development continues from `main` on short feature branches. Current signed release source: `001e9a3`; published v1.0 assets remain unchanged.
+
 
 The [signed v1.1.1→1.1.2 emulator upgrade evidence](docs/audits/release-1.1.2/README.md) confirms identity, verified contact and encrypted history continuity; the earlier [v1.0→1.1 evidence](docs/audits/release-1.1/README.md) remains available. Source build/lint, 82 JVM tests, six host tests and Android runtime checks passed. This is automated evidence, not a confirmed fix of the owner's reported phone-radio failure.
 

@@ -56,12 +56,16 @@ public class ConversationsUiTest {
             eventually(() ->
                     onData(
                                     allOf(
-                                            instanceOf(String.class),
-                                            containsString(CryptoManager.formatId(alice, 8))))
+                                            instanceOf(CharSequence.class),
+                                            hasToString(
+                                                    containsString(
+                                                            CryptoManager.formatId(alice, 8)))))
                             .inAdapterView(withId(R.id.conversationList))
                             .perform(click()));
             eventually(() -> onView(withText("Alice only " + token)).check(matches(isDisplayed())));
             onView(withText("Bob only " + token)).check(doesNotExist());
+            onView(withId(R.id.hopText)).check(matches(withText(startsWith("TTL "))));
+            onView(withId(R.id.sendButton)).check(matches(withContentDescription("Send message")));
             eventually(() -> assertTrue(store.dao().chat(first.getMessageId()).read));
             assertFalse(store.dao().chat(second.getMessageId()).read);
             scenario.recreate();
@@ -71,8 +75,10 @@ public class ConversationsUiTest {
             eventually(() ->
                     onData(
                                     allOf(
-                                            instanceOf(String.class),
-                                            containsString(CryptoManager.formatId(bob, 8))))
+                                            instanceOf(CharSequence.class),
+                                            hasToString(
+                                                    containsString(
+                                                            CryptoManager.formatId(bob, 8)))))
                             .inAdapterView(withId(R.id.conversationList))
                             .perform(click()));
             eventually(() -> onView(withText("Bob only " + token)).check(matches(isDisplayed())));
