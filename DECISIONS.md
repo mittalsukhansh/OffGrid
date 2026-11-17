@@ -562,10 +562,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** UI is merged source, not a newly published release. Physical phone/UI/radio behavior and existing security/licensing/admin/offline-media responsibilities remain as documented.
 - **Sources:** This change; D058–D059; ui 6f736021f68372e870651cb128bb9f97c8a099df; integrated a9a6a6f856fd7c783219ac51030dc06382d5b9b9; https://github.com/mittalsukhansh/OffGrid/actions/runs/44076699952.
 
+## D061 — 2026-11-17 UTC — Prepare merged-UI APK update 1.1.3
+
+- **Status:** Version/notes prepared and locally checked; hosted/release checks pending
+- **Work:** Owner explicitly requests updating the APK after branch consolidation. Set code113/versionName1.1.3-experimental on main and prepared release notes for the merged UI/resources, compatibility fixes and retained queue/unsend/name features. No additional protocol/database/identity change. Use the existing persistent signing key and actual published 1.1.2/code112 APK as the signed upgrade baseline with matching fixture2.
+- **Decision / reason:** Publish a distinct in-place update instead of overwriting immutable 1.1.2 assets. Retain experimental labeling and existing signing identity, and require exact-source tests plus real signed emulator continuity before release.
+- **Validation / evidence:** Local debug assembly/lint, all 82 JVM tests and Android-test compilation passed. Six host harness checks pass. The preceding merged source a9a6a6f passed hosted Android/runtime/UI checks (44076699952); this versioned source is checked separately before publishing. No new APK publication is claimed yet.
+- **Open items:** Exact-source hosted CI, signed assembly/upgrade/publication, independent public-download verification and artifact cleanup. Existing physical/UI/radio/security/licensing/admin/offline-backup limitations remain documented.
+- **Sources:** This change; D058–D060; RELEASE_NOTES_1.1.3.md; https://github.com/mittalsukhansh/OffGrid/actions/runs/44076699952.
+
 ## Template for the next work set
 
 ```markdown
-## D061 — YYYY-MM-DD HH:MM UTC — Short title
+## D062 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
