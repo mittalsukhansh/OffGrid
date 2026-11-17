@@ -427,10 +427,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Execute hosted checks, signed build/upgrade and v1.1 publication; consolidate temporary branches without merging historical binary artifact commits. User must retest the actual three-phone topology. Physical CoC/Direct benchmarks, owner offline-media backup and legal/admin items remain open.
 - **Sources:** This change; user v1.0 BLE/relay report in this session; TESTING.md; RELEASE_NOTES_1.1.md; PACKET_FORMAT.md.
 
+## D046 — 2026-11-17 UTC — Keep named QR dialog usable on small screens
+
+- **Status:** Fixed locally; hosted rerun pending
+- **Work:** Hosted source dafd83c passed build/lint/JVM/host checks and ordinary crypto/protocol tests, but the new first-launch name UI test found My contact's Close button clipped after name entry on the API-30 emulator. Put the full contact details, QR and profile actions inside a scroll container with dialog actions outside it. Explicitly dismiss the name-entry keyboard after saving.
+- **Decision / reason:** Fix the actual small-screen/keyboard flow rather than weakening the UI assertion or publishing a failed source. Retain the test's real Close-button click.
+- **Validation / evidence:** Final debug assembly/lint, all 72 JVM tests and Android-test compilation pass locally. Failed hosted run 44061318744 is retained; raw result shows one actual UI failure plus four intentionally opt-in assumption skips, not five application regressions. No release was published from that source. Hosted rerun and freshly signed exact-source APK remain pending.
+- **Open items:** Passing runtime rerun and signed v1.0→1.1 upgrade/publication, branch consolidation, physical relay retest. Legal/admin and owner offline backup remain separate.
+- **Sources:** This change; https://github.com/mittalsukhansh/OffGrid/actions/runs/44061318744; D045.
+
 ## Template for the next work set
 
 ```markdown
-## D046 — YYYY-MM-DD HH:MM UTC — Short title
+## D047 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

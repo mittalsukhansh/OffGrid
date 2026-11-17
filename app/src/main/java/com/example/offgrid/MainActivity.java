@@ -1034,6 +1034,11 @@ public class MainActivity extends AppCompatActivity {
                         .setOnClickListener(v -> {
                             try {
                                 crypto().setDisplayName(input.getText().toString());
+                                android.view.inputmethod.InputMethodManager keyboard =
+                                        (android.view.inputmethod.InputMethodManager)
+                                                getSystemService(INPUT_METHOD_SERVICE);
+                                if (keyboard != null)
+                                    keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
                                 dialog.dismiss();
                                 updateRecipientButton();
                                 updateConversationList();
@@ -1073,22 +1078,28 @@ public class MainActivity extends AppCompatActivity {
         Button editName = new Button(this);
         editName.setText("Edit my name");
         qrContainer.addView(editName);
+        TextView details = new TextView(this);
+        details.setText(
+                "Name: "
+                        + cm.displayName()
+                        + "\n\nYour ID:\n"
+                        + CryptoManager.formatId(cm.getLocalId(), 32)
+                        + "\n\nFull fingerprint:\n"
+                        + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
+                        + "\n\n"
+                        + "Share your contact with people who should be able to"
+                        + " message you privately. Confirm the ID with them in"
+                        + " person or on another channel so you know the contact is"
+                        + " really theirs.");
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        details.setPadding(padding, padding, padding, padding);
+        qrContainer.addView(details, 0);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(qrContainer);
         AlertDialog dialog =
                 new AlertDialog.Builder(this)
                         .setTitle("My contact")
-                        .setMessage(
-                                "Name: "
-                                        + cm.displayName()
-                                        + "\n\nYour ID:\n"
-                                        + CryptoManager.formatId(cm.getLocalId(), 32)
-                                        + "\n\nFull fingerprint:\n"
-                                        + CryptoManager.formatId(cm.getOwnFingerprint(), 64)
-                                        + "\n\n"
-                                        + "Share your contact with people who should be able to"
-                                        + " message you privately. Confirm the ID with them in"
-                                        + " person or on another channel so you know the contact is"
-                                        + " really theirs.")
-                        .setView(qrContainer)
+                        .setView(scroll)
                         .setPositiveButton(
                                 "Share",
                                 (d, w) -> {
