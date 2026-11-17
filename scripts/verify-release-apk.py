@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
     parser.add_argument("--version")
+    parser.add_argument("--version-code", type=int)
     parser.add_argument("--source-sha")
     parser.add_argument("--signature-output", type=Path)
     args = parser.parse_args()
@@ -42,6 +43,8 @@ def main():
     version = manifest("version-name")
     if args.version and version != args.version:
         raise SystemExit(f"Version mismatch: APK {version}, expected {args.version}")
+    if args.version_code is not None and int(manifest("version-code")) != args.version_code:
+        raise SystemExit("APK versionCode does not match the manifest")
     signature = subprocess.check_output(
         [str(signer), "verify", "--verbose", "--print-certs", apk], text=True
     )

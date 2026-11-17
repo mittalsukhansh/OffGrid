@@ -1,18 +1,24 @@
-name: Verify and publish pre-signed 1.0
+name: Verify pre-signed candidate and optional experimental release
 on:
   push:
-    branches: ['release-assets/v1.0*']
+    branches: ['release-assets/**']
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: publish-offgrid-v1
+  group: publish-offgrid-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   upgrade:
     if: github.repository == 'mittalsukhansh/OffGrid'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      publish: ${{ steps.artifacts.outputs.publish }}
+      tag: ${{ steps.artifacts.outputs.tag }}
+      source: ${{ steps.artifacts.outputs.source }}
+      apk: ${{ steps.artifacts.outputs.apk }}
+      version: ${{ steps.artifacts.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +34,7 @@ jobs:
       - name: Install verifier tools
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
       - name: Verify pinned certificate, package, hashes and signed provenance
+        id: artifacts
         run: python3 scripts/verify-staged-release.py
       - name: Require successful source CI
         env:
@@ -60,8 +67,21 @@ jobs:
             release-staging/SHA256SUMS
             release-staging/signature.txt
           if-no-files-found: ignore
+      - name: Upload validated installable candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-installable-candidate
+          path: |
+            release-staging/offgrid-*.apk
+            release-staging/manifest.json
+            release-staging/SHA256SUMS
+            release-staging/signature.txt
+            signing/offgrid-release-cert.pem
+            release-evidence/
+          if-no-files-found: error
   publish:
     needs: upgrade
+    if: needs.upgrade.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,11 +92,13 @@ jobs:
         with:
           name: signed-upgrade-evidence
           path: .
-      - name: Publish experimental version 1.0
+      - name: Publish explicitly requested experimental version
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.upgrade.outputs.tag }}
+          SOURCE_SHA: ${{ needs.upgrade.outputs.source }}
+          RELEASE_APK: ${{ needs.upgrade.outputs.apk }}
+          RELEASE_VERSION: ${{ needs.upgrade.outputs.version }}
         run: |
           set -euo pipefail
-          SOURCE=$(python3 -c 'import json; print(json.load(open("release-staging/manifest.json"))["sourceCommit"])')
-          test ! -z "$SOURCE"
-          gh release create v1.0 --target "$SOURCE" --prerelease --title 'OffGrid 1.0 — experimental' --notes-file RELEASE_NOTES_1.0.md release-staging/offgrid-1.0.apk release-staging/SHA256SUMS release-staging/signature.txt signing/offgrid-release-cert.pem release-evidence/upgrade.txt
+          gh release create "$RELEASE_TAG" --target "$SOURCE_SHA" --prerelease --title "OffGrid $RELEASE_VERSION — experimental" --notes "Experimental build. No physical-radio results are implied. Signed in-place upgrade evidence is attached; see TESTING.md for the phone procedure." "release-staging/$RELEASE_APK" release-staging/SHA256SUMS release-staging/signature.txt signing/offgrid-release-cert.pem release-evidence/upgrade.txt

@@ -16,10 +16,18 @@ trap 'adb logcat -d -s OffGridCrypto:W AndroidRuntime:E | tee release-evidence/k
     adb shell am instrument -w -e class com.example.offgrid.UpgradeContinuityTest#verify -e upgrade verify io.github.mittalsukhansh.offgrid.test/androidx.test.runner.AndroidJUnitRunner > release-evidence/baseline-reopen.txt
     cat release-evidence/baseline-reopen.txt
     grep -F 'OK (1 test)' release-evidence/baseline-reopen.txt
-    adb install -r release-staging/offgrid-1.0.apk
+    CANDIDATE=$(python3 - <<'PYTHON'
+import importlib.util,json
+spec=importlib.util.spec_from_file_location('staged','scripts/verify-staged-release.py')
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print('release-staging/' + module.validate_manifest(json.load(open('release-staging/manifest.json')))['apk'])
+PYTHON
+    )
+    adb install -r "$CANDIDATE"
     adb install -r release-staging/upgrade-test.apk
     adb shell am instrument -w -e class com.example.offgrid.UpgradeContinuityTest#verify -e upgrade verify io.github.mittalsukhansh.offgrid.test/androidx.test.runner.AndroidJUnitRunner > release-evidence/verify.txt
     cat release-evidence/verify.txt
     grep -F 'OK (1 test)' release-evidence/verify.txt
-    echo 'PASSED: package/signature accepted in place; identity, signing public key, contact nickname and encrypted history preserved; legacy trust correctly requires reverification.'
+    echo 'PASSED: package/signature accepted in place; identity, signing public key, contact nickname and encrypted history preserved; contact trust matches the baseline key format.'
 } 2>&1 | tee release-evidence/upgrade.txt

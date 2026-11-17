@@ -192,3 +192,16 @@ After the ordinary emulator suite, CI seeds current debug state, reinstalls the 
 
 
 The same-protocol reinstall check passed on API-30 in [run 43940312162](https://github.com/mittalsukhansh/OffGrid/actions/runs/43940312162); [raw evidence](docs/audits/same-protocol-reinstall/README.md). This does not change the physical-device NOT RUN entries above.
+
+
+## Owner quick start: first two-phone baseline
+
+Use [v1.0 → offgrid-1.0.apk](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.0) on **both** phones. This is the currently published experimental snapshot; source version 1.0.1-experimental is not a published release. Keep the APK unchanged during baseline comparisons. S23 FE is eligible; Redmi 4A on Android 7.1.2 is below the API-26 minimum. Borrow an Android 8+ second phone (Android 10+ on both is needed for BLE CoC).
+
+1. Record model/Android version and APK SHA-256. Install, allow requested nearby-device/location permissions and enable Location services for discovery where Android requires it. Start mesh on both phones. Exchange QR contacts and compare fingerprints directly.
+2. **BLE:** disable Wi-Fi and mobile data on both phones; keep Bluetooth on. Send private text in both directions, then a JPEG near the 48 KiB limit. Confirm the recipient sees it and the sender eventually says Delivered. Forwarded alone is insufficient.
+3. Reset diagnostics before each run. With BLE bulk streams enabled, confirm whether CoC actually negotiated; then disable bulk streams for GATT comparison. Record the transport used, exact photo bytes, time, failures and diagnostic exports. Do not label a fallback GATT run CoC.
+4. **Wi-Fi Direct:** turn Bluetooth off, leave Wi-Fi on, disconnect shared access points/hotspots. In Network → Wi-Fi Direct, enable/discover/connect and accept the system pairing prompt. Confirm group-owner/client state, then repeat text and the same photo. Record WIFI_DIRECT counters and delivery evidence.
+5. After basic success, repeat with screens off for five minutes, then Bluetooth toggles and a process restart. Keep failed runs and record recovery. Repeat controlled transfers three times if possible.
+
+Two phones validate a direct link only. Three-phone A–B–C relay testing still requires a third phone with A and C outside direct range. Do not report radio throughput or background reliability until these measurements actually exist.

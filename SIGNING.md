@@ -122,16 +122,20 @@ assets remain historical snapshots. Do not overwrite them with the new package.
 Local build/verification can establish package/signing correctness and repeat-key
 use. An actual signed vN→vN+1 installation with retained identity/history still
 requires a connected Android device/emulator and should be recorded before broad
-distribution. GitHub publication with the persistent key remains blocked until the
-owner provisions the three secrets. App signing does not resolve the separate
+distribution. Actions builds that sign from secrets remain blocked until the owner provisions
+the three secrets. The public pre-signed artifact route below supports local signing. App signing does not resolve the separate
 upstream licensing permission gap in LICENSE and UPSTREAM_PERMISSION.md.
 
 
-## Public pre-signed artifact route for 1.0
+## Public pre-signed candidates and experimental releases
 
 When Actions-secret provisioning is unavailable, build locally with the same private release keystore. The signed APK embeds its exact source commit in `assets/offgrid-build.json`. Only public signed APK/test fixtures, checksums, public certificate and metadata go on a temporary `release-assets/v1.0` branch, as one commit whose parent is the exact tested source on main. Never stage a keystore, credential JSON, password, identity backup or private handoff ZIP.
 
-The `publish-pre-signed.yml` workflow verifies APK hashes, installed identity, pinned certificate, non-debuggable release status, embedded source provenance and exact-source successful CI. It installs the older matching signed code-7 baseline, seeds identity/contact/encrypted-history data, installs 1.0 with `adb install -r`, then verifies continuity and required trust reverification. Publication depends on that actual emulator result. This is a local-key build plus public-artifact verification path, not secret provisioning, a reproducible-build guarantee or physical-phone validation. Preserve the private signing backup separately for future updates.
+The `publish-pre-signed.yml` workflow now accepts temporary `release-assets/**` branches and defaults to **candidate only**. It verifies APK hashes, package/version/code, pinned app/test certificates, signed source provenance and exact-source successful CI. An API-30 emulator seeds the actual signed baseline, reopens it, installs the candidate with `adb install -r` and verifies identity/contact/history continuity. Its installable-candidate artifact is uploaded only after success. Nothing is published to Releases unless the manifest explicitly sets boolean `publish: true`; new publication labels must end in `-experimental`. Keep baseline and candidate test fixtures synchronized with `UpgradeContinuityTest` fixture version 2 so unchanged dual-key contact verification is preserved, while legacy single-key upgrades require reverification.
+
+Schema 2 manifest fields: `schema: 2`, `version`, `versionCode`, `sourceCommit`, `baselineVersion`, `baselineVersionCode`, `baselineSource`, optional boolean `publish` (default false), and `sha256` mapping exactly `offgrid-<version>.apk`, `baseline.apk`, `baseline-test.apk`, `upgrade-test.apk` to their SHA-256 values. The new version code must exceed the baseline. Both app APKs must embed the declared source commit; instrumentation APKs must use the pinned certificate and release test package. Stage the actual published baseline app rather than rebuilding it; only its compatible test fixture needs rebuilding. Source must be committed and tested on main before creating the one-commit staging branch. Never merge binary staging branches into main.
+
+A successful candidate check is emulator upgrade evidence, not physical-phone validation, secret provisioning or a reproducible-build guarantee. Keep the private signing backup separately. The historical schema-1 v1.0 manifest remains readable but also defaults to no publication on reruns.
 
 
 ## Published 1.0 evidence

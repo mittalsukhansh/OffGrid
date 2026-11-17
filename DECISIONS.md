@@ -391,10 +391,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Hosted Android validation; reusable signed-upgrade candidate tooling; owner physical tests, offline-media restore check, licensing/admin actions. No new APK release published.
 - **Sources:** This change; D040; SECURITY.md; PACKET_FORMAT.md; docs/REVIEW_FOLLOWUP.md.
 
+## D042 — 2026-11-17 UTC — Reusable signed candidates without automatic publication
+
+- **Status:** Implemented and locally checked; end-to-end candidate upgrade pending
+- **Work:** Generalized pre-signed staging beyond hardcoded v1.0: explicit baseline/source/version codes, exact APK set/digests, pinned app and test certificates, signed provenance, advancing code checks and safe metadata. Candidate checks upload an installable artifact only after exact-source CI and a real emulator install-r continuity check. Publication defaults false; explicit new publications require experimental labels. Kept historical schema-1 manifests readable. Added manifest-admission host tests and corrected obsolete signing-route wording. Added owner-specific baseline phone steps to TESTING.md.
+- **Decision / reason:** Make a future update concrete and reviewable without overwriting the existing baseline or treating untested radios as stable. Preserve local signing while Actions secret provisioning remains unavailable; never upload signing secrets or owner backup material. Source/artifact identity must be explicit.
+- **Validation / evidence:** Six host orchestration/manifest tests pass; shell syntax, workflow job/output/publication-guard structure and diff formatting checked. End-to-end APK validation/emulator execution is not inferred from these host checks and remains pending.
+- **Open items:** Signed v1.0→1.0.1-experimental candidate upgrade proof; physical phones; deferred offline-media check and licensing/admin actions. No new release published by this work set.
+- **Sources:** This change; SIGNING.md; TESTING.md; scripts/verify-staged-release.py; .github/workflows/publish-pre-signed.yml.
+
 ## Template for the next work set
 
 ```markdown
-## D042 — YYYY-MM-DD HH:MM UTC — Short title
+## D043 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
