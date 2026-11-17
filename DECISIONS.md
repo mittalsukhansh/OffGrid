@@ -463,10 +463,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Hosted Android checks, exact-source signed patch upgrade/publication and independent download verification; owner controlled nearby/far and CoC/Direct comparisons. Earlier physical relay, backup/legal/admin items remain open.
 - **Sources:** This change; owner distance/latency report in this session; PACKET_FORMAT.md; THROUGHPUT.md; TESTING.md; RELEASE_NOTES_1.1.1.md.
 
+## D050 — 2026-11-17 UTC — Stage signed latency patch after source checks
+
+- **Status:** Source integrated, checks passed; signed update/publication pending
+- **Work:** Fast-forwarded latency patch source 2ba6336 into main after hosted checks. Prepared exact-source pinned code111/1.1.1-experimental APK with the actual published v1.1/code110 baseline and matching fixture2 APKs on one temporary artifact commit. Publish=true/tag v1.1.1 follows the owner's request to improve the shipped app's text/media delays, preserving the existing experimental release/signing path. Radio profiles/pacing and protocol remain unchanged.
+- **Decision / reason:** Deliver the latency corrections as an in-place patch, rather than imply the already published v1.1 APK contains new source changes. Actual release publication still depends on signed emulator continuity; no phone speedup is claimed.
+- **Validation / evidence:** Exact source passed both jobs in run 44065006584: build/lint, 74 JVM, six host tests and Android runtime suites. Signed assembly/lint/instrumentation compilation and local release APK package/code/name/pinned-certificate/signed-source verification passed. Signing scan: 541 reachable blobs, two public signing files, zero findings. Matching baseline is the downloaded public release, not a rebuilt app.
+- **Open items:** Real v1.1→1.1.1 signed install-r proof, publication, download verification and temporary-branch cleanup. Owner comparative phone timings/range/third-phone behavior remain unmeasured; prior legal/admin/offline-media actions remain open.
+- **Sources:** This change; D049; https://github.com/mittalsukhansh/OffGrid/actions/runs/44065006584; RELEASE_NOTES_1.1.1.md.
+
+## D051 — 2026-11-17 UTC — Publish verified 1.1.1 latency patch
+
+- **Status:** Published experimental patch; source consolidated on main; public download verified
+- **Work:** Workflow 44065763471 performed a real signed v1.1/code110→1.1.1-experimental/code111 install-r and preserved identity, verified dual-key contact/fingerprint, nickname and encrypted history, then published v1.1.1 from source 2ba6336. Applied release notes to explicitly targeted mittalsukhansh/OffGrid. Independently downloaded/verified the APK and archived public manifest/hash/signature/upgrade output. Preserved D050 preparation log, updated current README/signing/review docs and deleted merged feature/temporary artifact branches. No binary artifact commits were merged into main; origin again has only main. Preserved the concurrently added external testing commits 0b2378e/35e842e and empty test.text file when rebasing this unpublished documentation commit onto current origin/main. No application source differed from the tested/released 2ba6336 snapshot.
+- **Decision / reason:** Make the app-delay corrections testable as a signed update. Chat/receipts receive next-batch priority and bypass initial inventory; periodic refreshes no longer restart the bulk forwarding wait. Radio rates/range are not changed or claimed faster. A fresh nonce is still mandatory for endpoint identity/hint updates and end-to-end authentication remains unchanged.
+- **Validation / evidence:** Exact-source CI 44065006584 passed build/lint, 74 JVM/six host tests and Android runtime suites. Upgrade/publication 44065763471 passed. Downloaded APK SHA-256 3e19b6f1a7bc016fc56be28528891f955e966763378b9d69aa44460d28e39037 matches the staging/published checksum; pinned signer, package, version/code and signed source checked. Pre-stage audit: 541 blobs, two public signing files, zero findings. Public evidence/local links/diff checks performed; final documentation-only change skips redundant Android CI.
+- **Open items:** Owner near/far text/media timings, confirmed CoC versus GATT fallback and Direct comparisons, real third-phone behavior. Priority cannot preempt an active batch and weak links still cause retries/reconnection delays. Earlier licensing/admin/offline-media and full-forward-secrecy limitations remain documented. No numerical speedup is claimed.
+- **Sources:** This change; D049–D050; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.1; https://github.com/mittalsukhansh/OffGrid/actions/runs/44065763471; docs/audits/release-1.1.1/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D050 — YYYY-MM-DD HH:MM UTC — Short title
+## D052 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

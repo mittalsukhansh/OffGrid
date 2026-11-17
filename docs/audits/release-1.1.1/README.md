@@ -1,0 +1,12 @@
+# OffGrid 1.1.1 experimental latency patch evidence
+
+Published 17 November 2026 from `2ba6336d9cf7e0f2d9a739d49250da16d2082597`, app versionName `1.1.1-experimental`, versionCode 111, protocol 5, unchanged pinned certificate/application ID.
+
+- [Source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44065006584): build/lint, 74 JVM, six host tests and Android runtime suites passed. Regression coverage includes priority/bulk-gating behavior, authenticated refresh without a forwarding pause, unanswered refresh after initial timeout, lifecycle reset and stale nonce rejection.
+- [Upgrade/publication workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44065763471): API-30 emulator installed the actual published signed v1.1/code110 APK plus matching fixture2, seeded/reopened identity/contact/history, then installed code111 and its matching test fixture with `adb install -r`. Verification passed for identity/signing key, verified dual-key contact/fingerprint, nickname and encrypted history. No uninstall occurred.
+- [Published release](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.1) was downloaded again and checked against the staging manifest and published checksum, pinned signature, release package, version/code and embedded source. APK SHA-256: `3e19b6f1a7bc016fc56be28528891f955e966763378b9d69aa44460d28e39037`.
+- Before staging, public signing/history audit scanned 541 reachable blobs and two current public signing files, with zero findings. Private signing material was not uploaded.
+
+Archived [manifest](manifest.json), [upgrade output](upgrade.txt), [checksum](SHA256SUMS), [signature report](signature.txt). Only public release/evidence material is retained here.
+
+The owner reported text and media slowing with distance without timings or a confirmed third-phone path. The patch removes avoidable app scheduling pauses and prioritizes queued chat/receipts; it cannot preempt an already active batch. Radio rates/chunk sizes, retry/expiry limits and packet authentication remain unchanged. There is no measured phone speedup or increased-range claim. Use [controlled phone comparisons](../../../TESTING.md#latency-patch-comparison-111); confirm CoC versus GATT fallback and compare paired no-router Wi-Fi Direct for media. Real three-phone relay/radio results, full forward secrecy, upstream licensing consent and owner offline-media restore remain open.

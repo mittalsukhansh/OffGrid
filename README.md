@@ -6,14 +6,14 @@ media**. Phones exchange signed packets without a messaging server or shared
 access point. It uses a custom store-and-forward protocol; field reliability and
 radio throughput still require physical-device evidence.
 
-[Download OffGrid 1.1 — experimental prerelease](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1).
-Install the same release APK on all test phones, **without uninstalling** the existing signed app, and follow the [1.1 relay/name retest](TESTING.md#version-11-relay-and-name-retest). Development continues from `main` on short feature branches. Signed release source: `16d8592`; published v1.0 assets remain unchanged.
+[Download OffGrid 1.1.1 — experimental latency patch](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.1).
+Install the same release APK on all test phones, **without uninstalling** the existing signed app, and follow the [1.1 relay/name retest](TESTING.md#version-11-relay-and-name-retest). Development continues from `main` on short feature branches. Current signed release source: `2ba6336`; published v1.0 assets remain unchanged.
 
-The [signed v1.0→1.1 emulator upgrade evidence](docs/audits/release-1.1/README.md) confirms identity, verified contact and encrypted history continuity. Source build/lint, 72 JVM tests, six host tests and Android runtime checks passed. This is automated evidence, not a confirmed fix of the owner's reported phone-radio failure.
+The [signed v1.1→1.1.1 emulator upgrade evidence](docs/audits/release-1.1.1/README.md) confirms identity, verified contact and encrypted history continuity; the earlier [v1.0→1.1 evidence](docs/audits/release-1.1/README.md) remains available. Source build/lint, 74 JVM tests, six host tests and Android runtime checks passed. This is automated evidence, not a confirmed fix of the owner's reported phone-radio failure.
 
 ## Current release and physical testing
 
-Version **1.1-experimental**, code **110**, adds a device-name prompt and signed named QRs, preserves custom local contact aliases, improves relay retry fairness and includes the post-1.0 replay/inventory/backup fixes. Update all phones before scanning new named QRs; names can repeat and fingerprints remain the identity check. Wire protocol remains 5. Start mesh on all three phones when testing A–B–C; nearby peer counts show direct neighbors.
+Version **1.1.1-experimental**, code **111**, prioritizes chat/receipts and removes recurring inventory forwarding pauses. It includes a device-name prompt and signed named QRs, preserves custom local contact aliases, improves relay retry fairness and includes the post-1.0 replay/inventory/backup fixes. Update all phones before scanning new named QRs; names can repeat and fingerprints remain the identity check. Wire protocol remains 5. Start mesh on all three phones when testing A–B–C; nearby peer counts show direct neighbors.
 
 The owner reports BLE bulk success and a third-phone relay failure on v1.0, without device models or diagnostic exports. Controlled three-phone/Direct/screen-off results and throughput measurements are still pending. See [review follow-up](docs/REVIEW_FOLLOWUP.md) and [private signing-key custody](KEY_CUSTODY.md). The owner confirmed the Windows signing backup; offline-media restore verification remains pending. Upstream licensing consent remains unresolved.
 
@@ -261,3 +261,8 @@ CI test artifacts do not replace the physical validation table above.
 Version 1.1-experimental (code 110) adds a device name prompt and signed named QR exchange. Scanning prefills the contact label; custom local nicknames are preserved. Names are not globally unique accounts. Update every phone before scanning new named QRs; old contacts and protocol-5 messaging remain supported.
 
 The owner reports BLE bulk working on v1.0 and a third-phone relay failure. Device models, exact transport negotiation, exports and three-phone reproduction details have not been supplied, so this is a reported direct-link result, not a completed benchmark. Version 1.1 includes the post-1.0 inventory/replay/backup fixes, bounds repeated sends to one neighbor and keeps forwarding budget for a newly appearing relay. Automated routing regressions cannot establish that the reported phone failure is fixed; retest A–B–C with mesh started on all three, A/C outside direct range and B able to reach both. Nearby peer counts show direct neighbors, not an end-to-end route map.
+
+
+### Latency patch 1.1.1
+
+Chat and delivery receipts can proceed during the initial inventory exchange and are selected before attachment/control traffic. Refreshing inventory no longer creates repeated five-second forwarding gaps. Priority applies to the next batch; ongoing transmissions are not preempted. Radio pacing/chunk sizes and range are unchanged. The owner reports text/media get slower farther apart, without timings or a confirmed relay path. Compare confirmed CoC versus paired no-router Wi-Fi Direct and export measurements; this patch is not a measured speed multiplier. See [latency testing](TESTING.md#latency-patch-comparison-111) and [policy details](THROUGHPUT.md#app-latency-follow-up-111).

@@ -38,3 +38,8 @@ The signed code-100→101 experimental candidate passed the API-30 in-place upda
 ## Published 1.1 follow-up
 
 [Version 1.1](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1) is now an experimental prerelease. It adds named signed QR contacts and bounded per-neighbor relay retries with forwarding opportunity reserved for a newly appearing relay. The corrected small-screen contact dialog and QR-name tests passed hosted Android checks. [Signed update and independently verified public-download evidence](audits/release-1.1/README.md) covers v1.0→1.1 identity/contact/history continuity. The owner reports BLE bulk success but failed third-phone relay on v1.0; no exact models/logs or quantitative measurements were supplied. A field fix is not claimed until the 1.1 A–B–C retest succeeds. Use the 1.1 retest in TESTING.md, not the historical v1.0 baseline, for current debugging.
+
+
+## Published 1.1.1 latency follow-up
+
+[Experimental patch 1.1.1](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.1), code111, prioritizes next-batch receipts/text and removes recurring inventory forwarding pauses. Chat can proceed during the initial inventory exchange; cryptographic/replay/flood admission is unchanged. Owner reports distance-related text/media delays without timings or a confirmed third-phone path. [Automated and signed-upgrade evidence](audits/release-1.1.1/README.md) does not establish measured radio speed/range. Compare the same payload/transport and record near/far completion times before tuning radio rates.

@@ -156,3 +156,8 @@ The generalized [candidate workflow](https://github.com/mittalsukhansh/OffGrid/a
 ## Published 1.1 upgrade evidence
 
 The [v1.1 publication workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44063108150) passed a signed API-30 v1.0/code100→1.1-experimental/code110 update before publishing. The [public release APK](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1) was downloaded again and checked against the staged hash, pinned certificate, release package/version/code and signed source 16d8592. [Archived evidence](docs/audits/release-1.1/README.md). No private signing material was uploaded; phone-radio reliability remains a separate test.
+
+
+## Published 1.1.1 latency patch
+
+[Upgrade/publication workflow](https://github.com/mittalsukhansh/OffGrid/actions/runs/44065763471) passed actual API-30 signed v1.1/code110→1.1.1-experimental/code111 continuity before publication. [Exact-source checks](https://github.com/mittalsukhansh/OffGrid/actions/runs/44065006584) passed for 2ba6336. The published APK was downloaded and independently checked for hash, pinned signer, package, version/code and signed source. [Public evidence](docs/audits/release-1.1.1/README.md). No phone throughput/range result is implied.
