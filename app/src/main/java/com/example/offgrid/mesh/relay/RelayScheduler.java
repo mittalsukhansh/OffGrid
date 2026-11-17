@@ -17,6 +17,7 @@ import java.util.function.Function;
 /** Worker-confined routing policy. No Android Bluetooth, Service, Handler or Room API. */
 public final class RelayScheduler {
     public static final int MAX_CONNECTIONS = 3;
+    public static final long SEND_TURN_MS = 3_000;
     public static final int MAX_BATCH = 20;
     public static final int MAX_FORWARDS = 6;
     public static final int MAX_FORWARDS_PER_PEER = 3;
@@ -52,6 +53,8 @@ public final class RelayScheduler {
     private final Function<MeshMessage, byte[]> encoder;
     private final Map<String, Peer> peers = new HashMap<>();
     private final Map<String, Object> sessions = new HashMap<>();
+    private final Map<String, Runnable> attemptChecks = new HashMap<>();
+    private long opportunityCounter, scheduledAt;
     private final Map<String, Map<String, Hint>> identityHints = new LinkedHashMap<>();
     private final LinkedHashMap<String, Buffered> queue = new LinkedHashMap<>();
     private final Runnable connectPass = this::connect;
@@ -88,6 +91,8 @@ public final class RelayScheduler {
         active = false;
         scheduled = false;
         timer.cancel(connectPass);
+        for (Runnable check : attemptChecks.values()) timer.cancel(check);
+        attemptChecks.clear();
         sessions.clear();
         transport.cancelSends();
         peers.clear();
@@ -108,10 +113,12 @@ public final class RelayScheduler {
                 pending.message.getMessageId(),
                 new Buffered(pending, timer.elapsed() - (MeshConfig.PENDING_TTL_MS - remaining)));
         trim();
+        checkAttempts();
     }
 
     public void remove(String id) {
         queue.remove(id);
+        checkAttempts();
     }
 
     public boolean contains(String id) {
@@ -120,6 +127,11 @@ public final class RelayScheduler {
 
     public void reconcile(java.util.Collection<String> persistedIds) {
         queue.keySet().retainAll(new java.util.HashSet<>(persistedIds));
+        checkAttempts();
+    }
+
+    private void checkAttempts() {
+        for (Runnable check : new ArrayList<>(attemptChecks.values())) check.run();
     }
 
     public boolean eligible(String id) {
@@ -229,9 +241,13 @@ public final class RelayScheduler {
     }
 
     public void schedule(long delayMs) {
-        if (!active || scheduled) return;
+        if (!active) return;
+        long due = timer.elapsed() + Math.max(0, delayMs);
+        if (scheduled && scheduledAt <= due) return;
+        if (scheduled) timer.cancel(connectPass);
         scheduled = true;
-        timer.schedule(connectPass, delayMs);
+        scheduledAt = due;
+        timer.schedule(connectPass, Math.max(0, delayMs));
     }
 
     private void trim() {
@@ -293,7 +309,9 @@ public final class RelayScheduler {
         if (!active || queue.isEmpty() || sessions.size() >= MAX_CONNECTIONS) return;
         long now = timer.elapsed();
         List<Buffered> ordered = new ArrayList<>(queue.values());
-        ordered.sort(java.util.Comparator.comparingInt(buffer -> priority(buffer.message)));
+        ordered.sort(
+                java.util.Comparator.<Buffered>comparingInt(buffer -> priority(buffer.message))
+                        .thenComparingLong(buffer -> buffer.lastOpportunity));
         List<Peer> candidates = new ArrayList<>();
         for (Peer peer : peers.values()) {
             if (!sessions.containsKey(peer.address)
@@ -323,6 +341,72 @@ public final class RelayScheduler {
             MeshTransport.SendListener callbacks =
                     new MeshTransport.SendListener() {
                         int forwarded;
+                        String attempting;
+                        long attemptStarted;
+                        boolean yielded;
+                        Runnable cancelAttempt;
+                        final Runnable turnDeadline = this::checkTurn;
+
+                        private void finishTurn() {
+                            timer.cancel(turnDeadline);
+                            if (attemptChecks.get(peer.address) == turnDeadline)
+                                attemptChecks.remove(peer.address);
+                            attempting = null;
+                        }
+
+                        private void checkTurn() {
+                            timer.cancel(turnDeadline);
+                            if (!current() || yielded || attempting == null) return;
+                            long remaining = SEND_TURN_MS - (timer.elapsed() - attemptStarted);
+                            boolean removed = !queue.containsKey(attempting);
+                            boolean waitingText = false;
+                            for (Buffered other : queue.values())
+                                if (!other.message.getMessageId().equals(attempting)
+                                        && priority(other.message) <= 1
+                                        && readyFor(peer, other.message.getMessageId())) {
+                                    waitingText = true;
+                                    break;
+                                }
+                            if (removed || (remaining <= 0 && waitingText)) {
+                                yielded = true;
+                                if (!removed) {
+                                    Hint previous = peer.hints.get(attempting);
+                                    peer.hints.put(
+                                            attempting,
+                                            new Hint(
+                                                    timer.elapsed() + SEND_TURN_MS,
+                                                    previous == null ? 0 : previous.forwards));
+                                }
+                                Runnable close = cancelAttempt;
+                                finishTurn();
+                                close.run();
+                            } else if (remaining > 0) timer.schedule(turnDeadline, remaining);
+                            // No polling when alone: add/reconcile/remove checks wake this guard.
+                        }
+
+                        @Override
+                        public void onAttempt(String id, Runnable cancel) {
+                            if (!current() || yielded) {
+                                cancel.run();
+                                return;
+                            }
+                            cancelAttempt = cancel;
+                            if (!id.equals(attempting)) {
+                                finishTurn();
+                                attempting = id;
+                                attemptStarted = timer.elapsed();
+                                Buffered buffered = queue.get(id);
+                                if (buffered != null)
+                                    buffered.lastOpportunity = ++opportunityCounter;
+                            }
+                            attemptChecks.put(peer.address, turnDeadline);
+                            checkTurn();
+                        }
+
+                        @Override
+                        public boolean isCancelled() {
+                            return !current() || yielded;
+                        }
 
                         private boolean current() {
                             return active && sessions.get(peer.address) == session;
@@ -330,12 +414,13 @@ public final class RelayScheduler {
 
                         @Override
                         public boolean shouldSend(String id) {
-                            return current() && readyFor(peer, id);
+                            return current() && !yielded && readyFor(peer, id);
                         }
 
                         @Override
                         public void onForwarded(String id) {
-                            if (!current()) return;
+                            if (!current() || yielded) return;
+                            if (id.equals(attempting)) finishTurn();
                             forwarded++;
                             Hint previous = peer.hints.get(id);
                             int attempt = previous == null ? 1 : previous.forwards + 1;
@@ -365,13 +450,14 @@ public final class RelayScheduler {
 
                         @Override
                         public void onComplete(String failure, boolean incompatible) {
+                            finishTurn();
                             if (!current()) return;
                             sessions.remove(peer.address);
-                            if (failure != null) {
+                            if (failure != null && !yielded) {
                                 if (recentFailures.size() == 8) recentFailures.removeFirst();
                                 recentFailures.addLast(peer.address + ": " + failure);
                             }
-                            if (failure == null || forwarded > 0) {
+                            if (yielded || failure == null || forwarded > 0) {
                                 peer.failures = 0;
                                 peer.backoffUntil = 0;
                             } else if (incompatible)
@@ -384,7 +470,7 @@ public final class RelayScheduler {
                                                         60_000L,
                                                         2_000L << Math.min(peer.failures, 5));
                             }
-                            schedule(100);
+                            schedule(yielded ? 0 : 100);
                         }
                     };
             try {
@@ -459,6 +545,7 @@ public final class RelayScheduler {
         final MeshMessage message;
         final long storedAt;
         int forwardCount;
+        long lastOpportunity;
 
         Buffered(MeshStorage.Pending pending, long storedAt) {
             message = pending.message;

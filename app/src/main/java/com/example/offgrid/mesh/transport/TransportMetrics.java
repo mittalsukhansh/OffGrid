@@ -40,6 +40,16 @@ public final class TransportMetrics {
             boolean ended;
 
             @Override
+            public void onAttempt(String id, Runnable cancel) {
+                delegate.onAttempt(id, cancel);
+            }
+
+            @Override
+            public boolean isCancelled() {
+                return delegate.isCancelled();
+            }
+
+            @Override
             public boolean shouldSend(String id) {
                 return !ended && delegate.shouldSend(id);
             }
@@ -62,7 +72,7 @@ public final class TransportMetrics {
                 c.completed++;
                 c.lastMs = Math.max(0, clock.getAsLong() - start);
                 c.sessionMs += c.lastMs;
-                if (failure != null) c.failures++;
+                if (failure != null && !delegate.isCancelled()) c.failures++;
                 delegate.onComplete(failure, incompatible);
             }
         };

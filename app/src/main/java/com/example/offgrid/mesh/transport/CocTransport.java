@@ -115,6 +115,7 @@ final class CocTransport {
         outbound.add(socket);
         MeshTransport.SendListener measured =
                 metrics.sending(TransferProfile.COC, packets, callbacks);
+        measured.onAttempt(packets.get(0).id, () -> close(socket));
         try {
             io.execute(() -> sendBatch(socket, address, packets, measured, epoch));
         } catch (RejectedExecutionException e) {
@@ -213,6 +214,12 @@ final class CocTransport {
                                         && outbound.contains(socket)
                                         && callbacks.shouldSend(packet.id)))
                     throw new IOException("Cancelled");
+                if (!call(
+                        () -> {
+                            if (callbacks.isCancelled()) return false;
+                            callbacks.onAttempt(packet.id, () -> close(socket));
+                            return !callbacks.isCancelled();
+                        })) throw new IOException("Cancelled");
                 LanFrames.writePacket(out, packet.bytes);
                 if (in.readUnsignedByte() != 1) throw new IOException("Stream rejected");
                 call(() -> {
@@ -228,7 +235,8 @@ final class CocTransport {
             close(socket);
             String result = failure;
             worker.post(() -> {
-                if (result != null && epoch == generation) block(address);
+                if (result != null && epoch == generation && !callbacks.isCancelled())
+                    block(address);
                 // Completion must reach the relay even after Bluetooth/network generation changes.
                 callbacks.onComplete(result, false);
             });

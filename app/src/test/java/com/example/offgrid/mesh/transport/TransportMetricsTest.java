@@ -9,6 +9,42 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TransportMetricsTest {
     @Test
+    public void cancellationHandleSurvivesMetricsAndIntentionalYieldIsNotAFailure() {
+        TransportMetrics metrics = new TransportMetrics(() -> 0L);
+        int[] closed = {0};
+        boolean[] cancelled = {false};
+        MeshTransport.SendListener measured =
+                metrics.sending(
+                        TransferProfile.COC,
+                        Collections.singletonList(new MeshTransport.Packet("packet", new byte[10])),
+                        new MeshTransport.SendListener() {
+                            public void onAttempt(String id, Runnable close) {
+                                cancelled[0] = true;
+                                close.run();
+                            }
+
+                            public boolean isCancelled() {
+                                return cancelled[0];
+                            }
+
+                            public boolean shouldSend(String id) {
+                                return !cancelled[0];
+                            }
+
+                            public void onForwarded(String id) {
+                                fail("No packet was acknowledged");
+                            }
+
+                            public void onComplete(String failure, boolean incompatible) {}
+                        });
+        measured.onAttempt("packet", () -> closed[0]++);
+        assertEquals(1, closed[0]);
+        assertTrue(measured.isCancelled());
+        measured.onComplete("socket closed", false);
+        assertTrue(metrics.snapshot().contains("failures 0"));
+    }
+
+    @Test
     public void countsWireBytesOnceAndRecordsFailureAndElapsedTime() {
         AtomicLong time = new AtomicLong(1000);
         TransportMetrics metrics = new TransportMetrics(time::get);

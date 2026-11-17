@@ -221,3 +221,8 @@ Start mesh on A, B and C. Disable Wi-Fi/mobile data for an isolated BLE run. Est
 ## Latency patch comparison (1.1.1)
 
 Before upgrading, record a v1.1 baseline if practical. On each version, start both phones, reset diagnostics and time a short text to receiver appearance and sender Delivered. Repeat with a photo already transferring to check chat priority. Compare nearby versus farther apart; record models, Android version, separation/obstacles, actual transport, exported failures/retries and whether B is involved. Then compare a fixed-size JPEG on confirmed CoC versus paired no-router Wi-Fi Direct. Change one variable at a time and keep failures. The 1.1.1 patch removes inventory scheduling gaps and prioritizes the next batch; it does not establish a numerical speedup or improve radio range by itself.
+
+
+## Three-second queue and unsend retest (1.1.2)
+
+Update all phones without uninstalling. Queue text A, then text B while A is stalled. Check B gets its own opportunity after A's three-second send window, while A stays queued/retryable; do not interpret this window as proof of delivery or an automatic failure. Repeat by unsending the active A: the connection should cancel immediately and B should proceed when a peer is available. Try a single slow message without B to confirm it is not repeatedly aborted every three seconds. Repeat with CoC enabled/disabled and with a photo transferring; capture actual counters, timing and failures. Watch for late A reappearing after an authenticated unsend. Confirm another reachable peer/transport remains usable. Type the next text while history loads and verify the composer does not wait for a delivery receipt.

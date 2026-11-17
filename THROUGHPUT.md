@@ -184,3 +184,12 @@ Queued delivery receipts go first, then private/public text, then bulk/control/m
 Priority takes effect when forming the next batch; it cannot preempt a batch already being transmitted. Heavy chat can reduce bulk throughput. Existing retries, expiry and queue limits remain. Host regressions prove scheduling/deadline behavior, not a measured end-to-end speedup.
 
 For larger files on two nearby supported phones, try Network → Wi-Fi Direct with no router: pair both, start mesh, verify WIFI_DIRECT counters and compare the same file against confirmed CoC. Reset/export metrics and record payload bytes, completion time and failures. These measured results are needed before changing radio pacing or connection lifetime.
+
+
+## Three-second send turns (1.1.2)
+
+An active packet gets a three-second scheduling opportunity. If other text/receipts are ready for that peer and the active attempt has not completed, the scheduler closes only that native connection, briefly defers the old packet and rotates untried packets ahead of previously attempted ones. A sole slow packet keeps its normal transport timeout. A new packet starts a fresh window; CoC→GATT fallback of the same packet keeps the original window. Queued-message removal (including unsend, authenticated receipt or reconciliation) cancels its active attempt immediately. Existing retry/expiry limits still apply; three seconds does not mean Failed, Delivered or a guaranteed over-the-air deadline.
+
+Cancellation handles pass through BLE fallback and metric wrappers to GATT, CoC, LAN and Direct sockets. An intentional scheduling yield does not count as a peer/network failure or trigger CoC's failure fallback penalty. Late callbacks cannot mark a removed/cancelled packet Forwarded. Stop/pause removes outstanding turn timers. The UI releases the composer on a top-level durable chat save, independently of network delivery and history rendering; rolled-back/nested saves do not acknowledge an uncommitted message.
+
+These are worker scheduling semantics. Native socket cancellation, discovery, reconnection and availability still determine when a later packet can actually leave the phone. Phone tests must verify the three-second behavior under real BLE/GATT/CoC and unsend conditions.

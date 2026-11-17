@@ -39,8 +39,8 @@ android {
         applicationId = "io.github.mittalsukhansh.offgrid"
         minSdk = 26
         targetSdk = 37
-        versionCode = 111
-        versionName = "1.1.1-experimental"
+        versionCode = 112
+        versionName = "1.1.2-experimental"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         javaCompileOptions {

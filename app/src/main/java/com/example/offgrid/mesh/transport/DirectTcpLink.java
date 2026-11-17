@@ -258,6 +258,7 @@ final class DirectTcpLink implements MeshTransport {
         Socket socket = new Socket();
         sockets.add(socket);
         outgoing.add(socket);
+        measured.onAttempt(packets.get(0).id, () -> close(socket));
         int epoch = generation;
         InetAddress source = local;
         try {
@@ -292,6 +293,12 @@ final class DirectTcpLink implements MeshTransport {
                                         && outgoing.contains(socket)
                                         && callbacks.shouldSend(packet.id)))
                     throw new IOException("Cancelled");
+                if (!call(
+                        () -> {
+                            if (callbacks.isCancelled()) return false;
+                            callbacks.onAttempt(packet.id, () -> close(socket));
+                            return !callbacks.isCancelled();
+                        })) throw new IOException("Cancelled");
                 LanFrames.writePacket(out, packet.bytes);
                 if (in.readUnsignedByte() != 1) throw new IOException("Rejected");
                 call(() -> {

@@ -26,6 +26,7 @@ public final class MessageStore {
     final StorageCipher cipher;
     private final ExecutorService historyExecutor = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final MutableLiveData<String> outgoingSaved = new MutableLiveData<>();
     private final MutableLiveData<String> outgoingFailures = new MutableLiveData<>();
 
     public static MessageStore get(Context context) {
@@ -84,6 +85,10 @@ public final class MessageStore {
 
     public MessageDao dao() {
         return database.messages();
+    }
+
+    public LiveData<String> outgoingSaved() {
+        return outgoingSaved;
     }
 
     public LiveData<String> outgoingFailures() {
@@ -163,6 +168,13 @@ public final class MessageStore {
             if (finalChat != null) dao().insertChat(finalChat);
             if (finalPending != null) dao().insertPending(finalPending);
         });
+        // An outer transaction can still roll back. Only durable chat submissions release the
+        // composer; unrelated media saves must not overwrite its completion notification.
+        if (outgoing
+                && !database.inTransaction()
+                && (wire.getType() == MeshMessage.TYPE_PUBLIC
+                        || wire.getType() == MeshMessage.TYPE_PRIVATE))
+            outgoingSaved.postValue(wire.getMessageId());
     }
 
     public MeshMessage decodePending(PendingRecord row) throws Exception {

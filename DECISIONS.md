@@ -481,10 +481,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner near/far text/media timings, confirmed CoC versus GATT fallback and Direct comparisons, real third-phone behavior. Priority cannot preempt an active batch and weak links still cause retries/reconnection delays. Earlier licensing/admin/offline-media and full-forward-secrecy limitations remain documented. No numerical speedup is claimed.
 - **Sources:** This change; D049–D050; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.1; https://github.com/mittalsukhansh/OffGrid/actions/runs/44065763471; docs/audits/release-1.1.1/README.md.
 
+## D052 — 2026-11-17 UTC — Three-second send opportunities and immediate unsend cancellation
+
+- **Status:** Implemented and locally checked; hosted native/runtime and signed release checks pending
+- **Work:** Owner requests a three-second window so an undelivered/unsent message does not hold later texts. Added worker-confined per-packet turn guards and native per-connection cancellation handles across GATT, CoC, LAN and Direct, forwarded through metrics/BLE fallback. A stalled attempt yields after three seconds when another chat/receipt is ready; original stays queued, untried packets rotate ahead, and no peer failure is recorded for an intentional yield. Same-packet fallback keeps its deadline; new packet progress starts a fresh window. Removal/reconciliation/unsend cancels an active original immediately; pause clears guards and stale callbacks cannot alter forwarding status. Composer now releases on top-level durable chat-save completion rather than history rendering/network delivery, with nested rollback/media coalescing guarded. Prepared code112/1.1.2-experimental and phone retest notes.
+- **Decision / reason:** Three seconds is a fair scheduling opportunity, not a delivery/failure declaration. A sole slow packet may continue with its normal timeout. Only that connection is closed, preserving other links, cryptographic protocol, persistence and authenticated delivery semantics. Native cancellation/reconnection can still take time on phones. The main composer remains gated by durable persistence, not by reception on the other device.
+- **Validation / evidence:** Final debug assembly/lint, 80 JVM tests and Android-test compilation pass. Six host harness tests pass. JVM regressions cover exact 2,999/3,000 ms boundary, retaining stalled originals, immediate unsend reconciliation, slow sole-message behavior, per-packet reset/pause cleanup, fallback handle/deadline continuity, metric wrapper cancellation and late callbacks. Added Android real-socket cancellation-without-link-stop and durable-save/outer-rollback event regressions; actual hosted execution remains pending.
+- **Open items:** Hosted Android tests, signed in-place patch update/publication, public download verification and cleanup. Real phone three-second/unsend/range behavior and older physical/legal/admin/backup limits remain open.
+- **Sources:** This change; owner queue/unsend instruction in this session; THROUGHPUT.md; TESTING.md; RELEASE_NOTES_1.1.2.md.
+
 ## Template for the next work set
 
 ```markdown
-## D052 — YYYY-MM-DD HH:MM UTC — Short title
+## D053 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

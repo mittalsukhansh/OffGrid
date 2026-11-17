@@ -61,6 +61,123 @@ public class RelaySchedulerTest {
     }
 
     @Test
+    public void fallbackReplacesCancelHandleWithoutRestartingThreeSecondWindow() {
+        MeshMessage first = queued(0);
+        peer("wifi:phone", -20);
+        scheduler.start();
+        time.runDue();
+        Call call = transport.calls.get(0);
+        int[] closed = {0, 0};
+        call.listener.onAttempt(first.getMessageId(), () -> closed[0]++);
+        time.advance(2500);
+        call.listener.onAttempt(
+                first.getMessageId(),
+                () -> {
+                    closed[1]++;
+                    call.listener.onComplete("closed", false);
+                });
+        queued(0);
+        time.advance(500);
+        assertEquals(0, closed[0]);
+        assertEquals(1, closed[1]);
+    }
+
+    @Test
+    public void stalledAttemptYieldsAtThreeSecondsAndKeepsOldPacketQueued() {
+        MeshMessage first = queued(0);
+        peer("wifi:phone", -20);
+        scheduler.start();
+        time.runDue();
+        Call stalled = transport.calls.get(0);
+        int[] closed = {0};
+        stalled.listener.onAttempt(
+                first.getMessageId(),
+                () -> {
+                    closed[0]++;
+                    stalled.listener.onComplete("socket closed", false);
+                });
+        MeshMessage next = queued(0);
+        time.advance(2999);
+        assertEquals(0, closed[0]);
+        time.advance(1);
+        assertEquals(1, closed[0]);
+        assertTrue(scheduler.contains(first.getMessageId()));
+        assertFalse(storage.progress.containsKey(first.getMessageId()));
+        Call replacement = transport.calls.get(1);
+        assertEquals(next.getMessageId(), replacement.packets.get(0).id);
+        assertTrue(stalled.listener.isCancelled());
+        stalled.listener.onForwarded(first.getMessageId());
+        assertFalse(storage.progress.containsKey(first.getMessageId()));
+        assertFalse(scheduler.diagnostics().contains("socket closed"));
+    }
+
+    @Test
+    public void slowSingleMessageIsNotAbortedButNewTextGetsATurnAfterItsWindow() {
+        MeshMessage first = queued(0);
+        peer("wifi:phone", -20);
+        scheduler.start();
+        time.runDue();
+        Call stalled = transport.calls.get(0);
+        int[] closed = {0};
+        stalled.listener.onAttempt(
+                first.getMessageId(),
+                () -> {
+                    closed[0]++;
+                    stalled.listener.onComplete("closed", false);
+                });
+        time.advance(10_000);
+        assertEquals(0, closed[0]);
+        MeshMessage next = queued(0);
+        time.runDue();
+        assertEquals(1, closed[0]);
+        assertEquals(next.getMessageId(), transport.calls.get(1).packets.get(0).id);
+    }
+
+    @Test
+    public void unsendReconciliationCancelsActiveOriginalImmediately() {
+        MeshMessage first = queued(0);
+        peer("wifi:phone", -20);
+        scheduler.start();
+        time.runDue();
+        Call stalled = transport.calls.get(0);
+        int[] closed = {0};
+        stalled.listener.onAttempt(
+                first.getMessageId(),
+                () -> {
+                    closed[0]++;
+                    stalled.listener.onComplete("closed", false);
+                });
+        MeshMessage next = queued(0);
+        scheduler.reconcile(Collections.singletonList(next.getMessageId()));
+        time.runDue();
+        assertEquals(1, closed[0]);
+        assertFalse(scheduler.contains(first.getMessageId()));
+        assertEquals(next.getMessageId(), transport.calls.get(1).packets.get(0).id);
+        assertFalse(stalled.listener.shouldSend(first.getMessageId()));
+    }
+
+    @Test
+    public void packetProgressGetsANewWindowAndPauseClearsDeadline() {
+        MeshMessage first = queued(0), second = queued(0);
+        peer("wifi:phone", -20);
+        scheduler.start();
+        time.runDue();
+        Call call = transport.calls.get(0);
+        int[] closed = {0};
+        call.listener.onAttempt(first.getMessageId(), () -> closed[0]++);
+        time.advance(2900);
+        call.listener.onForwarded(first.getMessageId());
+        call.listener.onAttempt(second.getMessageId(), () -> closed[0]++);
+        queued(0);
+        time.advance(100);
+        assertEquals(0, closed[0]);
+        scheduler.pause();
+        time.advance(10_000);
+        assertEquals(0, closed[0]);
+        assertTrue(call.listener.isCancelled());
+    }
+
+    @Test
     public void chatAndReceiptsBypassInitialInventoryButBulkDoesNot() {
         MeshMessage announce = MeshMessage.createKeyAnnounce(sender, "A".repeat(87), 4);
         MeshMessage text =

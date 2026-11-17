@@ -347,6 +347,7 @@ public class MainActivity extends AppCompatActivity {
         chatRecycler.setLayoutManager(layoutManager);
         chatRecycler.setAdapter(adapter);
         MessageStore store = MessageStore.get(this);
+        store.outgoingSaved().observe(this, this::outgoingCommitted);
         store.outgoingFailures()
                 .observe(
                         this,
@@ -614,6 +615,15 @@ public class MainActivity extends AppCompatActivity {
         // Display only after the service has committed the message and pending packet to Room.
         chatViewModel.pendingMessageId = sent.getMessageId();
         chatViewModel.pendingText = text;
+        updateUi();
+    }
+
+    private void outgoingCommitted(String id) {
+        if (!id.equals(chatViewModel.pendingMessageId)) return;
+        if (messageInput.getText().toString().trim().equals(chatViewModel.pendingText))
+            messageInput.setText("");
+        chatViewModel.pendingMessageId = null;
+        chatViewModel.pendingText = null;
         updateUi();
     }
 

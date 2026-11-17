@@ -225,4 +225,97 @@ public class DirectTcpLinkTest {
             remote.shutdownNow();
         }
     }
+
+    @Test
+    public void perAttemptCancelUnblocksStalledSocketWithoutStoppingOtherLinks() throws Exception {
+        InetAddress stalled = address("127.0.0.3");
+        CountDownLatch connected = new CountDownLatch(1),
+                release = new CountDownLatch(1),
+                finished = new CountDownLatch(1);
+        AtomicReference<String> error = new AtomicReference<>();
+        AtomicInteger forwarded = new AtomicInteger();
+        AtomicReference<Runnable> cancel = new AtomicReference<>();
+        AtomicBoolean cancelled = new AtomicBoolean();
+        ExecutorService remote = Executors.newSingleThreadExecutor();
+        try (ServerSocket fake = new ServerSocket(port, 1, stalled)) {
+            fake.setSoTimeout(10000);
+            Future<?> accepted =
+                    remote.submit(() -> {
+                        try (Socket socket = fake.accept()) {
+                            connected.countDown();
+                            release.await(10, TimeUnit.SECONDS);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+            run(() -> {
+                a.start(
+                        listening(
+                                new CountDownLatch(1),
+                                new AtomicReference<>(),
+                                new CountDownLatch(1)));
+                a.bind(owner, 8, owner);
+                return true;
+            });
+            try (Socket hello = new Socket()) {
+                hello.bind(new InetSocketAddress(stalled, 0));
+                hello.connect(new InetSocketAddress(owner, port), 5000);
+                hello.setSoTimeout(5000);
+                DirectHello.write(new DataOutputStream(hello.getOutputStream()));
+                DirectHello.read(new DataInputStream(hello.getInputStream()));
+            }
+            run(() -> {
+                a.send(
+                        stalled.getHostAddress(),
+                        Collections.singletonList(
+                                new MeshTransport.Packet("stalled", new byte[100])),
+                        new MeshTransport.SendListener() {
+                            @Override
+                            public void onAttempt(String id, Runnable close) {
+                                cancel.set(close);
+                            }
+
+                            @Override
+                            public boolean isCancelled() {
+                                return cancelled.get();
+                            }
+
+                            @Override
+                            public boolean shouldSend(String id) {
+                                return true;
+                            }
+
+                            @Override
+                            public void onForwarded(String id) {
+                                forwarded.incrementAndGet();
+                            }
+
+                            @Override
+                            public void onComplete(String failure, boolean incompatible) {
+                                error.set(failure);
+                                finished.countDown();
+                            }
+                        });
+                return true;
+            });
+            assertTrue(connected.await(10, TimeUnit.SECONDS));
+            run(() -> {
+                assertNotNull(cancel.get());
+                cancelled.set(true);
+                cancel.get().run();
+                assertTrue("The P2P endpoint remains discovered", a.peerCount() > 0);
+                return true;
+            });
+            assertTrue(
+                    "Cancelled socket did not release relay session",
+                    finished.await(5, TimeUnit.SECONDS));
+            assertNotNull(error.get());
+            assertEquals(0, forwarded.get());
+            release.countDown();
+            accepted.get(10, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            remote.shutdownNow();
+        }
+    }
 }

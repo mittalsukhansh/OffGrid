@@ -415,6 +415,7 @@ public final class LanTransport implements MeshTransport {
             Socket socket = network.getSocketFactory().createSocket();
             sockets.add(socket);
             outbound.add(socket);
+            measured.onAttempt(packets.get(0).id, () -> close(socket));
             try {
                 io.execute(() -> sendBatch(socket, endpoint, packets, measured, epoch));
             } catch (RejectedExecutionException e) {
@@ -444,6 +445,12 @@ public final class LanTransport implements MeshTransport {
                                         && outbound.contains(socket)
                                         && callbacks.shouldSend(packet.id)))
                     throw new IOException("Transfer cancelled");
+                if (!call(
+                        () -> {
+                            if (callbacks.isCancelled()) return false;
+                            callbacks.onAttempt(packet.id, () -> close(socket));
+                            return !callbacks.isCancelled();
+                        })) throw new IOException("Cancelled");
                 LanFrames.writePacket(out, packet.bytes);
                 if (in.readUnsignedByte() != 1) throw new IOException("Wi-Fi transfer rejected");
                 call(() -> {

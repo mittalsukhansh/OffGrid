@@ -25,6 +25,13 @@ public interface MeshTransport {
     }
 
     interface SendListener {
+        /** Worker callback: cancel closes only this native connection, never every peer. */
+        default void onAttempt(String id, Runnable cancel) {}
+
+        default boolean isCancelled() {
+            return false;
+        }
+
         boolean shouldSend(String id);
 
         void onForwarded(String id);

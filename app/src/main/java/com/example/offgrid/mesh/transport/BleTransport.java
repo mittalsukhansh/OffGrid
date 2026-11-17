@@ -254,6 +254,16 @@ public final class BleTransport implements MeshTransport {
             SendListener callbacks =
                     new SendListener() {
                         @Override
+                        public void onAttempt(String id, Runnable cancel) {
+                            listener.onAttempt(id, cancel);
+                        }
+
+                        @Override
+                        public boolean isCancelled() {
+                            return listener.isCancelled();
+                        }
+
+                        @Override
                         public boolean shouldSend(String id) {
                             return listener.shouldSend(id);
                         }
@@ -266,7 +276,10 @@ public final class BleTransport implements MeshTransport {
 
                         @Override
                         public void onComplete(String failure, boolean incompatible) {
-                            if (failure == null || !meshActive || epoch != radioGeneration) {
+                            if (failure == null
+                                    || listener.isCancelled()
+                                    || !meshActive
+                                    || epoch != radioGeneration) {
                                 listener.onComplete(failure, incompatible);
                                 return;
                             }
@@ -298,6 +311,16 @@ public final class BleTransport implements MeshTransport {
                 address,
                 small,
                 new SendListener() {
+                    @Override
+                    public void onAttempt(String id, Runnable cancel) {
+                        listener.onAttempt(id, cancel);
+                    }
+
+                    @Override
+                    public boolean isCancelled() {
+                        return listener.isCancelled();
+                    }
+
                     @Override
                     public boolean shouldSend(String id) {
                         return listener.shouldSend(id);

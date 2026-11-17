@@ -55,6 +55,8 @@ final class GattOutboundSession extends BluetoothGattCallback {
     }
 
     void start() {
+        if (!packets.isEmpty()) listener.onAttempt(packets.get(0).id, this::abort);
+        if (finished) return;
         armTimeout();
         try {
             gatt =
@@ -161,6 +163,8 @@ final class GattOutboundSession extends BluetoothGattCallback {
             finish(null);
             return;
         }
+        listener.onAttempt(packets.get(packetIndex).id, this::abort);
+        if (finished) return;
         frames = FrameCodec.fragment(packets.get(packetIndex).bytes, mtu);
         frameIndex = 0;
         writeFrame();
