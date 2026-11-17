@@ -173,3 +173,14 @@ large signed/encrypted range authorization/integrity/transaction rollback, and
 resumption using the canonical blocks. Android API availability and compilation
 are not a substitute for real CoC negotiation, hardware flow control or vendor
 socket lifecycle testing.
+
+
+## App latency follow-up (1.1.1)
+
+The owner reports text and media feel slower with increased distance, without timings or confirmed third-phone routing. Distance-related loss/reconnection must be measured on phones. This patch does not increase chunk sizes, radio duty, send rates or range.
+
+Queued delivery receipts go first, then private/public text, then bulk/control/media, then key announcements; FIFO is preserved within each priority. Chat/receipts do not wait for the first inventory exchange. Bulk may wait once, for at most five seconds, to allow inventory optimization. Refreshes after that initial deadline or a successful challenge no longer create repeated five-second forwarding gaps, including when refresh replies are lost. Endpoint identity and inventory hints still require a valid current signed nonce response. Packet signatures, replay/flood admission and receipt authentication are unchanged.
+
+Priority takes effect when forming the next batch; it cannot preempt a batch already being transmitted. Heavy chat can reduce bulk throughput. Existing retries, expiry and queue limits remain. Host regressions prove scheduling/deadline behavior, not a measured end-to-end speedup.
+
+For larger files on two nearby supported phones, try Network → Wi-Fi Direct with no router: pair both, start mesh, verify WIFI_DIRECT counters and compare the same file against confirmed CoC. Reset/export metrics and record payload bytes, completion time and failures. These measured results are needed before changing radio pacing or connection lifetime.

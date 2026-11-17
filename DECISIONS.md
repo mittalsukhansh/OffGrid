@@ -454,10 +454,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Actual 1.1 A–B–C BLE bulk relay, photos, screen-off/restarts and Direct benchmarks need owner phone results. No quantitative phone benchmark or confirmed field fix is claimed. Offline-media restore, written upstream licensing consent and admin-only metadata/optional Actions secrets remain owner work; full forward secrecy and existing bounded replay/forwarding limits remain documented.
 - **Sources:** This change; D045–D047; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1; https://github.com/mittalsukhansh/OffGrid/actions/runs/44063108150; docs/audits/release-1.1/README.md.
 
+## D049 — 2026-11-17 UTC — Remove recurring inventory stalls and prioritize chat
+
+- **Status:** Implemented and locally checked; hosted/runtime/release checks pending
+- **Work:** Owner reports both text and media slowing with distance, without timings and without confirmed third-phone routing. Identified periodic inventory refreshes reapplying a five-second data gate. Gate bulk only during the initial exchange; keep forwarding enabled after that initial deadline or a successful authentication, while retaining fresh nonce validation for identity/hint updates. Let text/receipt packets proceed during initial inventory; select receipts, then private/public chat, then bulk/control, then announcements, preserving FIFO within each class. Sort once per connect pass. Prepared code111/1.1.1-experimental patch and measurement notes.
+- **Decision / reason:** Remove avoidable scheduling delay before speculative radio tuning. Inventory is an optimization, not packet authentication; signatures/replay/flood admission and authenticated delivery remain unchanged. Priority affects the next batch and cannot preempt an active transmission. Weak-link retries/range remain physical limits; no speed multiplier is claimed.
+- **Validation / evidence:** Debug assembly/lint, all 74 JVM tests and Android-test compilation pass. Regressions cover chat/receipt bypass with bulk still gated, priority order, authenticated refresh without a pause, unanswered refresh after initial timeout, lifecycle reset and stale nonce rejection. No phone timing or measured radio speedup is inferred.
+- **Open items:** Hosted Android checks, exact-source signed patch upgrade/publication and independent download verification; owner controlled nearby/far and CoC/Direct comparisons. Earlier physical relay, backup/legal/admin items remain open.
+- **Sources:** This change; owner distance/latency report in this session; PACKET_FORMAT.md; THROUGHPUT.md; TESTING.md; RELEASE_NOTES_1.1.1.md.
+
 ## Template for the next work set
 
 ```markdown
-## D049 — YYYY-MM-DD HH:MM UTC — Short title
+## D050 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

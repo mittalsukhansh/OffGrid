@@ -29,7 +29,8 @@ public final class InventoryExchange {
     private int cursor;
 
     private static final class State {
-        long sent, replied;
+        long sent, replied, initialDeadline;
+        boolean authenticated;
         String challenge;
     }
 
@@ -49,6 +50,7 @@ public final class InventoryExchange {
         if (state == null) {
             if (states.size() >= CAP) states.remove(states.keySet().iterator().next());
             state = new State();
+            state.initialDeadline = now + DEADLINE;
             state.sent = -INTERVAL;
             state.replied = -INTERVAL;
             states.put(peer, state);
@@ -65,9 +67,7 @@ public final class InventoryExchange {
 
     public boolean ready(String peer) {
         State state = states.get(peer);
-        return state == null
-                || state.challenge == null
-                || clock.getAsLong() - state.sent >= DEADLINE;
+        return state == null || state.authenticated || clock.getAsLong() >= state.initialDeadline;
     }
 
     private String body(String kind, String nonce) throws Exception {
@@ -109,6 +109,7 @@ public final class InventoryExchange {
                     ids.add(id);
                 }
                 state.challenge = null;
+                state.authenticated = true;
                 link.authenticated(peer, packet.getSenderId(), ids);
             }
         } catch (Exception ignored) {
