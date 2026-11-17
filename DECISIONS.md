@@ -526,10 +526,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner real BLE/GATT/CoC/Wi-Fi queue/unsend/alias/weak-link timing, actual third-phone relay and throughput results; prior security/licensing/admin/offline-media responsibilities remain documented. Three seconds is an opportunity for untried chat, not an authenticated Delivered/Failed deadline.
 - **Sources:** This change; D052–D055; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.2; https://github.com/mittalsukhansh/OffGrid/actions/runs/44073685324; docs/audits/release-1.1.2/README.md.
 
+## D057 — 2026-11-17 UTC — Preserve concurrent external UI branch
+
+- **Status:** Documented; external branch preserved unchanged
+- **Work:** Final remote-head verification after the release/evidence push discovered a newly added ui branch at 6f73602 (external author, added ui). It contains separate MainActivity/ChatAdapter/layout/preview changes and was not one of this task's temporary feature/artifact branches. Kept it untouched. The queue patch and public 1.1.2 release remain from tested source 001e9a3.
+- **Decision / reason:** Correct D056's main-only branch statement: this task's branches were removed, but origin also has concurrent ui work. Do not overwrite or silently fold a separate contributor's active UI work into an already verified queue patch.
+- **Validation / evidence:** Fetched ui read-only; inspected its latest commit and seven-file diff. No application or released APK change; no extra app tests required for this logging-only correction.
+- **Open items:** Separate UI integration/review is outside this queue patch; prior physical/release limitations remain unchanged.
+- **Sources:** This change; D056; ui commit 6f736021f68372e870651cb128bb9f97c8a099df.
+
 ## Template for the next work set
 
 ```markdown
-## D057 — YYYY-MM-DD HH:MM UTC — Short title
+## D058 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
