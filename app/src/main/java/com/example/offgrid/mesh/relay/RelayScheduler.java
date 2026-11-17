@@ -259,12 +259,24 @@ public final class RelayScheduler {
                 && (attempts == 0 || queue.get(id).forwardCount < MAX_FORWARDS - 1);
     }
 
-    private List<MeshTransport.Packet> pendingFor(Peer peer, int limit) {
+    private static int priority(MeshMessage packet) {
+        if (packet.isAcknowledgement()) return 0;
+        if (packet.getType() == MeshMessage.TYPE_PRIVATE
+                || packet.getType() == MeshMessage.TYPE_PUBLIC) return 1;
+        if (packet.getType() == MeshMessage.TYPE_KEY_ANNOUNCE) return 3;
+        return 2;
+    }
+
+    private List<MeshTransport.Packet> pendingFor(Peer peer, int limit, List<Buffered> ordered) {
         List<MeshTransport.Packet> result = new ArrayList<>();
         if (peer.address.startsWith("ble:coc:")
                 && transport.profile(peer.address)
                         != com.example.offgrid.mesh.transport.TransferProfile.COC) return result;
-        for (Buffered buffered : queue.values()) {
+        boolean waitingForInventory = !inventoryReady.test(peer.address);
+        for (Buffered buffered : ordered) {
+            // Inventory is an optimization, not packet authentication. Do not hold chat/receipts
+            // for the initial handshake; signature, encryption and admission checks still apply.
+            if (waitingForInventory && priority(buffered.message) > 1) continue;
             if (result.size() >= limit) break;
             String id = buffered.message.getMessageId();
             if (readyFor(peer, id)) {
@@ -280,13 +292,14 @@ public final class RelayScheduler {
         scheduled = false;
         if (!active || queue.isEmpty() || sessions.size() >= MAX_CONNECTIONS) return;
         long now = timer.elapsed();
+        List<Buffered> ordered = new ArrayList<>(queue.values());
+        ordered.sort(java.util.Comparator.comparingInt(buffer -> priority(buffer.message)));
         List<Peer> candidates = new ArrayList<>();
         for (Peer peer : peers.values()) {
-            if (inventoryReady.test(peer.address)
-                    && !sessions.containsKey(peer.address)
+            if (!sessions.containsKey(peer.address)
                     && now - peer.lastSeen <= PEER_FRESH_MS
                     && now >= peer.backoffUntil
-                    && !pendingFor(peer, 1).isEmpty()) candidates.add(peer);
+                    && !pendingFor(peer, 1, ordered).isEmpty()) candidates.add(peer);
         }
         candidates.sort((a, b) -> {
             int profile =
@@ -303,7 +316,7 @@ public final class RelayScheduler {
                 if (other != null && logical(peer).equals(logical(other))) sameIdentityBusy = true;
             }
             if (sameIdentityBusy) continue;
-            List<MeshTransport.Packet> batch = pendingFor(peer, MAX_BATCH);
+            List<MeshTransport.Packet> batch = pendingFor(peer, MAX_BATCH, ordered);
             if (batch.isEmpty()) continue;
             Object session = new Object();
             sessions.put(peer.address, session);
@@ -386,7 +399,7 @@ public final class RelayScheduler {
         StringBuilder text = new StringBuilder();
         text.append(
                 "Automatic relay: on while mesh is running\n"
-                    + "Nearby peers are direct neighbors, not all reachable contacts.\n");
+                        + "Nearby peers are direct neighbors, not all reachable contacts.\n");
         text.append("Relay queue: ")
                 .append(queue.size())
                 .append(" packets\n")

@@ -61,6 +61,57 @@ public class RelaySchedulerTest {
     }
 
     @Test
+    public void chatAndReceiptsBypassInitialInventoryButBulkDoesNot() {
+        MeshMessage announce = MeshMessage.createKeyAnnounce(sender, "A".repeat(87), 4);
+        MeshMessage text =
+                MeshMessage.createPrivate(
+                        MeshMessage.newId(sender),
+                        sender,
+                        "2".repeat(32),
+                        "A".repeat(40),
+                        "A".repeat(87),
+                        7,
+                        time.wall());
+        MeshMessage receipt =
+                MeshMessage.createAcknowledgement(
+                        MeshMessage.newId(sender),
+                        sender,
+                        "2".repeat(32),
+                        "A".repeat(40),
+                        "A".repeat(87),
+                        time.wall());
+        MeshMessage control =
+                MeshMessage.createControl(
+                        MeshMessage.newId(sender),
+                        sender,
+                        "2".repeat(32),
+                        "A".repeat(40),
+                        "A".repeat(87),
+                        time.wall());
+        for (MeshMessage packet : Arrays.asList(announce, control, text, receipt))
+            scheduler.add(
+                    new MeshStorage.Pending(
+                            packet, time.wall(), time.wall() + MeshConfig.PENDING_TTL_MS, 0));
+        scheduler.inventoryReady(peer -> false);
+        peer("wifi:phone", -40);
+        scheduler.start();
+        time.runDue();
+        Call call = transport.calls.get(0);
+        assertEquals(
+                Arrays.asList(receipt.getMessageId(), text.getMessageId()),
+                Arrays.asList(call.packets.get(0).id, call.packets.get(1).id));
+        assertEquals(2, call.packets.size());
+        for (MeshTransport.Packet packet : call.packets) call.listener.onForwarded(packet.id);
+        call.listener.onComplete(null, false);
+        scheduler.inventoryReady(peer -> true);
+        scheduler.schedule(0);
+        time.advance(100);
+        Call bulk = transport.calls.get(1);
+        assertEquals(control.getMessageId(), bulk.packets.get(0).id);
+        assertEquals(announce.getMessageId(), bulk.packets.get(1).id);
+    }
+
+    @Test
     public void repeatedSendsLeaveBudgetForAThirdPhoneAfterLongPartition() {
         MeshMessage packet = queued(0);
         scheduler.start();
