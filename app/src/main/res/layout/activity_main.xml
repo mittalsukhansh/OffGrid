@@ -1,130 +1,379 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- res/layout/activity_main.xml -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/og_bg"
     android:orientation="vertical">
 
-    <!-- Header: mesh status + Start/Stop toggle -->
     <LinearLayout
+        android:id="@+id/headerBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:background="@drawable/bg_header"
+        android:orientation="vertical"
         android:paddingStart="16dp"
-        android:paddingTop="8dp"
+        android:paddingTop="10dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="12dp">
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Mesh stopped"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/toggleButton"
-            android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/appTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.04"
+                    android:text="OffGrid"
+                    android:textColor="@color/og_text"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/nodeIdBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/bg_node_badge"
+                    android:clickable="true"
+                    android:contentDescription="Copy node ID"
+                    android:drawableEnd="@drawable/ic_copy"
+                    android:drawablePadding="6dp"
+                    android:focusable="true"
+                    android:fontFamily="monospace"
+                    android:gravity="center_vertical"
+                    android:minHeight="26dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="ID  ········"
+                    android:textColor="@color/og_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/contactButton"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_button_ghost"
+                android:drawableStart="@drawable/ic_qr"
+                android:drawablePadding="6dp"
+                android:fontFamily="sans-serif-medium"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:stateListAnimator="@null"
+                android:text="My QR"
+                android:textAllCaps="false"
+                android:textColor="@color/og_cyan_soft"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/toggleButton"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_button_start"
+                android:fontFamily="sans-serif-medium"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:stateListAnimator="@null"
+                android:text="Start Mesh"
+                android:textAllCaps="false"
+                android:textColor="@color/og_on_accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Start Mesh" />
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
+
+                <LinearLayout
+                    android:id="@+id/statusPill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="start|center_vertical"
+                    android:background="@drawable/bg_status_pill"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp">
+
+                    <FrameLayout
+                        android:layout_width="16dp"
+                        android:layout_height="16dp">
+
+                        <View
+                            android:id="@+id/statusGlow"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:alpha="0"
+                            android:background="@drawable/bg_dot"
+                            android:backgroundTint="@color/og_hint"
+                            android:visibility="invisible" />
+
+                        <View
+                            android:id="@+id/statusDot"
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:layout_gravity="center"
+                            android:background="@drawable/bg_dot"
+                            android:backgroundTint="@color/og_hint" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/statusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-medium"
+                        android:maxLines="1"
+                        android:text="Mesh stopped"
+                        android:textColor="@color/og_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <Button
+                android:id="@+id/diagnosticsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_button_ghost"
+                android:fontFamily="sans-serif-medium"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:stateListAnimator="@null"
+                android:text="Network"
+                android:textAllCaps="false"
+                android:textColor="@color/og_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:alpha="0.2"
-        android:background="#808080" />
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:paddingHorizontal="12dp">
-        <Button android:id="@+id/conversationsButton" android:layout_width="0dp"
-            android:layout_weight="1" android:layout_height="wrap_content" android:text="Conversations" />
-        <Button android:id="@+id/diagnosticsButton" android:layout_width="wrap_content"
-            android:layout_height="wrap_content" android:text="Network" />
-    </LinearLayout>
-    <TextView android:id="@+id/conversationHeading" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:paddingHorizontal="16dp"
-        android:text="Conversations · choose a chat or start a new one below" android:textSize="14sp" />
-    <ListView android:id="@+id/conversationList" android:layout_width="match_parent"
-        android:layout_height="0dp" android:layout_weight="1" />
-    <!-- Chat history -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/chatRecycler"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:alpha="0.2"
-        android:background="#808080" />
-
-    <!-- Recipient selector + own contact -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="4dp"
-        android:paddingEnd="12dp">
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="4dp">
+
+        <Button
+            android:id="@+id/conversationsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_button_ghost"
+            android:drawableStart="@drawable/ic_chevron_left"
+            android:fontFamily="sans-serif-medium"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="14dp"
+            android:stateListAnimator="@null"
+            android:text="Conversations"
+            android:textAllCaps="false"
+            android:textColor="@color/og_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/conversationHeading"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="end|center_vertical"
+            android:maxLines="1"
+            android:text="Conversations"
+            android:textColor="@color/og_muted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ListView
+            android:id="@+id/conversationList"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:listSelector="@android:color/transparent"
+            android:overScrollMode="never"
+            android:paddingStart="8dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="4dp"
+            android:scrollbars="none" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/chatRecycler"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="never"
+            android:paddingTop="12dp"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:id="@+id/eventPill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/bg_event_pill"
+            android:elevation="4dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:maxLines="2"
+            android:paddingStart="14dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/og_emerald_soft"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/targetBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="2dp">
 
         <Button
             android:id="@+id/recipientButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_button_ghost"
+            android:drawableEnd="@drawable/ic_chevron_down"
+            android:drawablePadding="4dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxWidth="180dp"
+            android:maxLines="2"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="10dp"
+            android:stateListAnimator="@null"
+            android:text="To: Everyone"
+            android:textAllCaps="false"
+            android:textColor="@color/og_text"
+            android:textSize="11sp" />
+
+        <HorizontalScrollView
+            android:id="@+id/targetScroll"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="To: Everyone" />
+            android:overScrollMode="never"
+            android:paddingStart="8dp"
+            android:scrollbars="none">
 
-        <Button
-            android:id="@+id/contactButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="My contact" />
+            <LinearLayout
+                android:id="@+id/targetChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
     </LinearLayout>
 
-    <!-- Message input row -->
-    <LinearLayout android:id="@+id/composerRow"
+    <LinearLayout
+        android:id="@+id/composerRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_composer"
+        android:elevation="6dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingTop="4dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="8dp">
+        android:padding="6dp">
 
-        <Button android:id="@+id/attachButton" android:layout_width="wrap_content"
-            android:layout_height="wrap_content" android:text="Attach"/>
+        <ImageButton
+            android:id="@+id/attachButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Attach media"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_attach" />
+
         <EditText
             android:id="@+id/messageInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:background="@null"
             android:hint="Type a message"
             android:imeOptions="actionSend"
             android:importantForAutofill="no"
             android:inputType="textCapSentences"
-            android:maxLines="3" />
+            android:maxLines="3"
+            android:minHeight="40dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:textColor="@color/og_text"
+            android:textColorHint="@color/og_hint"
+            android:textSize="15sp" />
 
-        <Button
+        <ImageButton
             android:id="@+id/sendButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_send_button"
+            android:contentDescription="Send message"
             android:enabled="false"
-            android:text="Send" />
+            android:padding="11dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_send"
+            android:tint="@color/og_send_icon" />
     </LinearLayout>
 
 </LinearLayout>

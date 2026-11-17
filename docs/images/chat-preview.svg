@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1140" viewBox="0 0 640 1140" role="img" aria-labelledby="title description">
+  <title id="title">OffGrid chat screen preview</title>
+  <desc id="description">Illustrative dark-themed OffGrid chat interface with mesh status, verified private messages, and a message composer.</desc>
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17212b"/>
+      <stop offset="1" stop-color="#080c11"/>
+    </linearGradient>
+    <linearGradient id="outgoing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#087e70"/>
+      <stop offset="1" stop-color="#075c59"/>
+    </linearGradient>
+    <style>
+      text { font-family: "Segoe UI", Roboto, Arial, sans-serif; }
+      .muted { fill: #9ca3af; }
+      .white { fill: #f3f4f6; }
+      .small { font-size: 15px; }
+    </style>
+  </defs>
+  <rect x="28" y="12" width="584" height="1116" rx="66" fill="url(#frame)" stroke="#35414b" stroke-width="3"/>
+  <rect x="46" y="30" width="548" height="1080" rx="50" fill="#0b1117"/>
+  <rect x="241" y="30" width="158" height="22" rx="11" fill="#05080b"/>
+
+  <text x="78" y="78" class="white" font-size="16" font-weight="600">9:41</text>
+  <g fill="#e6edf3">
+    <rect x="500" y="64" width="4" height="10" rx="2"/>
+    <rect x="508" y="60" width="4" height="14" rx="2"/>
+    <rect x="516" y="56" width="4" height="18" rx="2"/>
+    <path d="M530 62q12-12 24 0l-12 14z"/>
+    <rect x="565" y="58" width="18" height="16" rx="4" fill="none" stroke="#e6edf3" stroke-width="2"/>
+    <rect x="583" y="63" width="3" height="6" rx="1"/>
+    <rect x="568" y="61" width="10" height="10" rx="2"/>
+  </g>
+
+  <rect x="46" y="90" width="548" height="176" fill="#101a22"/>
+  <text x="72" y="131" class="white" font-size="28" font-weight="700" letter-spacing=".8">OffGrid</text>
+  <rect x="72" y="145" width="168" height="30" rx="10" fill="#18232c" stroke="#293741"/>
+  <text x="86" y="165" class="muted" font-size="14" font-family="monospace">ID ········</text>
+  <rect x="413" y="107" width="76" height="38" rx="12" fill="#17232b" stroke="#2a3a43"/>
+  <text x="451" y="132" text-anchor="middle" fill="#a5f3fc" font-size="14" font-weight="600">My QR</text>
+  <rect x="498" y="107" width="82" height="38" rx="12" fill="#7f1d1d"/>
+  <text x="539" y="132" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Stop Mesh</text>
+  <circle cx="83" cy="214" r="6" fill="#10b981"/>
+  <circle cx="83" cy="214" r="11" fill="#10b981" opacity=".14"/>
+  <text x="102" y="219" class="white" font-size="16" font-weight="600">Mesh active · 2 nearby</text>
+  <rect x="475" y="194" width="98" height="34" rx="11" fill="#17232b" stroke="#2a3a43"/>
+  <text x="524" y="216" text-anchor="middle" class="muted" font-size="14">Network</text>
+
+  <rect x="62" y="278" width="164" height="36" rx="12" fill="#18232c"/>
+  <text x="144" y="301" text-anchor="middle" class="white" font-size="14" font-weight="600">‹ Conversations</text>
+  <text x="570" y="301" text-anchor="end" class="muted" font-size="14">Riley</text>
+
+  <rect x="62" y="342" width="350" height="154" rx="20" fill="#16212a" stroke="#24323c"/>
+  <text x="82" y="371" fill="#22d3ee" font-size="15" font-weight="700">Riley</text>
+  <text x="153" y="371" fill="#34d399" font-size="12" font-weight="600">✓ Verified</text>
+  <rect x="252" y="354" width="62" height="24" rx="8" fill="#15343b"/>
+  <text x="283" y="371" text-anchor="middle" fill="#22d3ee" font-size="11" font-weight="700">E2EE</text>
+  <text x="82" y="408" class="white" font-size="19">Meet at the trailhead</text>
+  <text x="82" y="434" class="white" font-size="19">after lunch?</text>
+  <text x="82" y="472" class="muted small">direct</text>
+  <text x="388" y="472" text-anchor="end" class="muted small">10:42</text>
+
+  <rect x="215" y="520" width="359" height="150" rx="20" fill="url(#outgoing)"/>
+  <text x="237" y="550" fill="#e0f2fe" font-size="15" font-weight="700">You</text>
+  <rect x="284" y="532" width="62" height="24" rx="8" fill="#dff8f5" opacity=".17"/>
+  <text x="315" y="549" text-anchor="middle" fill="#e0f2fe" font-size="11" font-weight="700">E2EE</text>
+  <text x="237" y="588" class="white" font-size="19">Sounds good. I’ll message</text>
+  <text x="237" y="614" class="white" font-size="19">when I’m close.</text>
+  <text x="237" y="647" fill="#d1fae5" font-size="13">TTL 5</text>
+  <text x="548" y="647" text-anchor="end" fill="#d1fae5" font-size="13">10:43 · Queued</text>
+
+  <rect x="62" y="695" width="343" height="120" rx="20" fill="#16212a" stroke="#24323c"/>
+  <text x="82" y="724" fill="#22d3ee" font-size="15" font-weight="700">Riley</text>
+  <text x="153" y="724" fill="#34d399" font-size="12" font-weight="600">✓ Verified</text>
+  <text x="82" y="761" class="white" font-size="19">Great — see you there.</text>
+  <text x="82" y="792" class="muted small">direct</text>
+  <text x="382" y="792" text-anchor="end" class="muted small">10:44</text>
+
+  <rect x="66" y="968" width="508" height="72" rx="24" fill="#111b23" stroke="#26353f" stroke-width="2"/>
+  <circle cx="101" cy="1004" r="19" fill="#1b2932"/>
+  <path d="M95 1004h12m-6-6v12" stroke="#aab7c1" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="137" y="1010" class="muted" font-size="16">Type a message</text>
+  <circle cx="535" cy="1004" r="24" fill="#34d399"/>
+  <path d="M525 1004l20-10-6 21-5-8zM534 1007l11-13" fill="#04130e"/>
+  <rect x="268" y="1086" width="104" height="5" rx="2.5" fill="#ecf1f5" opacity=".75"/>
+</svg>
