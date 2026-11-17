@@ -553,10 +553,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Passing final exact-source rerun, main consolidation/branch cleanup/evidence recording. No new APK release is implied.
 - **Sources:** This change; https://github.com/mittalsukhansh/OffGrid/actions/runs/44075748030; D058; MainActivity.scanContact ScanOptions.QR_CODE.
 
+## D060 — 2026-11-17 UTC — Complete tested branch consolidation into main
+
+- **Status:** All current origin branches consolidated into main; merged branches removed
+- **Work:** Confirmed current main/ui tips are ancestors of the tested integration; fast-forwarded main to a9a6a6f, pushed as mittalsukhansh and deleted merged origin/ui plus integration/all-branches. Preserved UI commit 6f73602 through the actual two-parent merge. Added the missing UI resources/theme, resolved README and API/tint issues, retained durable-save composer and queue/unsend behavior, bounded quick-contact rendering, paused hidden animations and kept mutable TTL labels honest. QR test reader now matches the production QR-only scanner. Existing published APKs were not changed.
+- **Decision / reason:** Deliver one tested development baseline with both contributors' work and avoid deleting any unmerged commits. Distinguish source integration from an APK release: published 1.1.2 predates this UI merge, as stated beside the illustrative README previews.
+- **Validation / evidence:** Exact integrated source a9a6a6f passed both hosted jobs in run 44076699952: build/lint, 82 JVM/six host tests and Android runtime suites, including conversation navigation, name/contact dialogs, diagnostics, QR round trips, Room/Keystore, queue/cancellation and continuity harnesses. Earlier unrestricted QR-decoder false positive was diagnosed and fixed without relaxing payload equality. Final ancestry, origin-head, document-link and diff checks performed. This final record is documentation only and avoids redundant Android CI.
+- **Open items:** UI is merged source, not a newly published release. Physical phone/UI/radio behavior and existing security/licensing/admin/offline-media responsibilities remain as documented.
+- **Sources:** This change; D058–D059; ui 6f736021f68372e870651cb128bb9f97c8a099df; integrated a9a6a6f856fd7c783219ac51030dc06382d5b9b9; https://github.com/mittalsukhansh/OffGrid/actions/runs/44076699952.
+
 ## Template for the next work set
 
 ```markdown
-## D060 — YYYY-MM-DD HH:MM UTC — Short title
+## D061 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.
