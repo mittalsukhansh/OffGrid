@@ -236,6 +236,48 @@ public class RelaySchedulerTest {
         assertEquals(1, transport.calls.size());
     }
 
+    @Test
+    public void repeatedInventoriesCannotPostponeForwardingForever() {
+        MeshMessage packet = queued(0);
+        peer("wifi:liar", -20);
+        scheduler.inventory("wifi:liar", sender, Collections.singletonList(packet.getMessageId()));
+        scheduler.start();
+        time.runDue();
+        assertTrue(transport.calls.isEmpty());
+        time.advance(RelayScheduler.INVENTORY_HINT_MS - 1);
+        scheduler.inventory("wifi:liar", sender, Collections.singletonList(packet.getMessageId()));
+        scheduler.schedule(0);
+        time.runDue();
+        assertTrue(transport.calls.isEmpty());
+        time.advance(1);
+        peer("wifi:liar", -20);
+        time.runDue();
+        assertEquals(1, transport.calls.size());
+        Call call = transport.calls.get(0);
+        call.listener.onForwarded(packet.getMessageId());
+        call.listener.onComplete(null, false);
+        time.advance(RelayScheduler.RETRY_BASE_MS);
+        scheduler.inventory("wifi:liar", sender, Collections.singletonList(packet.getMessageId()));
+        peer("wifi:liar", -20);
+        time.runDue();
+        assertEquals(2, transport.calls.size());
+        scheduler.remove(packet.getMessageId());
+        assertFalse(transport.calls.get(1).listener.shouldSend(packet.getMessageId()));
+    }
+
+    @Test
+    public void newRadioAliasCannotRenewExpiredInventorySuppression() {
+        MeshMessage packet = queued(0);
+        peer("ble:liar", -10);
+        scheduler.inventory("ble:liar", sender, Collections.singletonList(packet.getMessageId()));
+        scheduler.start();
+        time.advance(RelayScheduler.INVENTORY_HINT_MS);
+        peer("wifi:new", -20);
+        scheduler.inventory("wifi:new", sender, Collections.singletonList(packet.getMessageId()));
+        time.runDue();
+        assertFalse(transport.calls.isEmpty());
+    }
+
     static final class FakeTimer implements RelayScheduler.Timer {
         long elapsed;
         final long wallBase = System.currentTimeMillis();

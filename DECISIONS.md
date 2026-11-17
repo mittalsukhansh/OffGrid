@@ -373,10 +373,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner offline-media backup remains deferred; real two-phone/radio tests and replay/inventory/backup-format follow-ups remain behind the previously requested gate unless the owner changes priority. Repo licensing/admin actions remain open. No 1.0.1 APK release has been published.
 - **Sources:** This change; [CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/43940312162); [reinstall evidence](docs/audits/same-protocol-reinstall/README.md)
 
+## D040 — 2026-11-17 UTC — Versioned backup costs and non-renewable inventory hints
+
+- **Status:** Implemented/locally checked; final runtime integration pending
+- **Work:** Owner explicitly requested proceeding with the remaining work, superseding the earlier physical-test-first ordering. Added OGB2 authenticated scrypt cost/KDF/version fields with pre-allocation bounds, retained OGB1 reading and the existing mobile default, and tested the stronger 2^17 profile. Replaced indefinite per-peer possession suppression with first-claim deadlines and bounded post-forward backoff shared across aliases; repeated claims cannot renew a known hint. Keep global queue lifetime/fan-out limits and authenticated delivery receipts.
+- **Decision / reason:** Keep protocol-5 wire compatibility while improving local policy/storage formats. New backup files encode logN 15..17, r8/p1 and KDF id1 in authenticated header; default remains logN15 until phones provide memory/latency evidence. Known claims expire after five seconds; actual forwarding backs off 30/60/120 seconds and never means Delivered. Only queued IDs can populate inventory claims.
+- **Validation / evidence:** KDF debug build/lint/JVM/instrumentation compilation passed; relay retry and alias tests passed in the JVM suite. Generated the legacy vector with the old production OGB1 writer; verified read compatibility, tampered/bad costs, minimum passphrase and logN17 round-trip. Combined runtime tests continue with later work. Physical radio results remain unverified.
+- **Open items:** Protected replay capacity, reusable release tooling, final integrated checks and documentation. Owner tests the unchanged published v1.0 baseline on compatible phones; the Android7.1.2 device remains ineligible. No new release is claimed.
+- **Sources:** This change; [backup](IDENTITY_BACKUP.md); [protocol](PACKET_FORMAT.md)
+
 ## Template for the next work set
 
 ```markdown
-## D040 — YYYY-MM-DD HH:MM UTC — Short title
+## D041 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

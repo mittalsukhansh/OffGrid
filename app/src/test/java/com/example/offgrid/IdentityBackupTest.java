@@ -62,4 +62,47 @@ public class IdentityBackupTest {
                 GeneralSecurityException.class,
                 () -> IdentityBackup.decrypt(encrypted, shortPhrase));
     }
+
+    @Test
+    public void legacyFileRemainsReadable() throws Exception {
+        byte[] vector;
+        try (java.io.InputStream in = getClass().getResourceAsStream("/identity-backup-v1.b64")) {
+            assertNotNull(in);
+            vector =
+                    java.util.Base64.getMimeDecoder()
+                            .decode(
+                                    new String(
+                                            in.readAllBytes(),
+                                            java.nio.charset.StandardCharsets.US_ASCII));
+        }
+        assertEquals(
+                "legacy identity payload",
+                new String(
+                        IdentityBackup.decrypt(vector, password),
+                        java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void v2CostsAreExplicitAuthenticatedAndBounded() throws Exception {
+        byte[] encrypted = IdentityBackup.encrypt(new byte[] {7}, password);
+        assertEquals(0x4f474232, java.nio.ByteBuffer.wrap(encrypted).getInt());
+        assertEquals(15, encrypted[5]);
+        assertEquals(8, encrypted[7]);
+        assertEquals(1, encrypted[8]);
+        for (int[] mutation :
+                new int[][] {{4, 2}, {5, 14}, {5, 18}, {6, 127}, {7, 9}, {8, 2}, {9, 1}}) {
+            byte[] bad = encrypted.clone();
+            bad[mutation[0]] = (byte) mutation[1];
+            assertThrows(
+                    GeneralSecurityException.class, () -> IdentityBackup.decrypt(bad, password));
+        }
+        byte[] changedCost = encrypted.clone();
+        changedCost[5] = 16;
+        assertThrows(
+                GeneralSecurityException.class,
+                () -> IdentityBackup.decrypt(changedCost, password));
+        byte[] stronger = IdentityBackup.encrypt(new byte[] {7}, password, 17);
+        assertEquals(17, stronger[5]);
+        assertArrayEquals(new byte[] {7}, IdentityBackup.decrypt(stronger, password));
+    }
 }

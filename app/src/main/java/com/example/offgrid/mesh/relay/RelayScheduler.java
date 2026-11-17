@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +24,9 @@ public final class RelayScheduler {
     public static final long PEER_TIMEOUT_MS = 30_000;
     private static final int MAX_PEERS = 200;
     private static final int MAX_PEER_IDS = 500;
+    public static final long INVENTORY_HINT_MS = 5_000;
+    public static final long RETRY_BASE_MS = 30_000;
+    public static final long RETRY_MAX_MS = 120_000;
 
     public interface Timer {
         long elapsed();
@@ -140,28 +142,36 @@ public final class RelayScheduler {
 
     public void receivedFrom(String peer, String id) {
         Peer source = peers.get(peer);
-        if (source != null) source.remember(id);
+        if (source != null) source.hint(id, timer.elapsed() + RETRY_BASE_MS);
     }
 
     /** IDs are hints from a challenge-authenticated endpoint; never delivery receipts. */
     public void inventory(String address, String identity, java.util.Collection<String> ids) {
         Peer peer = peers.get(address);
         if (peer == null) return;
-        if (peer.identity != null && !identity.equals(peer.identity)) peer.deliveredIds.clear();
+        if (peer.identity != null && !identity.equals(peer.identity)) peer.hints.clear();
         peer.identity = identity;
-        Set<String> shared = new LinkedHashSet<>();
-        for (Peer sibling : peers.values())
-            if (identity.equals(sibling.identity)) shared.addAll(sibling.deliveredIds);
-        shared.addAll(ids);
-        while (shared.size() > MAX_PEER_IDS) {
-            Iterator<String> oldest = shared.iterator();
-            oldest.next();
-            oldest.remove();
-        }
+        Map<String, Hint> shared = new LinkedHashMap<>();
         for (Peer sibling : peers.values())
             if (identity.equals(sibling.identity)) {
-                sibling.deliveredIds.clear();
-                sibling.deliveredIds.addAll(shared);
+                for (Map.Entry<String, Hint> entry : sibling.hints.entrySet()) {
+                    Hint previous = shared.get(entry.getKey()), next = entry.getValue();
+                    if (previous == null
+                            || next.forwards > previous.forwards
+                            || (next.forwards == previous.forwards
+                                    && next.retryAt < previous.retryAt))
+                        shared.put(entry.getKey(), next);
+                }
+            }
+        // A peer cannot fill the hint table with invented IDs or renew a known claim forever.
+        shared.keySet().removeIf(id -> !queue.containsKey(id));
+        for (String id : ids)
+            if (queue.containsKey(id))
+                shared.putIfAbsent(id, new Hint(timer.elapsed() + INVENTORY_HINT_MS, 0));
+        for (Peer sibling : peers.values())
+            if (identity.equals(sibling.identity)) {
+                sibling.hints.clear();
+                sibling.hints.putAll(shared);
             }
         publishPeerCount();
     }
@@ -180,6 +190,7 @@ public final class RelayScheduler {
 
     public void maintenance() {
         long now = timer.elapsed();
+        for (Peer peer : peers.values()) peer.hints.keySet().removeIf(id -> !queue.containsKey(id));
         peers.entrySet()
                 .removeIf(entry ->
                         now - entry.getValue().lastSeen > PEER_TIMEOUT_MS
@@ -228,7 +239,7 @@ public final class RelayScheduler {
         for (Buffered buffered : queue.values()) {
             if (result.size() >= limit) break;
             String id = buffered.message.getMessageId();
-            if (eligible(id) && !peer.deliveredIds.contains(id)) {
+            if (eligible(id) && peer.ready(id, timer.elapsed())) {
                 byte[] bytes = encoder.apply(buffered.message);
                 if (bytes.length <= transport.maxPacketBytes(peer.address))
                     result.add(new MeshTransport.Packet(id, bytes));
@@ -278,18 +289,26 @@ public final class RelayScheduler {
 
                         @Override
                         public boolean shouldSend(String id) {
-                            return current() && eligible(id);
+                            return current() && eligible(id) && peer.ready(id, timer.elapsed());
                         }
 
                         @Override
                         public void onForwarded(String id) {
                             if (!current()) return;
                             forwarded++;
-                            peer.remember(id);
+                            Hint previous = peer.hints.get(id);
+                            int attempt = previous == null ? 1 : previous.forwards + 1;
+                            long retry =
+                                    Math.min(
+                                            RETRY_MAX_MS,
+                                            RETRY_BASE_MS << Math.min(attempt - 1, 2));
+                            Hint sent = new Hint(timer.elapsed() + retry, attempt);
+                            peer.hints.put(id, sent);
                             if (peer.identity != null)
                                 for (Peer sibling : peers.values())
                                     if (peer.identity.equals(sibling.identity))
-                                        sibling.remember(id);
+                                        sibling.hints.put(id, sent);
+                            peer.trimHints();
                             Buffered buffered = queue.get(id);
                             if (buffered != null) {
                                 try {
@@ -402,24 +421,39 @@ public final class RelayScheduler {
         }
     }
 
+    private static final class Hint {
+        final long retryAt;
+        final int forwards;
+
+        Hint(long retryAt, int forwards) {
+            this.retryAt = retryAt;
+            this.forwards = forwards;
+        }
+    }
+
     private static final class Peer {
         final String address;
         String identity;
         long lastSeen, backoffUntil;
         int rssi, failures;
-        final Set<String> deliveredIds = new LinkedHashSet<>();
+        final Map<String, Hint> hints = new LinkedHashMap<>();
 
         Peer(String address) {
             this.address = address;
         }
 
-        void remember(String id) {
-            deliveredIds.add(id);
-            if (deliveredIds.size() > MAX_PEER_IDS) {
-                Iterator<String> iterator = deliveredIds.iterator();
-                iterator.next();
-                iterator.remove();
-            }
+        boolean ready(String id, long now) {
+            Hint hint = hints.get(id);
+            return hint == null || now >= hint.retryAt;
+        }
+
+        void hint(String id, long until) {
+            hints.putIfAbsent(id, new Hint(until, 0));
+            trimHints();
+        }
+
+        void trimHints() {
+            while (hints.size() > MAX_PEER_IDS) hints.remove(hints.keySet().iterator().next());
         }
     }
 }
