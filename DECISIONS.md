@@ -490,10 +490,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Hosted Android tests, signed in-place patch update/publication, public download verification and cleanup. Real phone three-second/unsend/range behavior and older physical/legal/admin/backup limits remain open.
 - **Sources:** This change; owner queue/unsend instruction in this session; THROUGHPUT.md; TESTING.md; RELEASE_NOTES_1.1.2.md.
 
+## D053 — 2026-11-17 UTC — Keep send-turn deferral shared across authenticated radios
+
+- **Status:** Implemented and locally checked; final exact-source hosted rerun pending
+- **Work:** Review found that yielding a high-priority old receipt on one endpoint could allow another authenticated radio alias to select it ahead of the waiting text. Share the short yield hint across authenticated aliases and the bounded identity hint cache, using the same helper as successful-forward hints. Added the failing-order scenario with a blocked CoC endpoint and a newly discovered Wi-Fi alias. Tightened the cancellation metric regression to inspect the COC counter specifically rather than matching another transport's zero failures.
+- **Decision / reason:** Switching transports must preserve the three-second scheduling rule; endpoint aliases must not bypass a yielded packet's deferral. Identity association still requires the existing signed nonce exchange. Avoid a false-positive metrics assertion when verifying that intentional cancellation is not counted as radio failure.
+- **Validation / evidence:** Debug assembly/lint, all 81 JVM tests and Android-test compilation pass locally. Prior source 511e6e8 passed both hosted jobs in run 44069653706, including the real socket cancel-without-link-stop and top-level-save/nested-rollback regressions. No release was published from that intermediate source. Final alias-aware source is retested/re-signed separately.
+- **Open items:** Final source CI, exact-source signed update/publication and download verification. User phone timing/unsend/alias/radio retest remains required; no physical three-second guarantee is inferred.
+- **Sources:** This change; D052; https://github.com/mittalsukhansh/OffGrid/actions/runs/44069653706.
+
 ## Template for the next work set
 
 ```markdown
-## D053 — YYYY-MM-DD HH:MM UTC — Short title
+## D054 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

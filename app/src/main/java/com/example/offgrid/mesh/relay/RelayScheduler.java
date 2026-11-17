@@ -265,6 +265,20 @@ public final class RelayScheduler {
         }
     }
 
+    private void rememberHint(Peer peer, String id, Hint hint) {
+        peer.hints.put(id, hint);
+        if (peer.identity != null) {
+            if (identityHints.containsKey(peer.identity))
+                identityHints.get(peer.identity).put(id, hint);
+            for (Peer sibling : peers.values())
+                if (peer.identity.equals(sibling.identity)) {
+                    sibling.hints.put(id, hint);
+                    sibling.trimHints();
+                }
+        }
+        peer.trimHints();
+    }
+
     private boolean readyFor(Peer peer, String id) {
         if (!eligible(id) || !peer.ready(id, timer.elapsed())) return false;
         Hint hint = peer.hints.get(id);
@@ -371,7 +385,8 @@ public final class RelayScheduler {
                                 yielded = true;
                                 if (!removed) {
                                     Hint previous = peer.hints.get(attempting);
-                                    peer.hints.put(
+                                    rememberHint(
+                                            peer,
                                             attempting,
                                             new Hint(
                                                     timer.elapsed() + SEND_TURN_MS,
@@ -429,14 +444,7 @@ public final class RelayScheduler {
                                             RETRY_MAX_MS,
                                             RETRY_BASE_MS << Math.min(attempt - 1, 2));
                             Hint sent = new Hint(timer.elapsed() + retry, attempt);
-                            peer.hints.put(id, sent);
-                            if (peer.identity != null && identityHints.containsKey(peer.identity))
-                                identityHints.get(peer.identity).put(id, sent);
-                            if (peer.identity != null)
-                                for (Peer sibling : peers.values())
-                                    if (peer.identity.equals(sibling.identity))
-                                        sibling.hints.put(id, sent);
-                            peer.trimHints();
+                            rememberHint(peer, id, sent);
                             Buffered buffered = queue.get(id);
                             if (buffered != null) {
                                 try {

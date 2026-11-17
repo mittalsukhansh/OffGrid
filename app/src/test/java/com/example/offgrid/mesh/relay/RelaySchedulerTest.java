@@ -61,6 +61,39 @@ public class RelaySchedulerTest {
     }
 
     @Test
+    public void alternateRadioCannotPutYieldedReceiptAheadOfWaitingText() {
+        MeshMessage receipt =
+                MeshMessage.createAcknowledgement(
+                        MeshMessage.newId(sender),
+                        sender,
+                        "2".repeat(32),
+                        "A".repeat(40),
+                        "A".repeat(87),
+                        time.wall());
+        scheduler.add(
+                new MeshStorage.Pending(
+                        receipt, time.wall(), time.wall() + MeshConfig.PENDING_TTL_MS, 0));
+        peer("ble:coc:primary", -20);
+        scheduler.inventory("ble:coc:primary", sender, Collections.emptyList());
+        scheduler.start();
+        time.runDue();
+        Call stalled = transport.calls.get(0);
+        stalled.listener.onAttempt(
+                receipt.getMessageId(), () -> stalled.listener.onComplete("closed", false));
+        MeshMessage next = queued(0);
+        time.advance(2999);
+        peer("wifi:alias", -30);
+        scheduler.inventory("wifi:alias", sender, Collections.emptyList());
+        time.runDue();
+        assertEquals(1, transport.calls.size());
+        time.advance(1);
+        Call replacement = transport.calls.get(1);
+        assertEquals("wifi:alias", replacement.peer);
+        assertEquals(next.getMessageId(), replacement.packets.get(0).id);
+        assertFalse(replacement.listener.shouldSend(receipt.getMessageId()));
+    }
+
+    @Test
     public void fallbackReplacesCancelHandleWithoutRestartingThreeSecondWindow() {
         MeshMessage first = queued(0);
         peer("wifi:phone", -20);

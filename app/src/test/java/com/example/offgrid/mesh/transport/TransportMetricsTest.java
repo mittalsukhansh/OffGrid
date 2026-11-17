@@ -41,7 +41,8 @@ public class TransportMetricsTest {
         assertEquals(1, closed[0]);
         assertTrue(measured.isCancelled());
         measured.onComplete("socket closed", false);
-        assertTrue(metrics.snapshot().contains("failures 0"));
+        String coc = metrics.snapshot().split("\n\nCOC:")[1].split("\n\n")[0];
+        assertTrue(coc.contains("Sessions 1/1 · failures 0"));
     }
 
     @Test
