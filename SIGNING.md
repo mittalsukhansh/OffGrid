@@ -166,3 +166,8 @@ The [v1.1 publication workflow](https://github.com/mittalsukhansh/OffGrid/action
 ## Published 1.1.2 queue fairness patch
 
 [Upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44073685324) passed an actual API-30 signed v1.1.1/code111→1.1.2-experimental/code112 install-r, retaining identity, verified contact/fingerprint, nickname and encrypted history. [Exact-source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44072897339) passed for 001e9a3 (82 JVM/six host tests and Android runtime suites). The public APK was independently downloaded and checked for hash, pin, package, version/code and source. [Evidence](docs/audits/release-1.1.2/README.md). Real phone cancellation timing remains separate.
+
+
+## Published merged-UI 1.1.3 update
+
+[Source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44102943274) passed for 26ea58b (82 JVM/six host tests, build/lint and Android runtime/UI suites). [Signed upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44103792519) verified actual published v1.1.2/code112→1.1.3-experimental/code113 identity, verified-contact/nickname and encrypted-history continuity on API30 before publishing. The public APK was downloaded and independently checked for hash, pin, package, code/version and signed source. [Evidence](docs/audits/release-1.1.3/README.md). No physical radio result is implied.

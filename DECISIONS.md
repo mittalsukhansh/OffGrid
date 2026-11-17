@@ -571,10 +571,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Exact-source hosted CI, signed assembly/upgrade/publication, independent public-download verification and artifact cleanup. Existing physical/UI/radio/security/licensing/admin/offline-backup limitations remain documented.
 - **Sources:** This change; D058–D060; RELEASE_NOTES_1.1.3.md; https://github.com/mittalsukhansh/OffGrid/actions/runs/44076699952.
 
+## D062 — 2026-11-17 UTC — Stage public signed merged-UI update
+
+- **Status:** Signed artifacts prepared/locally verified; source CI and signed upgrade/publication gate apply before release
+- **Work:** Staged exact-source code113/1.1.3-experimental APK plus matching fixture2 and actual published v1.1.2/code112 APK with its matching fixture on a one-commit temporary release-assets/v1.1.3 branch. Explicit publish=true/tag v1.1.3 follows the owner's APK update request. No private signing material is staged.
+- **Decision / reason:** Release the tested merged UI using the persistent pinned certificate and a real published baseline; retain prior releases unchanged. Push the artifact branch only after exact-source hosted checks pass; require successful emulator install-r continuity before publishing.
+- **Validation / evidence:** Local debug assembly/lint, 82 JVM/six host tests and Android-test compilation passed; signed release assembly/lint/test-fixture build and standalone APK pin/package/version/code/source verification passed. Signing/history audit: 635 reachable blobs, two current public files, zero findings. Exact source CI run 44102943274 is the release gate; final results and signed publication evidence are recorded in the following entry when actually complete.
+- **Open items:** Successful exact-source hosted run, actual signed v1.1.2→1.1.3 update, publication/download verification and artifact cleanup. Real phones and existing legal/security/admin/offline-media limits remain as documented.
+- **Sources:** This staging change; source 26ea58b221298d80a7a0b2fb431c8a26eeadf830; D061; https://github.com/mittalsukhansh/OffGrid/actions/runs/44102943274; RELEASE_NOTES_1.1.3.md.
+
+## D063 — 2026-11-17 UTC — Publish verified merged-UI 1.1.3 APK
+
+- **Status:** Published experimental v1.1.3, signed update verified, artifact branch cleaned
+- **Work:** Exact source 26ea58b passed CI 44102943274, then workflow 44103792519 seeded/reopened the actual published v1.1.2/code112 baseline, performed signed install-r to code113/1.1.3-experimental and verified identity, verified dual-key contact/fingerprint, nickname and encrypted history. Published v1.1.3 with APK/public certificate/hash/signature/upgrade output and applied release notes to explicitly targeted mittalsukhansh/OffGrid. Downloaded the public APK for independent verification, archived public evidence/D062 and updated current release links. Removed temporary release-assets/v1.1.3; development remains on main.
+- **Decision / reason:** Fulfill the explicit APK update request with the merged UI and existing queue fixes while preserving the pinned signing identity and prior releases. Separate immutable artifact/source verification from physical-phone behavior and retain experimental labeling.
+- **Validation / evidence:** CI passed build/lint, 82 JVM/six host tests and Android runtime/UI suites. Actual API30 signed v1.1.2→1.1.3 upgrade/publication passed. Public downloaded APK SHA-256 6a2f6c0456d0f002068a59275b39a84241f82317d025725c5c0ec8fd80016f54 matches staged/published sums; certificate pin, package, code/version and signed source verified. Pre-stage audit: 635 blobs, two public files, zero findings. Final evidence/manifest/local links/diff formatting checked; this documentation-only record skips redundant Android CI.
+- **Open items:** Real phone UI/BLE/GATT/CoC/Direct/three-phone/weak-link timing and previous licensing/security/admin/offline-media responsibilities remain documented; no new physical reliability/speedup claim is made.
+- **Sources:** This change; D061–D062; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.3; https://github.com/mittalsukhansh/OffGrid/actions/runs/44103792519; docs/audits/release-1.1.3/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D062 — YYYY-MM-DD HH:MM UTC — Short title
+## D064 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

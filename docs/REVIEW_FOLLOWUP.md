@@ -48,3 +48,8 @@ The signed code-100→101 experimental candidate passed the API-30 in-place upda
 ## Published 1.1.2 queue/unsend follow-up
 
 [Patch 1.1.2](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.2), code112, adds conditional three-second first send turns, shared alias deferral, targeted native connection cancellation and composer release after a durable save. Unsend/removal cancels active original work immediately; original undelivered messages remain queued on yield. Retried slow packets can complete once queued chats have had first opportunities. [Hosted/native-socket/signed-upgrade evidence](audits/release-1.1.2/README.md) is available; actual BLE/GATT/CoC timing, weak links and third-phone behavior still need owner testing.
+
+
+## Published merged-UI 1.1.3 APK
+
+[Experimental v1.1.3](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.3), code113, now ships the consolidated UI/resources and retained queue/unsend/name functionality. The QR test reader matches the real QR-only scanner and UI compatibility issues were resolved during integration. [Actual source/UI checks, signed v1.1.2→1.1.3 upgrade and independent public download verification](audits/release-1.1.3/README.md) passed. Physical phone/UI/radio and existing legal/security/admin/offline-backup limitations remain open.
