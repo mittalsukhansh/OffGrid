@@ -377,6 +377,7 @@ public final class RelayScheduler {
                             for (Buffered other : queue.values())
                                 if (!other.message.getMessageId().equals(attempting)
                                         && priority(other.message) <= 1
+                                        && other.lastOpportunity == 0
                                         && readyFor(peer, other.message.getMessageId())) {
                                     waitingText = true;
                                     break;

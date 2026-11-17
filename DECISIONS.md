@@ -499,10 +499,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Final source CI, exact-source signed update/publication and download verification. User phone timing/unsend/alias/radio retest remains required; no physical three-second guarantee is inferred.
 - **Sources:** This change; D052; https://github.com/mittalsukhansh/OffGrid/actions/runs/44069653706.
 
+## D054 — 2026-11-17 UTC — Preserve eventual delivery for two slow packets
+
+- **Status:** Reliability fix implemented; local regression red/green verified; final hosted rerun pending
+- **Work:** Added a deterministic case where each of two packets needs more than three seconds. The earlier rule repeatedly aborted the second packet when the first became retryable, preventing either from finishing. Yield for chat/receipts waiting for their first opportunity; after every queued chat has had a turn, allow ordinary native retry timeouts so weak-but-working links can complete. Newly queued untried chats still trigger a yield; unsend/removal remains immediate. Updated policy and phone/release notes.
+- **Decision / reason:** A three-second first-opportunity policy must not become a perpetual reset loop or falsely fail slow transmissions. Later new text should get a turn while existing retries can eventually complete. A scheduling window cannot guarantee a physical delivery time.
+- **Validation / evidence:** New slow-two-packet test failed against source 4256b74 (an undesired repeated abort), then passed after the guard correction. Final local debug build/lint, all 82 JVM tests and Android-test compilation passed. Prior alias-aware source 4256b74 passed both hosted jobs in run 44071132534, including real socket cancellation and durable-save/rollback checks. No intermediate 1.1.2 APK was released. Final source is checked and signed separately.
+- **Open items:** Final exact-source CI, signed upgrade/publication, downloaded-APK verification and cleanup. Owner physical BLE/unsend/weak-link timing remains required; no radio reliability/speedup claim is made.
+- **Sources:** This change; D052–D053; https://github.com/mittalsukhansh/OffGrid/actions/runs/44071132534; THROUGHPUT.md; TESTING.md.
+
 ## Template for the next work set
 
 ```markdown
-## D054 — YYYY-MM-DD HH:MM UTC — Short title
+## D055 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

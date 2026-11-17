@@ -61,6 +61,43 @@ public class RelaySchedulerTest {
     }
 
     @Test
+    public void twoSlowPacketsCanFinishAfterEachGetsItsFirstTurn() {
+        MeshMessage first = queued(0);
+        peer("wifi:phone", -20);
+        scheduler.start();
+        time.runDue();
+        Call blocked = transport.calls.get(0);
+        blocked.listener.onAttempt(
+                first.getMessageId(), () -> blocked.listener.onComplete("closed", false));
+        MeshMessage second = queued(0);
+        time.advance(3000);
+        Call next = transport.calls.get(1);
+        int[] repeatedAbort = {0};
+        next.listener.onAttempt(
+                second.getMessageId(),
+                () -> {
+                    repeatedAbort[0]++;
+                    next.listener.onComplete("closed", false);
+                });
+        time.advance(3000);
+        assertEquals(
+                "Already attempted packets must not cause endless three-second restarts",
+                0,
+                repeatedAbort[0]);
+        time.advance(1000);
+        next.listener.onForwarded(second.getMessageId());
+        next.listener.onComplete(null, false);
+        time.advance(100);
+        Call retry = transport.calls.get(2);
+        assertEquals(first.getMessageId(), retry.packets.get(0).id);
+        retry.listener.onAttempt(first.getMessageId(), () -> fail("No untried text is waiting"));
+        retry.listener.onForwarded(first.getMessageId());
+        retry.listener.onComplete(null, false);
+        assertEquals(Integer.valueOf(1), storage.progress.get(first.getMessageId()));
+        assertEquals(Integer.valueOf(1), storage.progress.get(second.getMessageId()));
+    }
+
+    @Test
     public void alternateRadioCannotPutYieldedReceiptAheadOfWaitingText() {
         MeshMessage receipt =
                 MeshMessage.createAcknowledgement(
