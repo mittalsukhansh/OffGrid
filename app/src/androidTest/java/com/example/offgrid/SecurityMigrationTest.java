@@ -134,13 +134,59 @@ public class SecurityMigrationTest {
             try (android.database.Cursor row =
                     db.query(
                             "SELECT senderId,highest,hex(bits),priority,lastUsed FROM"
-                                + " sequence_windows")) {
+                                    + " sequence_windows")) {
                 assertTrue(row.moveToFirst());
                 assertEquals(sender, row.getString(0));
                 assertEquals(42, row.getLong(1));
                 assertEquals("01", row.getString(2));
                 assertEquals(0, row.getInt(3));
                 assertEquals(0, row.getLong(4));
+            }
+            db.close();
+        } finally {
+            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteDatabase(name);
+        }
+    }
+
+    @Test
+    public void transferControlMigrationKeepsCiphertextProgressAndAssociatesQueuedPackets()
+            throws Exception {
+        String name = "transfer-control-migration-" + UUID.randomUUID();
+        try {
+            SupportSQLiteDatabase db = helper.createDatabase(name, 6);
+            db.execSQL(
+                    "INSERT INTO media VALUES"
+                        + " ('offer','sender','target','image/jpeg','TRANSFERRING',X'AA',X'BB',X'01',1,1000,2,100,200)");
+            db.execSQL("INSERT INTO media_parts VALUES ('offer',0,X'CC','chunk',300)");
+            db.execSQL("INSERT INTO pending_messages VALUES ('offer',X'0102',10000,100,3)");
+            db.execSQL("INSERT INTO pending_messages VALUES ('chunk',X'0304',10000,100,4)");
+            db.execSQL("INSERT INTO pending_messages VALUES ('text',X'0506',10000,100,1)");
+            db.close();
+            db = helper.runMigrationsAndValidate(name, 7, true, MessageDatabase.MIGRATION_6_7);
+            try (android.database.Cursor rows =
+                    db.query("SELECT hex(file),hex(received),paused FROM media")) {
+                assertTrue(rows.moveToFirst());
+                assertEquals("BB", rows.getString(0));
+                assertEquals("01", rows.getString(1));
+                assertEquals(0, rows.getInt(2));
+            }
+            try (android.database.Cursor rows =
+                    db.query(
+                            "SELECT id,hex(packet),forwardCount,transferId FROM pending_messages"
+                                + " ORDER BY id")) {
+                assertTrue(rows.moveToFirst());
+                assertEquals("chunk", rows.getString(0));
+                assertEquals("0304", rows.getString(1));
+                assertEquals(4, rows.getInt(2));
+                assertEquals("offer", rows.getString(3));
+                assertTrue(rows.moveToNext());
+                assertEquals("offer", rows.getString(0));
+                assertEquals("0102", rows.getString(1));
+                assertEquals(3, rows.getInt(2));
+                assertEquals("offer", rows.getString(3));
+                assertTrue(rows.moveToNext());
+                assertEquals("text", rows.getString(0));
+                assertEquals("", rows.getString(3));
             }
             db.close();
         } finally {

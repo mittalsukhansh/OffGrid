@@ -410,6 +410,19 @@ public class MeshService extends Service {
         if (!destroyed) node.unsend(id);
     }
 
+    public void transferCommand(
+            String id,
+            PrivateActions.TransferCommand command,
+            java.util.function.Consumer<String> callback) {
+        if (destroyed) callback.accept("Mesh service stopped. Reopen transfer controls.");
+        else node.transferCommand(id, command, callback);
+    }
+
+    public void messageDetails(String id, java.util.function.Consumer<String> callback) {
+        if (destroyed) callback.accept("Mesh service stopped. Reopen message details.");
+        else node.messageDetails(id, callback);
+    }
+
     public void sendMedia(String target, byte[] bytes, String mime) {
         if (!destroyed) node.sendMedia(target, bytes, mime);
     }

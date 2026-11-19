@@ -240,3 +240,21 @@ For A–B–C, record models, Android versions, APK versions, transport and aggr
 exports on all three phones, with A/C out of direct range. A forward-budget-exhausted
 count explains retry policy, not proof of route discovery or authenticated delivery.
 These phone checks have not been performed by the coding environment.
+
+## Attachment controls and delivery-detail retest (1.1.5)
+
+Install the same current signed build on the test phones without uninstalling. Send
+a private photo, tap Transfer controls → Controls → Pause sending, rotate/reopen
+the app and verify Paused and retained progress. Keep the other phone offline for
+this first check. Resume, reconnect and require Delivered plus a valid opened photo.
+Repeat with Cancel local sending: its remaining local packets should stop; already
+relayed bytes may still arrive. Send again creates a distinct new attachment at 0%.
+Verify that an unsent attachment offers no retry. Do not equate cancellation with
+remote deletion. A completion receipt arriving after a local stop should show Delivered.
+
+Open Delivery details with no nearby phone, during a retry cooldown and while sending.
+Capture the displayed reason and aggregate Network export; nearby peers must never
+be described as a proven route or the cooldown as a delivery ETA. Pair these checks
+with the existing A–B–C/Direct procedure before adaptive transport tuning. Automated
+Room/crypto/UI tests do not supply these physical results. See
+[control semantics](docs/TRANSFER_CONTROLS.md).

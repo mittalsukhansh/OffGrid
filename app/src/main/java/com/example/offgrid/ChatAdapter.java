@@ -80,6 +80,8 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
     public interface Interaction {
         void open(ChatEntry entry);
 
+        void details(ChatEntry entry);
+
         boolean longPress(ChatEntry entry);
     }
 
@@ -111,6 +113,13 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         boolean secure = message.isPrivate();
         float density = context.getResources().getDisplayMetrics().density;
 
+        boolean media = !entry.kind.equals("text");
+        holder.progress.setVisibility(media ? View.VISIBLE : View.GONE);
+        holder.progress.setProgress(Math.max(0, Math.min(100, entry.progress)));
+        holder.details.setVisibility(media || outgoing ? View.VISIBLE : View.GONE);
+        holder.details.setText(media && outgoing ? "Transfer controls" : "Delivery details");
+        holder.details.setOnClickListener(
+                interaction == null ? null : v -> interaction.details(entry));
         holder.senderText.setText(senderLabel(entry, context));
         holder.messageText.setText(message.getText());
         holder.preview.setClipToOutline(true);
@@ -227,6 +236,10 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
                 return "Unsend unconfirmed";
             case "UNSENT":
                 return "Unsent";
+            case "PAUSED":
+                return "Paused";
+            case "CANCELLED":
+                return "Sending cancelled";
             case "RECEIVING":
                 return "Receiving";
             case "TRANSFERRING":
@@ -262,6 +275,8 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
         final TextView hopText;
         final TextView timeText;
         final ImageView preview;
+        final android.widget.ProgressBar progress;
+        final android.widget.Button details;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -273,6 +288,8 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ViewHolder> {
             hopText = itemView.findViewById(R.id.hopText);
             timeText = itemView.findViewById(R.id.timeText);
             preview = itemView.findViewById(R.id.mediaPreview);
+            progress = itemView.findViewById(R.id.transferProgress);
+            details = itemView.findViewById(R.id.messageDetails);
         }
     }
 }

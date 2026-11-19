@@ -528,6 +528,170 @@ public class OfflineSharingTest {
         assertEquals(1, c.store.dao().replayed(packet.getMessageId()));
     }
 
+    @Test
+    public void pausedOfferSurvivesRestartAndResumesWithoutReplacingItsMessage() throws Exception {
+        long now = System.currentTimeMillis();
+        a.actions.offer(c.crypto.getLocalId(), photo(), "image/jpeg", now);
+        MediaRecord row = a.store.dao().activeMedia().get(0);
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.PAUSE, now);
+        assertTrue(a.store.dao().media(row.id).paused);
+        assertEquals("PAUSED", a.store.dao().chat(row.id).status);
+        assertNull(a.storage.pending(row.id));
+        assertFalse(a.storage.pendingIds().contains(row.id));
+        assertFalse(a.actions.transferPacketIds(row.id).isEmpty());
+        a.reopen();
+        a.actions.pump(now + 60_000, elapsed.addAndGet(60_000));
+        assertTrue(a.storage.pending().isEmpty());
+        assertEquals(
+                Arrays.asList(
+                        PrivateActions.TransferCommand.RESUME,
+                        PrivateActions.TransferCommand.CANCEL),
+                a.actions.transferCommands(row.id));
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.RESUME, now + 60_000);
+        assertNotNull(a.storage.pending(row.id));
+        assertEquals(1, a.store.dao().activeMedia().size());
+        drain(a, c);
+        for (int n = 0; n < 30 && !a.store.dao().chat(row.id).status.equals("DELIVERED"); n++) {
+            a.actions.pump(System.currentTimeMillis(), elapsed.addAndGet(5000));
+            drain(a, c);
+        }
+        assertEquals("DELIVERED", a.store.dao().chat(row.id).status);
+    }
+
+    @Test
+    public void lateStatusKeepsPauseAndCancellationStopsAssociatedControlsAndChunks()
+            throws Exception {
+        MediaRecord row = offer(largePhoto(), "image/jpeg");
+        long now = System.currentTimeMillis();
+        a.actions.pump(now, elapsed.addAndGet(5000));
+        assertFalse(a.actions.transferPacketIds(row.id).isEmpty());
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.PAUSE, now);
+        MeshMessage status =
+                c.crypto.control(
+                        a.crypto.getLocalId(),
+                        new JSONObject()
+                                .put("kind", "media_status")
+                                .put("mid", row.id)
+                                .put("bits", "AQ")
+                                .put("ranges", true)
+                                .toString());
+        a.receive(c, status);
+        assertEquals("PAUSED", a.store.dao().chat(row.id).status);
+        assertEquals(1, BitSet.valueOf(a.store.dao().media(row.id).received).cardinality());
+        a.reopen();
+        assertTrue(a.storage.pending().isEmpty());
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.RESUME, now);
+        assertFalse(a.store.dao().media(row.id).paused);
+        assertEquals(1, BitSet.valueOf(a.store.dao().media(row.id).received).cardinality());
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.CANCEL, now);
+        assertTrue(a.actions.transferPacketIds(row.id).isEmpty());
+        assertEquals("CANCELLED", a.store.dao().chat(row.id).status);
+        assertArrayEquals(largePhoto(), a.actions.attachment(row.id));
+        a.actions.pump(now, elapsed.addAndGet(60_000));
+        assertTrue(a.storage.pending().isEmpty());
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.SEND_AGAIN, now);
+        MediaRecord fresh = a.store.dao().activeMedia().get(0);
+        assertNotEquals(row.id, fresh.id);
+        assertEquals(0, BitSet.valueOf(fresh.received).cardinality());
+        assertEquals(0, a.store.dao().chat(fresh.id).progress);
+        assertEquals("CANCELLED", a.store.dao().chat(row.id).status);
+        assertNull(a.store.dao().withdrawal(row.id));
+        assertSame(
+                MeshProtocol.Incoming.IGNORED,
+                a.receive(
+                        c,
+                        c.crypto.control(
+                                a.crypto.getLocalId(),
+                                new JSONObject()
+                                        .put("kind", "media_status")
+                                        .put("mid", row.id)
+                                        .put("bits", "")
+                                        .toString())));
+    }
+
+    @Test
+    public void authenticatedCompletionWhilePausedWinsAndRemovedMediaCannotBeRetried()
+            throws Exception {
+        byte[] image = photo();
+        MediaRecord row = offer(image, "image/jpeg");
+        a.actions.transferCommand(
+                row.id, PrivateActions.TransferCommand.PAUSE, System.currentTimeMillis());
+        MeshProtocol.Incoming result = c.receive(a, range(row, 0, image, a));
+        assertNotNull(result.relay);
+        a.receive(c, result.relay);
+        assertEquals("DELIVERED", a.store.dao().chat(row.id).status);
+        assertFalse(a.store.dao().media(row.id).paused);
+        assertEquals(
+                row.chunkCount, BitSet.valueOf(a.store.dao().media(row.id).received).cardinality());
+        assertTrue(a.actions.transferCommands(row.id).isEmpty());
+        try {
+            a.actions.transferCommand(
+                    row.id, PrivateActions.TransferCommand.PAUSE, System.currentTimeMillis());
+            fail("Delivered transfer was paused");
+        } catch (IllegalArgumentException expected) {
+        }
+        a.actions.unsend(row.id, System.currentTimeMillis());
+        assertTrue(a.actions.transferCommands(row.id).isEmpty());
+        try {
+            a.actions.transferCommand(
+                    row.id, PrivateActions.TransferCommand.SEND_AGAIN, System.currentTimeMillis());
+            fail("Unsent transfer resurrected");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    @Test
+    public void failedSendAgainRollsBackAndIncomingTransfersCannotBeControlled() throws Exception {
+        MediaRecord row = offer(photo(), "image/jpeg");
+        try {
+            c.actions.transferCommand(
+                    row.id, PrivateActions.TransferCommand.CANCEL, System.currentTimeMillis());
+            fail("Incoming transfer controlled as outgoing");
+        } catch (IllegalArgumentException expected) {
+        }
+        a.actions.transferCommand(
+                row.id, PrivateActions.TransferCommand.CANCEL, System.currentTimeMillis());
+        a.db.getOpenHelper()
+                .getWritableDatabase()
+                .execSQL(
+                        "CREATE TRIGGER fail_retry BEFORE INSERT ON pending_messages BEGIN SELECT"
+                                + " RAISE(ABORT,'injected retry failure'); END");
+        try {
+            a.actions.transferCommand(
+                    row.id, PrivateActions.TransferCommand.SEND_AGAIN, System.currentTimeMillis());
+            fail("Injected retry succeeded");
+        } catch (android.database.sqlite.SQLiteException expected) {
+        } finally {
+            a.db.getOpenHelper().getWritableDatabase().execSQL("DROP TRIGGER fail_retry");
+        }
+        assertEquals(1, a.store.dao().history().size());
+        assertEquals("CANCELLED", a.store.dao().chat(row.id).status);
+        assertTrue(a.storage.pending().isEmpty());
+    }
+
+    @Test
+    public void pauseDoesNotExtendOfferExpiryAndFailedTransferNeedsFreshMessage() throws Exception {
+        long now = System.currentTimeMillis();
+        a.actions.offer(c.crypto.getLocalId(), photo(), "image/jpeg", now);
+        MediaRecord row = a.store.dao().activeMedia().get(0);
+        a.actions.transferCommand(row.id, PrivateActions.TransferCommand.PAUSE, now);
+        try {
+            a.actions.transferCommand(row.id, PrivateActions.TransferCommand.RESUME, now + 600_001);
+            fail("Expired offer resumed");
+        } catch (IllegalArgumentException expected) {
+        }
+        a.actions.pump(now + 600_001, elapsed.addAndGet(600_001));
+        assertEquals("FAILED", a.store.dao().chat(row.id).status);
+        assertFalse(a.store.dao().media(row.id).paused);
+        assertTrue(a.storage.pending().isEmpty());
+        assertEquals(
+                Collections.singletonList(PrivateActions.TransferCommand.SEND_AGAIN),
+                a.actions.transferCommands(row.id));
+        a.actions.transferCommand(
+                row.id, PrivateActions.TransferCommand.SEND_AGAIN, System.currentTimeMillis());
+        assertNotEquals(row.id, a.store.dao().activeMedia().get(0).id);
+    }
+
     private final class Peer {
         final String name, label;
         CryptoManager crypto;

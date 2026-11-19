@@ -35,7 +35,7 @@ public interface MessageDao {
 
     @Query(
             "SELECT * FROM sequence_windows WHERE priority = 0 AND senderId = :sender ORDER BY"
-                + " lastUsed,id LIMIT 1")
+                    + " lastUsed,id LIMIT 1")
     SequenceRecord sequenceVictimForSender(String sender);
 
     @Query(
@@ -72,7 +72,7 @@ public interface MessageDao {
                     + " createdAt")
     List<MediaRecord> activeMedia();
 
-    @Query("SELECT COUNT(*) FROM media WHERE state != 'CANCELLED'")
+    @Query("SELECT COUNT(*) FROM media WHERE state != 'CANCELLED' OR length(file) > 0")
     int mediaCount();
 
     @Query("SELECT COALESCE(SUM(length(file)),0) FROM media")
@@ -105,7 +105,23 @@ public interface MessageDao {
     @Query("UPDATE messages SET content = :content WHERE id = :id")
     void updateMediaContent(String id, byte[] content);
 
-    @Query("SELECT id FROM pending_messages")
+    @Query("UPDATE pending_messages SET transferId = :transferId WHERE id = :packetId")
+    void linkTransfer(String packetId, String transferId);
+
+    @Query(
+            "SELECT id FROM pending_messages WHERE id = :id OR transferId = :id OR id IN (SELECT"
+                    + " packetId FROM media_parts WHERE mediaId = :id)")
+    List<String> transferPacketIds(String id);
+
+    @Query(
+            "DELETE FROM pending_messages WHERE transferId = :id OR id = :id OR id IN (SELECT"
+                    + " packetId FROM media_parts WHERE mediaId = :id)")
+    void deleteTransferPackets(String id);
+
+    @Query(
+            "SELECT id FROM pending_messages WHERE NOT EXISTS (SELECT 1 FROM media WHERE media.id ="
+                    + " pending_messages.transferId AND (media.paused = 1 OR media.state ="
+                    + " 'CANCELLED'))")
     List<String> pendingIds();
 
     @Insert
@@ -162,13 +178,19 @@ public interface MessageDao {
     @Query("SELECT * FROM messages ORDER BY displayTimeMs DESC, id DESC LIMIT 500")
     List<ChatRecord> history();
 
-    @Query("SELECT * FROM pending_messages ORDER BY storedAtMs, id")
+    @Query(
+            "SELECT * FROM pending_messages WHERE NOT EXISTS (SELECT 1 FROM media WHERE media.id ="
+                    + " pending_messages.transferId AND (media.paused = 1 OR media.state ="
+                    + " 'CANCELLED')) ORDER BY storedAtMs, id")
     List<PendingRecord> pending();
 
     @Query("SELECT * FROM messages WHERE id = :id")
     ChatRecord chat(String id);
 
-    @Query("SELECT * FROM pending_messages WHERE id = :id")
+    @Query(
+            "SELECT * FROM pending_messages WHERE id = :id AND NOT EXISTS (SELECT 1 FROM media"
+                    + " WHERE media.id = pending_messages.transferId AND (media.paused = 1 OR"
+                    + " media.state = 'CANCELLED'))")
     PendingRecord pendingById(String id);
 
     @Query("SELECT COUNT(*) FROM messages WHERE id = :id")

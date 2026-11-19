@@ -17,29 +17,46 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
             MediaRecord.class,
             MediaPart.class
         },
-        version = 6,
+        version = 7,
         exportSchema = true)
 public abstract class MessageDatabase extends RoomDatabase {
+    public static final Migration MIGRATION_6_7 =
+            new Migration(6, 7) {
+                @Override
+                public void migrate(@NonNull SupportSQLiteDatabase db) {
+                    db.execSQL("ALTER TABLE media ADD COLUMN paused INTEGER NOT NULL DEFAULT 0");
+                    db.execSQL(
+                            "ALTER TABLE pending_messages ADD COLUMN transferId TEXT NOT NULL"
+                                    + " DEFAULT ''");
+                    db.execSQL(
+                            "UPDATE pending_messages SET transferId = id WHERE id IN (SELECT id"
+                                    + " FROM media)");
+                    db.execSQL(
+                            "UPDATE pending_messages SET transferId = (SELECT mediaId FROM"
+                                + " media_parts WHERE packetId = pending_messages.id LIMIT 1) WHERE"
+                                + " id IN (SELECT packetId FROM media_parts)");
+                }
+            };
     public static final Migration MIGRATION_5_6 =
             new Migration(5, 6) {
                 @Override
                 public void migrate(@NonNull SupportSQLiteDatabase db) {
                     db.execSQL(
                             "ALTER TABLE sequence_windows ADD COLUMN senderId TEXT NOT NULL DEFAULT"
-                                + " ''");
+                                    + " ''");
                     db.execSQL(
                             "ALTER TABLE sequence_windows ADD COLUMN priority INTEGER NOT NULL"
-                                + " DEFAULT 0");
+                                    + " DEFAULT 0");
                     db.execSQL(
                             "ALTER TABLE sequence_windows ADD COLUMN lastUsed INTEGER NOT NULL"
-                                + " DEFAULT 0");
+                                    + " DEFAULT 0");
                     db.execSQL("UPDATE sequence_windows SET senderId = substr(id,1,32)");
                     db.execSQL(
                             "CREATE INDEX IF NOT EXISTS index_sequence_windows_senderId ON"
-                                + " sequence_windows(senderId)");
+                                    + " sequence_windows(senderId)");
                     db.execSQL(
                             "CREATE INDEX IF NOT EXISTS index_sequence_windows_priority_lastUsed ON"
-                                + " sequence_windows(priority,lastUsed)");
+                                    + " sequence_windows(priority,lastUsed)");
                 }
             };
     public static final Migration MIGRATION_4_5 =

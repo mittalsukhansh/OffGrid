@@ -251,6 +251,43 @@ public final class MeshNode implements MeshTransport.Listener {
         });
     }
 
+    public void transferCommand(
+            String id,
+            PrivateActions.TransferCommand command,
+            java.util.function.Consumer<String> callback) {
+        worker.post(() -> {
+            String result;
+            try {
+                if (closed || !ready)
+                    throw new IllegalStateException("Message storage is unavailable");
+                actions.transferCommand(id, command, System.currentTimeMillis());
+                refreshOutbox();
+                wakeMedia();
+                relay.schedule(0);
+                result =
+                        command == PrivateActions.TransferCommand.SEND_AGAIN
+                                ? "New attachment queued"
+                                : "Transfer updated";
+            } catch (Exception e) {
+                result = "Could not update transfer: " + e.getMessage();
+            }
+            callback.accept(result);
+        });
+    }
+
+    public void messageDetails(String id, java.util.function.Consumer<String> callback) {
+        worker.post(() -> {
+            try {
+                callback.accept(
+                        actions.deliveryDetails(id)
+                                + "\n\n"
+                                + relay.explain(actions.deliveryPacketIds(id)));
+            } catch (RuntimeException e) {
+                callback.accept("Message details are unavailable.");
+            }
+        });
+    }
+
     private void refreshOutbox() throws Exception {
         java.util.List<String> ids = storage.pendingIds();
         relay.reconcile(ids);

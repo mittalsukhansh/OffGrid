@@ -203,3 +203,14 @@ removal. Unknown initial groups are not adopted; passively joined/restored group
 can be disconnected explicitly but are not automatically removed. Generation/query
 checks, a cross-instance cleanup lease and a bounded worker shutdown grace protect
 asynchronous control cleanup. See WIFI_DIRECT.md for limits and test boundaries.
+
+## Durable local transfer controls
+
+Room schema7 stores a pause flag and a pending-packet transfer association. DAO
+reads filter paused/cancelled associations before the relay restores/reconciles its
+outbox. PrivateActions validates outgoing ownership/terminal state inside the same
+transaction as each command. MediaTransfers preserves bitmap and expiry on pause;
+retry after terminal failure is a new offer in an atomic transaction. MeshNode
+reconciles after commands so active removed work uses existing targeted cancellation.
+MessageDetailsDialog renders controls separately from storage and relay policy.
+See [semantics and migration limits](docs/TRANSFER_CONTROLS.md).

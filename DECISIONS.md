@@ -616,10 +616,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Owner physical A–B–C/CoC/Direct/weak-link measurements, upstream consent, offline-media restore verification and integration-blocked repository description/topics. Session protocol design/prototype/external review remains future work; pinned library assessment is not implementation or a crypto audit. Previously deferred private groups/SOS/battery modes remain deferred.
 - **Sources:** This change; D064–D065; source7e92162b024658eec65778fdb8cb4d6ea6d689c7; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.4; https://github.com/mittalsukhansh/OffGrid/actions/runs/44529729343; https://github.com/mittalsukhansh/OffGrid/actions/runs/44530564163; docs/audits/release-1.1.4/README.md.
 
+## D067 — 2026-11-19 UTC — Durable attachment controls and honest delivery details
+
+- **Status:** Implemented and locally validated; hosted Android runtime and signed release checks pending
+- **Work:** Added attachment progress bars and visible transfer/delivery-details buttons. Outgoing transfers support persistent pause/resume, local cancellation and a confirmed Send again action creating a new signed attachment. Added Room migration6→7 with a pause flag and durable pending-packet association; backfill keeps legacy offers/chunks and forwarding counts. Paused packets are excluded from all relay outbox reads; commands reconcile the active scheduler and use existing targeted cancellation. Preserve confirmed blocks/deadlines across pause, never unpause from late status, and let authenticated completion override a local pause/cancel. Retry/cancel is atomic and unsent/completed/incoming transfers reject inappropriate controls. Retained encrypted retry files count against quota. Added per-message relay explanations from live scheduler policy and documented snapshot/route uncertainty and legacy queued-control limits. Prepare code115/1.1.5-experimental; protocol5 unchanged.
+- **Decision / reason:** Fulfill the owner's selected transfer-controls/relay-explanations work before adaptive transport tuning. Pause is local, durable and does not extend expiry or reset forwarding budgets. Cancel cannot recall relayed bytes and remains separate from unsend. Terminal retry requires a fresh signed message so expired/failed receiver state is not resurrected. Details report local evidence, never a proven route or delivery ETA.
+- **Validation / evidence:** Local debug assembly/lint,90 JVM tests, six host harness checks and Android-test compilation passed. Added seven Android cases covering real Room migration/crypto, pause/restart/late status, completion-after-pause, cancellation/fresh retry, rollback/ownership/unsend guards, expiry and actual control dialogs across rotation; hosted runtime results follow when run. New JVM explanation tests cover stopped/no-peer/active/cooldown/budget/inventory and identifier privacy. No physical radio timing or adaptive-policy measurement is claimed.
+- **Open items:** Exact-source hosted Android/UI/migration checks and signed v1.1.4→1.1.5 verification/publication. Pre-upgrade queued query/offer wrappers cannot be linked by SQL and may still leave the phone; already relayed packets may arrive after a local stop. Physical phone results and existing licensing/security-review/admin/offline-backup items remain open. Adaptive tuning, private groups/SOS/battery modes remain deferred.
+- **Sources:** This change; D066; docs/TRANSFER_CONTROLS.md; RELEASE_NOTES_1.1.5.md; TESTING.md; ARCHITECTURE.md.
+
 ## Template for the next work set
 
 ```markdown
-## D067 — YYYY-MM-DD HH:MM UTC — Short title
+## D068 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

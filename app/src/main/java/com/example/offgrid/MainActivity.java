@@ -298,6 +298,11 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     @Override
+                    public void details(ChatAdapter.ChatEntry entry) {
+                        showMessageDetails(entry);
+                    }
+
+                    @Override
                     public boolean longPress(ChatAdapter.ChatEntry entry) {
                         if (!entry.outgoing
                                 || !entry.message.isPrivate()
@@ -1006,6 +1011,65 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    private void showMessageDetails(ChatAdapter.ChatEntry entry) {
+        String id = entry.message.getMessageId();
+        java.util.function.Consumer<String> show =
+                text -> {
+                    if (mediaWorker.isShutdown()) return;
+                    try {
+                        mediaWorker.execute(() -> {
+                            MessageStore store = MessageStore.get(this);
+                            PrivateActions actions = new PrivateActions(this, store, crypto());
+                            java.util.List<PrivateActions.TransferCommand> commands =
+                                    actions.transferCommands(id);
+                            boolean media = store.dao().media(id) != null;
+                            runOnUiThread(() -> {
+                                if (!isDestroyed() && !isFinishing())
+                                    MessageDetailsDialog.show(
+                                            this,
+                                            text,
+                                            media,
+                                            commands,
+                                            command -> transferCommand(id, command));
+                            });
+                        });
+                    } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                        // Activity was destroyed while the worker snapshot was in flight.
+                    }
+                };
+        if (mesh != null) mesh.messageDetails(id, show);
+        else
+            mediaWorker.execute(() ->
+                    show.accept(
+                            new PrivateActions(this, MessageStore.get(this), crypto())
+                                            .deliveryDetails(id)
+                                    + "\n\nMesh stopped. Start it to attempt delivery."));
+    }
+
+    private void transferCommand(String id, PrivateActions.TransferCommand command) {
+        java.util.function.Consumer<String> result =
+                text ->
+                        runOnUiThread(() -> {
+                            if (!isDestroyed())
+                                Toast.makeText(this, text, Toast.LENGTH_LONG).show();
+                        });
+        if (mesh != null) mesh.transferCommand(id, command, result);
+        else
+            mediaWorker.execute(() -> {
+                try {
+                    if (!MeshService.identityRestoreSafe())
+                        throw new IllegalStateException(
+                                "Mesh worker is reconnecting. Try again after it stops or"
+                                    + " reconnects.");
+                    new PrivateActions(this, MessageStore.get(this), crypto())
+                            .transferCommand(id, command, System.currentTimeMillis());
+                    result.accept("Saved locally. Start mesh to continue sending.");
+                } catch (Exception e) {
+                    result.accept("Could not update transfer: " + e.getMessage());
+                }
+            });
     }
 
     private void openAttachment(ChatAdapter.ChatEntry entry) {

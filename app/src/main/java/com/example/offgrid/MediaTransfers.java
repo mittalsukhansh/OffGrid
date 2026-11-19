@@ -155,8 +155,114 @@ final class MediaTransfers {
                     now,
                     now + 600_000);
             dao().putMedia(record);
+            dao().linkTransfer(id, id);
             dao().mediaStatus(id, kind(mime), 0, "QUEUED");
         });
+    }
+
+    private void queue(MeshMessage packet, String id, long now) throws Exception {
+        actions.transaction(() -> {
+            actions.queue(packet, now);
+            dao().linkTransfer(packet.getMessageId(), id);
+        });
+    }
+
+    private void accept(MeshMessage packet, MeshMessage response, String id, long now)
+            throws Exception {
+        actions.transaction(() -> {
+            actions.accept(packet, response, now);
+            if (response != null) dao().linkTransfer(response.getMessageId(), id);
+        });
+    }
+
+    private static int progress(MediaRecord row) {
+        return BitSet.valueOf(row.received).cardinality() * 100 / row.chunkCount;
+    }
+
+    public void command(String id, PrivateActions.TransferCommand command, long now)
+            throws Exception {
+        actions.transaction(() -> {
+            MediaRecord row = dao().media(id);
+            ChatRecord chat = dao().chat(id);
+            if (row == null
+                    || !row.outgoing
+                    || !row.senderId.equals(crypto.getLocalId())
+                    || chat == null
+                    || chat.status.equals("DELIVERED")
+                    || dao().withdrawal(id) != null
+                    || row.state.equals("COMPLETE"))
+                throw new IllegalArgumentException("This attachment cannot be changed");
+            boolean terminal = row.state.equals("FAILED") || row.state.equals("CANCELLED");
+            if (command == PrivateActions.TransferCommand.SEND_AGAIN) {
+                if (!terminal || row.file.length == 0)
+                    throw new IllegalArgumentException(
+                            "Only a failed or cancelled attachment can be sent again");
+                byte[] file = actions.open("media-file:" + row.id, row.file);
+                cancel(row);
+                // A fresh signed message/sequence is required after expiry or receiver failure.
+                offer(row.targetId, file, row.mime, now);
+            } else if (command == PrivateActions.TransferCommand.CANCEL) {
+                if (row.state.equals("CANCELLED")) return;
+                cancel(row);
+            } else {
+                if (terminal)
+                    throw new IllegalArgumentException("Start a new transfer with Send again");
+                if (command == PrivateActions.TransferCommand.RESUME
+                        && (now - row.createdAt > LIFETIME
+                                || (row.state.equals("OFFERED") && now - row.createdAt > 600_000)))
+                    throw new IllegalArgumentException(
+                            "Transfer expired. Cancel it, then use Send again");
+                row.paused = command == PrivateActions.TransferCommand.PAUSE;
+                dao().putMedia(row);
+                dao().mediaStatus(
+                                id,
+                                kind(row.mime),
+                                progress(row),
+                                row.paused
+                                        ? "PAUSED"
+                                        : row.state.equals("OFFERED") ? "QUEUED" : row.state);
+                nextPump.remove(id);
+            }
+        });
+    }
+
+    private void cancel(MediaRecord row) {
+        dao().deleteTransferPackets(row.id);
+        dao().deleteParts(row.id);
+        row.paused = false;
+        row.state = "CANCELLED";
+        dao().putMedia(row);
+        dao().mediaStatus(row.id, kind(row.mime), progress(row), "CANCELLED");
+        nextPump.remove(row.id);
+    }
+
+    public String details(String id) {
+        MediaRecord row = dao().media(id);
+        if (row == null) return "Attachment is unavailable.";
+        BitSet bitmap = bits(row);
+        long bytes = (long) bitmap.cardinality() * CHUNK;
+        if (bitmap.get(row.chunkCount - 1)) bytes -= (long) row.chunkCount * CHUNK - row.byteCount;
+        return (row.outgoing ? "Recipient-confirmed blocks: " : "Validated local blocks: ")
+                + bytes
+                + " / "
+                + row.byteCount
+                + " bytes ("
+                + progress(row)
+                + "%).\n"
+                + (row.paused
+                        ? "Paused on this phone. Already relayed bytes may still arrive.\n"
+                        : "")
+                + (row.state.equals("CANCELLED")
+                        ? "Local sending cancelled. This is not unsend.\n"
+                        : "")
+                + (row.state.equals("OFFERED")
+                        ? "Waiting for the recipient to accept the offer.\n"
+                        : "")
+                + (row.state.equals("FAILED")
+                        ? "Transfer failed or expired; Send again starts a new attachment.\n"
+                        : "")
+                + "Block progress is not proof of Delivered. Only an authenticated completion"
+                + " receipt confirms delivery. Pausing does not extend expiry.";
     }
 
     private MeshMessage status(MediaRecord record) throws Exception {
@@ -200,6 +306,7 @@ final class MediaTransfers {
                         now + 600_000,
                         true);
                 dao().putMedia(record);
+                dao().linkTransfer(response.getMessageId(), record.id);
                 dao().mediaStatus(record.id, kind(record.mime), 0, "RECEIVING");
             });
         } catch (IllegalStateException e) {
@@ -222,7 +329,7 @@ final class MediaTransfers {
             return MeshProtocol.Incoming.IGNORED;
         MeshMessage response =
                 record.state.equals("COMPLETE") ? completion(record) : status(record);
-        actions.queue(response, now);
+        queue(response, record.id, now);
         return PrivateActions.result(wire, response);
     }
 
@@ -274,7 +381,11 @@ final class MediaTransfers {
         String peer = record.outgoing ? record.targetId : record.senderId;
         if (!peer.equals(packet.getSenderId()) || !crypto.getLocalId().equals(packet.getTargetId()))
             return MeshProtocol.Incoming.IGNORED;
-        if (kind.equals("media_missing") && record.outgoing && now - record.createdAt < 600_000) {
+        if (kind.equals("media_missing")
+                && record.outgoing
+                && !record.paused
+                && !record.state.equals("FAILED")
+                && now - record.createdAt < 600_000) {
             MeshMessage response =
                     crypto.control(
                             peer,
@@ -283,16 +394,17 @@ final class MediaTransfers {
                                     .put("mid", id)
                                     .put("wire", original(record).toJson())
                                     .toString());
-            actions.accept(packet, response, now);
+            accept(packet, response, record.id, now);
             return PrivateActions.result(packet, response);
         }
         if (kind.equals("media_query") && !record.outgoing) {
             MeshMessage response =
                     record.state.equals("COMPLETE") ? completion(record) : status(record);
-            actions.accept(packet, response, now);
+            accept(packet, response, record.id, now);
             return PrivateActions.result(packet, response);
         }
         if (kind.equals("media_status") && record.outgoing) {
+            if (record.state.equals("FAILED")) return MeshProtocol.Incoming.IGNORED;
             ChatRecord chat = dao().chat(id);
             if (chat == null || chat.status.equals("DELIVERED") || chat.status.startsWith("UNSEN"))
                 return MeshProtocol.Incoming.IGNORED;
@@ -315,8 +427,9 @@ final class MediaTransfers {
                             "media-meta:" + record.id,
                             meta.toString().getBytes(StandardCharsets.UTF_8));
             record.state = body.optBoolean("failed") ? "FAILED" : "TRANSFERRING";
+            if (record.state.equals("FAILED")) record.paused = false;
             actions.transaction(() -> {
-                actions.accept(packet, null, now);
+                accept(packet, null, record.id, now);
                 dao().deletePending(id);
                 for (MediaPart part : dao().parts(id))
                     if (received.get(part.partIndex)) dao().deletePending(part.packetId);
@@ -325,9 +438,9 @@ final class MediaTransfers {
                                 id,
                                 kind(record.mime),
                                 received.cardinality() * 100 / record.chunkCount,
-                                record.state);
+                                record.paused ? "PAUSED" : record.state);
                 if (record.state.equals("FAILED")) {
-                    dao().cancelMediaPackets(id);
+                    dao().deleteTransferPackets(id);
                     dao().deleteParts(id);
                 }
             });
@@ -342,12 +455,12 @@ final class MediaTransfers {
             MeshMessage packet, JSONObject body, MediaRecord record, long now) throws Exception {
         if (record.state.equals("FAILED")) {
             MeshMessage response = status(record);
-            actions.accept(packet, response, now);
+            accept(packet, response, record.id, now);
             return PrivateActions.result(packet, response);
         }
         if (record.state.equals("COMPLETE")) {
             MeshMessage response = completion(record);
-            actions.accept(packet, response, now);
+            accept(packet, response, record.id, now);
             return PrivateActions.result(packet, response);
         }
         int index = body.optInt("index", -1);
@@ -384,7 +497,7 @@ final class MediaTransfers {
         }
         if (added.isEmpty()) {
             MeshMessage response = status(record);
-            actions.accept(packet, response, now);
+            accept(packet, response, record.id, now);
             return PrivateActions.result(packet, response);
         }
         record.received = received.toByteArray();
@@ -409,7 +522,7 @@ final class MediaTransfers {
                 record.state = "FAILED";
                 MeshMessage response = status(record);
                 actions.transaction(() -> {
-                    actions.accept(packet, response, now);
+                    accept(packet, response, record.id, now);
                     dao().putMedia(record);
                     dao().deleteParts(record.id);
                     dao().mediaStatus(record.id, kind(record.mime), 0, "FAILED");
@@ -431,7 +544,7 @@ final class MediaTransfers {
                                     .toString()
                                     .getBytes(StandardCharsets.UTF_8));
             actions.transaction(() -> {
-                actions.accept(packet, ack, now);
+                accept(packet, ack, record.id, now);
                 dao().putMedia(record);
                 dao().deleteParts(record.id);
                 dao().updateMediaContent(record.id, content);
@@ -446,7 +559,7 @@ final class MediaTransfers {
         }
         MeshMessage response = range || received.cardinality() % 4 == 0 ? status(record) : null;
         actions.transaction(() -> {
-            actions.accept(packet, response, now);
+            accept(packet, response, record.id, now);
             for (MediaPart part : added) dao().putPart(part);
             dao().putMedia(record);
             dao().mediaStatus(
@@ -470,7 +583,7 @@ final class MediaTransfers {
             if (record.outgoing && chat != null && chat.status.equals("DELIVERED")) {
                 record.state = "COMPLETE";
                 actions.transaction(() -> {
-                    dao().cancelMediaPackets(record.id);
+                    dao().deleteTransferPackets(record.id);
                     dao().deleteParts(record.id);
                     dao().putMedia(record);
                 });
@@ -481,15 +594,16 @@ final class MediaTransfers {
                             && record.state.equals("OFFERED")
                             && now - record.createdAt > 600_000)) {
                 record.state = "FAILED";
+                record.paused = false;
                 actions.transaction(() -> {
-                    dao().cancelMediaPackets(record.id);
+                    dao().deleteTransferPackets(record.id);
                     dao().deleteParts(record.id);
                     dao().putMedia(record);
                     dao().mediaStatus(record.id, kind(record.mime), 0, "FAILED");
                 });
                 continue;
             }
-            if (!record.outgoing) continue;
+            if (!record.outgoing || record.paused) continue;
             boolean ranges = metadata(record).optBoolean("ranges", false);
             com.example.offgrid.mesh.transport.TransferProfile profile =
                     ranges
@@ -509,7 +623,7 @@ final class MediaTransfers {
                                         .toString());
                 record.lastQuery = now;
                 actions.transaction(() -> {
-                    actions.queue(query, now);
+                    queue(query, record.id, now);
                     dao().putMedia(record);
                 });
                 // Leave the legacy quota for the query; fast streams have a separate bounded
@@ -579,7 +693,7 @@ final class MediaTransfers {
             }
             actions.transaction(() -> {
                 for (String old : obsolete) dao().deletePending(old);
-                actions.queue(chunk, now);
+                queue(chunk, record.id, now);
                 for (MediaPart part : replacements) dao().putPart(part);
             });
         }
@@ -587,10 +701,7 @@ final class MediaTransfers {
 
     byte[] file(String id) throws Exception {
         MediaRecord record = dao().media(id);
-        if (record == null
-                || record.file.length == 0
-                || record.state.equals("CANCELLED")
-                || dao().withdrawal(id) != null)
+        if (record == null || record.file.length == 0 || dao().withdrawal(id) != null)
             throw new IllegalArgumentException("Attachment is not available");
         return actions.open("media-file:" + id, record.file);
     }

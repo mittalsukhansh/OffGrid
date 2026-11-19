@@ -558,6 +558,95 @@ public final class RelayScheduler {
         }
     }
 
+    /** Snapshot for message details; possession and direct neighbors never prove a route. */
+    public String explain(java.util.Collection<String> ids) {
+        String caveat = "\nNearby peers are direct neighbors, not proof of a route or delivery.";
+        if (!active)
+            return "Local forwarding is stopped or paused. Start the mesh and check radio"
+                    + " permissions."
+                    + caveat;
+        long now = timer.elapsed();
+        int queued = 0, exhausted = 0, expired = 0;
+        boolean live = false, ready = false, inventoryWait = false, sizeWait = false;
+        long retry = Long.MAX_VALUE;
+        java.util.List<Peer> fresh = new ArrayList<>();
+        for (Peer peer : peers.values()) if (now - peer.lastSeen <= PEER_FRESH_MS) fresh.add(peer);
+        for (String id : new java.util.HashSet<>(ids)) {
+            Buffered packet = queue.get(id);
+            if (packet == null) continue;
+            queued++;
+            if (now - packet.storedAt >= MeshConfig.PENDING_TTL_MS) {
+                expired++;
+                continue;
+            }
+            if (packet.forwardCount >= MAX_FORWARDS) {
+                exhausted++;
+                continue;
+            }
+            if (packet.inFlight > 0) live = true;
+            for (Peer peer : fresh) {
+                if (peer.address.startsWith("ble:coc:")
+                        && transport.profile(peer.address)
+                                != com.example.offgrid.mesh.transport.TransferProfile.COC) {
+                    sizeWait = true;
+                    continue;
+                }
+                if (encoder.apply(packet.message).length > transport.maxPacketBytes(peer.address)) {
+                    sizeWait = true;
+                    continue;
+                }
+                if (peer.backoffUntil > now) {
+                    retry = Math.min(retry, peer.backoffUntil - now);
+                    continue;
+                }
+                if (!inventoryReady.test(peer.address) && priority(packet.message) > 1) {
+                    inventoryWait = true;
+                    continue;
+                }
+                if (readyFor(peer, id)) ready = true;
+                Hint hint = peer.hints.get(id);
+                if (hint != null && hint.retryAt > now) retry = Math.min(retry, hint.retryAt - now);
+            }
+        }
+        if (queued == 0)
+            return "No packet currently in the local relay queue. Waiting for a receipt, recipient"
+                    + " status, or the next attachment block."
+                    + caveat;
+        if (live)
+            return "A transmission attempt is active; transport confirmation is still pending."
+                    + caveat;
+        if (expired == queued) return "Queued packets expired; cleanup is pending." + caveat;
+        if (exhausted + expired == queued)
+            return "Forwarding budget exhausted for remaining queued packets. Waiting for"
+                    + " confirmation; no further copies are scheduled for these packets."
+                    + caveat;
+        if (fresh.isEmpty())
+            return "No recently seen nearby relay. Keep mesh running on intermediate phones."
+                    + caveat;
+        if (ready && sessions.size() >= MAX_CONNECTIONS)
+            return "All local send sessions are busy. This packet is waiting for a sending slot."
+                    + caveat;
+        if (ready)
+            return "A nearby peer can be attempted on the next send turn. The recipient may be"
+                    + " offline or outside the reachable mesh."
+                    + caveat;
+        if (retry != Long.MAX_VALUE)
+            return "Waiting for retry cooldown (about "
+                    + ((retry + 999) / 1000)
+                    + " seconds for an observed peer)."
+                    + caveat;
+        if (inventoryWait)
+            return "Waiting for the initial nearby-peer inventory exchange before bulk forwarding."
+                    + caveat;
+        if (sizeWait)
+            return "Waiting for a compatible stream transport; current links cannot carry this"
+                    + " packet."
+                    + caveat;
+        return "Nearby peers have reached their retry allowance for this packet. Waiting for a"
+                + " different relay or confirmation."
+                + caveat;
+    }
+
     /** Aggregate-only state: no packet IDs, sender IDs, peer addresses or error descriptions. */
     public String measurements() {
         int exhausted = 0, activeClaims = 0;

@@ -124,7 +124,7 @@ public final class PrivateActions implements MeshProtocol.Extensions {
 
     private void erase(String id, String status) throws Exception {
         dao().deletePending(id);
-        dao().cancelMediaPackets(id);
+        dao().deleteTransferPackets(id);
         dao().deleteParts(id);
         MediaRecord attachment = dao().media(id);
         if (attachment != null) {
@@ -288,6 +288,110 @@ public final class PrivateActions implements MeshProtocol.Extensions {
             erase(id, "UNSENT");
         });
         return new MeshProtocol.Incoming(packet, null, null, marker.requestId, null);
+    }
+
+    public enum TransferCommand {
+        PAUSE,
+        RESUME,
+        CANCEL,
+        SEND_AGAIN
+    }
+
+    public void transferCommand(String id, TransferCommand command, long now) throws Exception {
+        media.command(id, command, now);
+    }
+
+    public java.util.List<TransferCommand> transferCommands(String id) {
+        MediaRecord row = dao().media(id);
+        ChatRecord chat = dao().chat(id);
+        if (row == null
+                || chat == null
+                || !row.outgoing
+                || !row.senderId.equals(crypto.getLocalId())
+                || chat.status.equals("DELIVERED")
+                || row.state.equals("COMPLETE")
+                || dao().withdrawal(id) != null) return java.util.Collections.emptyList();
+        if (row.state.equals("CANCELLED") || row.state.equals("FAILED"))
+            return row.file.length > 0
+                    ? java.util.Collections.singletonList(TransferCommand.SEND_AGAIN)
+                    : java.util.Collections.emptyList();
+        return java.util.Arrays.asList(
+                row.paused ? TransferCommand.RESUME : TransferCommand.PAUSE,
+                TransferCommand.CANCEL);
+    }
+
+    public String deliveryDetails(String id) {
+        ChatRecord chat = dao().chat(id);
+        if (chat == null) return "Message is unavailable.";
+        String summary;
+        switch (chat.status) {
+            case "DELIVERED":
+                summary =
+                        "Delivered: the recipient authenticated and saved this message; this is not"
+                                + " a read receipt.";
+                break;
+            case "FORWARDED":
+                summary = "Forwarded to a nearby peer. Recipient delivery is unconfirmed.";
+                break;
+            case "EXPIRED":
+                summary =
+                        "Delivery deadline expired without confirmation. The recipient may still"
+                                + " have a copy.";
+                break;
+            case "EVICTED":
+                summary =
+                        "Removed from the local relay queue because it was full. Delivery is"
+                                + " unconfirmed.";
+                break;
+            case "FAILED":
+                summary = "Sending failed or the transfer expired. Delivery is unconfirmed.";
+                break;
+            case "PAUSED":
+                summary = "Attachment sending is paused on this phone.";
+                break;
+            case "CANCELLED":
+                summary =
+                        "Local attachment sending was cancelled; already relayed copies are not"
+                                + " recalled.";
+                break;
+            case "UNSEND_PENDING":
+                summary = "Waiting for the recipient to acknowledge the unsend request.";
+                break;
+            case "UNSEND_EXPIRED":
+                summary = "Unsend request expired without recipient confirmation.";
+                break;
+            case "UNSENT":
+                summary =
+                        "Unsent in the participating apps; screenshots and exports cannot be"
+                                + " recalled.";
+                break;
+            case "TRANSFERRING":
+                summary = "Sending attachment blocks. Waiting for authenticated completion.";
+                break;
+            case "RECEIVING":
+                summary = "Receiving and validating attachment blocks.";
+                break;
+            case "READY":
+                summary = "Attachment validated and saved on this phone.";
+                break;
+            case "RECEIVED":
+                summary = "Message saved on this phone.";
+                break;
+            default:
+                summary = "Queued locally. No recipient delivery confirmation yet.";
+        }
+        return summary + (!chat.kind.equals("text") ? "\n\n" + media.details(id) : "");
+    }
+
+    public java.util.List<String> deliveryPacketIds(String id) {
+        WithdrawalRecord withdrawal = dao().withdrawal(id);
+        if (withdrawal != null) return java.util.Collections.singletonList(withdrawal.requestId);
+        java.util.List<String> ids = dao().transferPacketIds(id);
+        return ids.isEmpty() ? java.util.Collections.singletonList(id) : ids;
+    }
+
+    public java.util.List<String> transferPacketIds(String id) {
+        return dao().transferPacketIds(id);
     }
 
     public void offer(String target, byte[] bytes, String mime, long now) throws Exception {

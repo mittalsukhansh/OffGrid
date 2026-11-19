@@ -14,6 +14,10 @@ public class MediaRecord {
     @NonNull public byte[] metadata = new byte[0];
     @NonNull public byte[] file = new byte[0];
     @NonNull public byte[] received = new byte[0];
+
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    public boolean paused;
+
     public boolean outgoing;
     public int byteCount;
     public int chunkCount;

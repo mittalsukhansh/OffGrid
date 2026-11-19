@@ -714,6 +714,67 @@ public class RelaySchedulerTest {
         }
     }
 
+    @Test
+    public void explanationsDistinguishStoppedNoPeerCooldownAndBudgetWithoutIdentifiers() {
+        MeshMessage packet = queued(0);
+        List<String> ids = Collections.singletonList(packet.getMessageId());
+        assertTrue(scheduler.explain(ids).contains("stopped"));
+        scheduler.start();
+        assertTrue(scheduler.explain(ids).contains("No recently seen nearby relay"));
+        scheduler.peerSeen("private-radio-address", -40);
+        assertTrue(scheduler.explain(ids).contains("next send turn"));
+        time.runDue();
+        Call call = transport.calls.get(0);
+        call.listener.onAttempt(packet.getMessageId(), () -> {});
+        assertTrue(scheduler.explain(ids).contains("attempt is active"));
+        call.listener.onForwarded(packet.getMessageId());
+        call.listener.onComplete(null, false);
+        assertTrue(scheduler.explain(ids).contains("cooldown"));
+        assertFalse(scheduler.explain(ids).contains("private-radio-address"));
+        assertFalse(scheduler.explain(ids).contains(packet.getMessageId()));
+        scheduler.clear();
+        scheduler.add(
+                new MeshStorage.Pending(
+                        packet,
+                        time.wall(),
+                        time.wall() + MeshConfig.PENDING_TTL_MS,
+                        RelayScheduler.MAX_FORWARDS));
+        scheduler.start();
+        assertTrue(scheduler.explain(ids).contains("budget exhausted"));
+    }
+
+    @Test
+    public void explanationsUseActualBulkInventoryGateWithoutHoldingText() {
+        scheduler.inventoryReady(peer -> false);
+        MeshMessage packet = queued(0);
+        scheduler.start();
+        scheduler.peerSeen("nearby", -40);
+        assertTrue(
+                scheduler
+                        .explain(Collections.singletonList(packet.getMessageId()))
+                        .contains("next send turn"));
+        scheduler.remove(packet.getMessageId());
+        assertTrue(
+                scheduler
+                        .explain(Collections.singletonList(packet.getMessageId()))
+                        .contains("No packet currently"));
+        MeshMessage bulk =
+                MeshMessage.createControl(
+                        MeshMessage.newId(sender),
+                        sender,
+                        "2".repeat(32),
+                        "A".repeat(40),
+                        "A".repeat(87),
+                        time.wall());
+        scheduler.add(
+                new MeshStorage.Pending(
+                        bulk, time.wall(), time.wall() + MeshConfig.PENDING_TTL_MS, 0));
+        assertTrue(
+                scheduler
+                        .explain(Collections.singletonList(bulk.getMessageId()))
+                        .contains("inventory exchange"));
+    }
+
     private static final class FakeTransport implements MeshTransport {
         final List<Call> calls = new ArrayList<>();
         int cancellations;

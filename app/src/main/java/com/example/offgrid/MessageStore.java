@@ -45,7 +45,8 @@ public final class MessageStore {
                                                         MessageDatabase.MIGRATION_2_3,
                                                         MessageDatabase.MIGRATION_3_4,
                                                         MessageDatabase.MIGRATION_4_5,
-                                                        MessageDatabase.MIGRATION_5_6)
+                                                        MessageDatabase.MIGRATION_5_6,
+                                                        MessageDatabase.MIGRATION_6_7)
                                                 .build(),
                                         new StorageCipher());
                         CryptoManager identity = CryptoManager.getInstance(context);
@@ -243,9 +244,13 @@ public final class MessageStore {
             dao().markDelivered(original.getMessageId());
             dao().deletePending(original.getMessageId());
             MediaRecord transfer = dao().media(original.getMessageId());
-            if (transfer != null && transfer.outgoing && !transfer.state.equals("CANCELLED")) {
+            if (transfer != null && transfer.outgoing) {
                 transfer.state = "COMPLETE";
-                dao().cancelMediaPackets(transfer.id);
+                transfer.paused = false;
+                java.util.BitSet complete = new java.util.BitSet(transfer.chunkCount);
+                complete.set(0, transfer.chunkCount);
+                transfer.received = complete.toByteArray();
+                dao().deleteTransferPackets(transfer.id);
                 dao().deleteParts(transfer.id);
                 dao().putMedia(transfer);
             }
