@@ -8,6 +8,7 @@ public final class TransportMetrics {
     private final LongSupplier clock;
     private final EnumMap<TransferProfile, Counter> counters = new EnumMap<>(TransferProfile.class);
     private long resetAt;
+    private final Set<Window> active = new HashSet<>();
 
     public TransportMetrics(LongSupplier clock) {
         this.clock = clock;
@@ -19,6 +20,11 @@ public final class TransportMetrics {
         for (TransferProfile profile : TransferProfile.values())
             counters.put(profile, new Counter());
         resetAt = clock.getAsLong();
+        for (Window window : active) {
+            window.counter = counters.get(window.profile);
+            window.counter.sessions++;
+            window.start = resetAt;
+        }
     }
 
     public void received(TransferProfile profile, int bytes) {
@@ -31,9 +37,9 @@ public final class TransportMetrics {
             TransferProfile profile,
             List<MeshTransport.Packet> packets,
             MeshTransport.SendListener delegate) {
-        Counter c = counters.get(profile);
-        c.sessions++;
-        long start = clock.getAsLong();
+        Window window = new Window(profile, counters.get(profile), clock.getAsLong());
+        window.counter.sessions++;
+        active.add(window);
         Map<String, Integer> sizes = new HashMap<>();
         for (MeshTransport.Packet packet : packets) sizes.put(packet.id, packet.bytes.length);
         return new MeshTransport.SendListener() {
@@ -41,12 +47,13 @@ public final class TransportMetrics {
 
             @Override
             public void onAttempt(String id, Runnable cancel) {
-                delegate.onAttempt(id, cancel);
+                if (ended) cancel.run();
+                else delegate.onAttempt(id, cancel);
             }
 
             @Override
             public boolean isCancelled() {
-                return delegate.isCancelled();
+                return ended || delegate.isCancelled();
             }
 
             @Override
@@ -59,8 +66,8 @@ public final class TransportMetrics {
                 if (ended) return;
                 Integer bytes = sizes.remove(id);
                 if (bytes != null) {
-                    c.tx += bytes;
-                    c.txPackets++;
+                    window.counter.tx += bytes;
+                    window.counter.txPackets++;
                 }
                 delegate.onForwarded(id);
             }
@@ -69,8 +76,10 @@ public final class TransportMetrics {
             public void onComplete(String failure, boolean incompatible) {
                 if (ended) return;
                 ended = true;
+                active.remove(window);
+                Counter c = window.counter;
                 c.completed++;
-                c.lastMs = Math.max(0, clock.getAsLong() - start);
+                c.lastMs = Math.max(0, clock.getAsLong() - window.start);
                 c.sessionMs += c.lastMs;
                 if (failure != null && !delegate.isCancelled()) c.failures++;
                 delegate.onComplete(failure, incompatible);
@@ -117,8 +126,21 @@ public final class TransportMetrics {
                             + "Wire-byte counters include encrypted envelopes, relays and retries;"
                             + " they are not unique media goodput or Delivered receipts. Wall"
                             + " averages include idle time. Reset before each controlled run."
-                            + " Counters reset on service restart.")
+                            + " Active sessions carry into a reset window; their duration is"
+                            + " rebased. Counters reset on service restart.")
                 .toString();
+    }
+
+    private static final class Window {
+        final TransferProfile profile;
+        Counter counter;
+        long start;
+
+        Window(TransferProfile profile, Counter counter, long start) {
+            this.profile = profile;
+            this.counter = counter;
+            this.start = start;
+        }
     }
 
     private static final class Counter {

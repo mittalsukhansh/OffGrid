@@ -193,3 +193,14 @@ An active packet gets a three-second scheduling opportunity. If other text/recei
 Cancellation handles pass through BLE fallback and metric wrappers to GATT, CoC, LAN and Direct sockets. An intentional scheduling yield does not count as a peer/network failure or trigger CoC's failure fallback penalty. Late callbacks cannot mark a removed/cancelled packet Forwarded. Stop/pause removes outstanding turn timers. The UI releases the composer on a top-level durable chat save, independently of network delivery and history rendering; rolled-back/nested saves do not acknowledge an uncommitted message.
 
 These are worker scheduling semantics. Native socket cancellation, discovery, reconnection and availability still determine when a later packet can actually leave the phone. Phone tests must verify the three-second behavior under real BLE/GATT/CoC and unsend conditions.
+
+## Measurement reset and relay export (1.1.4)
+
+Measurement export v2 includes aggregate queue depth, oldest queued age, exhausted
+forward budgets, live send sessions/reservations and turn-yield/removal/budget-refusal
+counters. It contains no peer addresses, packet IDs, contact IDs or message text.
+Reset clears relay event counters but preserves the live queue and reservations.
+Active transport sessions carry into the new measurement window, with durations
+rebased to reset time. Whole packet bytes are counted when their transport confirmation
+arrives after reset; some physical transmission may have preceded reset. Completed
+packets are not counted again. These are wire confirmations, not delivered goodput.

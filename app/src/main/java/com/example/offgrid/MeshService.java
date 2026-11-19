@@ -305,7 +305,10 @@ public class MeshService extends Service {
     }
 
     public void resetMeasurements() {
-        worker.post(measurements::reset);
+        worker.post(() -> {
+            measurements.reset();
+            node.resetRelayMeasurements();
+        });
     }
 
     /** Aggregate-only export: never includes contacts, packet IDs, addresses or error text. */
@@ -318,7 +321,7 @@ public class MeshService extends Service {
                 version = "unknown";
             }
             String report =
-                    "OffGrid measurement export v1\n"
+                    "OffGrid measurement export v2\n"
                             + "App: "
                             + getPackageName()
                             + " "
@@ -333,6 +336,8 @@ public class MeshService extends Service {
                             + java.time.Instant.now()
                             + "\n\n"
                             + measurements.snapshot()
+                            + "\n\n"
+                            + node.relayMeasurements()
                             + "\n\n"
                             + "Test topology, distance, radio selection and payload must be"
                             + " recorded separately. This export does not certify delivery or"
@@ -357,6 +362,8 @@ public class MeshService extends Service {
                             + detail
                             + "\n\n"
                             + measurements.snapshot()
+                            + "\n\n"
+                            + node.relayMeasurements()
                             + "\n\n"
                             + "Endpoints are transport addresses, not verified contacts. One phone"
                             + " may appear on both transports. Forwarded means transferred to a"

@@ -589,10 +589,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Real phone UI/BLE/GATT/CoC/Direct/three-phone/weak-link timing and previous licensing/security/admin/offline-media responsibilities remain documented; no new physical reliability/speedup claim is made.
 - **Sources:** This change; D061–D062; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.3; https://github.com/mittalsukhansh/OffGrid/actions/runs/44103792519; docs/audits/release-1.1.3/README.md.
 
+## D064 — 2026-11-19 UTC — Reserve relay budgets and keep live measurements across reset
+
+- **Status:** Implemented and locally validated; exact-source hosted and signed release checks pending
+- **Work:** Reserve global forwarding capacity before native attempts, release unused reservations on completion/pause, preserve allocated slots across reversed acknowledgements/inventory changes and reject duplicate callbacks. Keep known successful progress in memory if its persistence fails. Fix measurement reset during active transfers, carry active sessions into the new window and rebase duration. Add aggregate-only relay state/event counters to measurement export v2 and reset only event counters. Avoid a CoC executor-rejection penalty for intentionally cancelled work. Document the transport callback contract, regressions and phone checks. Prepare code114/1.1.4-experimental without a packet/database format change. Add a pinned Noise/libsignal assessment without integrating a new crypto dependency.
+- **Decision / reason:** Fix demonstrated concurrency/accounting bugs before tuning unmeasured radios. Live reservations prevent parallel attempts from overspending the six-forward policy; reservations are not persisted or an all-time guarantee across crashes. Aggregate diagnostics help the owner distinguish queue policy from radio behavior without exporting identifiers/content. Session protocol adoption requires explicit offline-prekey/state/restore design and external review; no custom ratchet is introduced.
+- **Validation / evidence:** Both initial regression tests failed against the previous implementation, then passed after correction. Local debug assembly/lint, 88 JVM tests and Android-test compilation pass; six host harness checks pass. Pinned candidate README/build/license metadata inspected on 19 November. No physical phone, JNI compatibility or crypto audit result is claimed. Exact-source hosted and signed upgrade evidence follows when complete.
+- **Open items:** Physical A–B–C/CoC/Direct/weak-link measurements; live forward-secrecy design/review; inherited-code permission; owner USB restore verification. Retried prepared repository metadata script as mittalsukhansh: GitHub returned HTTP403 “Resource not accessible by integration”; description/topics remain owner-admin work. No signing secrets were printed or uploaded.
+- **Sources:** This change; D063; RELEASE_NOTES_1.1.4.md; docs/SESSION_PROTOCOL_REVIEW.md; TESTING.md; THROUGHPUT.md.
+
 ## Template for the next work set
 
 ```markdown
-## D064 — YYYY-MM-DD HH:MM UTC — Short title
+## D065 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

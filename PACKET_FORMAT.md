@@ -64,3 +64,14 @@ LAN/Direct/CoC use bounded OGL1 framing: magic `0x4f474c31`, batch count 1–20,
 ## Named QR contacts (app 1.1; wire protocol remains 5)
 
 Legacy `offgrid5:<signing>.<agreement>.<signature>` imports remain supported. A device with a chosen display name exports `offgrid5:<signing>.<agreement>.<name>.<signature>`: name is unpadded Base64url of normalized UTF-8 (1–40 UTF-16 units, no controls/format characters), maximum full bundle 640 characters. The signature covers ASCII `offgrid-contact-name-v1|` followed by the three dot-separated fields. The domain differs from the legacy `offgrid-contact-v5|` signature over the two key fields. A tampered name fails verification. Identity ID and two-key fingerprint do not depend on the name; a name is self-selected, not proof of a human identity. Duplicates are allowed. Named imports prefill an empty local nickname and never overwrite an existing local alias. Older apps cannot scan the new named bundle: update all phones to 1.1 first. Transport/protocol-5 packet compatibility is unchanged.
+
+### Concurrent forwarding reservations (1.1.4)
+
+Each live send attempt reserves a global forwarding slot before native connection
+or packet transmission. Observed successful forwards plus active reservations cannot
+exceed the six-forward policy. Existing reservations remain valid when another peer
+acknowledges first or advertises inventory. Failed attempts, cancellation completion
+and mesh pause release unused reservations; duplicate/stale callbacks cannot consume
+additional slots. Reservations are in-memory and do not establish an all-time wire
+limit across crashes or lost acknowledgements. Persisted progress counts observed
+successes. This scheduler correction does not change packet encoding.

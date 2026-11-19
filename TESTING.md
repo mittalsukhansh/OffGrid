@@ -226,3 +226,17 @@ Before upgrading, record a v1.1 baseline if practical. On each version, start bo
 ## Three-second queue and unsend retest (1.1.2)
 
 Update all phones without uninstalling. Queue text A, then text B while A is stalled. Check B gets its own opportunity after A's three-second send window, while A stays queued/retryable; do not interpret this window as proof of delivery or an automatic failure. Repeat by unsending the active A: the connection should cancel immediately and B should proceed when a peer is available. Try a single slow message without B, then two messages each needing more than three seconds, to confirm retries can finish once both have had their first opportunity instead of restarting forever. Repeat with CoC enabled/disabled and with a photo transferring; capture actual counters, timing and failures. Watch for late A reappearing after an authenticated unsend. Confirm another reachable peer/transport remains usable. Type the next text while history loads and verify the composer does not wait for a delivery receipt.
+
+## Additional 1.1.4 regression and phone checks
+
+JVM regressions exercise concurrent attempts sharing the final global forward slot,
+release on failure/pause, reversed acknowledgement order, changing inventory, duplicate
+callbacks and privacy-safe aggregate export. Measurement tests reset during an active
+transfer and check subsequent confirmations, duration rebasing and repeated resets.
+
+On phones, export diagnostics before/after a slow transfer and reset once mid-transfer:
+post-reset confirmations should continue increasing counters without cancelling it.
+For A–B–C, record models, Android versions, APK versions, transport and aggregate
+exports on all three phones, with A/C out of direct range. A forward-budget-exhausted
+count explains retry policy, not proof of route discovery or authenticated delivery.
+These phone checks have not been performed by the coding environment.

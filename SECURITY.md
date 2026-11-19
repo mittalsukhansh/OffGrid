@@ -38,6 +38,8 @@ A full session protocol remains a separate reviewed integration. Candidate: the 
 
 [noise-java](https://github.com/rweather/noise-java) is a concrete Java implementation to assess, not a shipped dependency. Before adopting any library: verify maintenance/security advisories and exact license at a pinned commit; test API 26+, interoperability and known-answer vectors; review session resumption, persistent nonce allocation, lost messages, crash recovery and rekey erasure with an external cryptographer. No custom ratchet or claim of audited forward secrecy is introduced in 1.0.
 
+See the [pinned library assessment](docs/SESSION_PROTOCOL_REVIEW.md) for concrete maintenance, licensing and offline-session integration constraints. Neither candidate is integrated.
+
 ## Evidence and reporting
 
 See [TESTING.md](TESTING.md), [THROUGHPUT.md](THROUGHPUT.md) and [decision log](DECISIONS.md) for actual check outcomes. JVM fuzzing is a seeded bounded smoke test, not exhaustive fuzz coverage. JVM relay simulation does not exercise Android radios/Keystore. Instrumentation uses real Android crypto/Room and simulated logical nodes. Physical A–B–C, CoC and Wi-Fi Direct field results are still pending.

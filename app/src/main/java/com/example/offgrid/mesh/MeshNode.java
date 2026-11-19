@@ -401,6 +401,15 @@ public final class MeshNode implements MeshTransport.Listener {
         reportError(message);
     }
 
+    /** Called by the service on the shared mesh worker, never on the UI thread. */
+    public String relayMeasurements() {
+        return relay.measurements();
+    }
+
+    public void resetRelayMeasurements() {
+        relay.resetMeasurements();
+    }
+
     public void diagnostics(java.util.function.Consumer<String> callback) {
         worker.post(() -> {
             StringBuilder text = new StringBuilder(relay.diagnostics());

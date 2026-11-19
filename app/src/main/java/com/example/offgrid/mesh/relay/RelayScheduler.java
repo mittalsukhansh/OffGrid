@@ -53,8 +53,10 @@ public final class RelayScheduler {
     private final Function<MeshMessage, byte[]> encoder;
     private final Map<String, Peer> peers = new HashMap<>();
     private final Map<String, Object> sessions = new HashMap<>();
+    private final Map<Object, Map<String, Buffered>> reservations = new HashMap<>();
     private final Map<String, Runnable> attemptChecks = new HashMap<>();
     private long opportunityCounter, scheduledAt;
+    private long turnYields, removedAttempts, budgetRefusals;
     private final Map<String, Map<String, Hint>> identityHints = new LinkedHashMap<>();
     private final LinkedHashMap<String, Buffered> queue = new LinkedHashMap<>();
     private final Runnable connectPass = this::connect;
@@ -93,6 +95,8 @@ public final class RelayScheduler {
         timer.cancel(connectPass);
         for (Runnable check : attemptChecks.values()) timer.cancel(check);
         attemptChecks.clear();
+        for (Map<String, Buffered> claims : reservations.values()) releaseAll(claims);
+        reservations.clear();
         sessions.clear();
         transport.cancelSends();
         peers.clear();
@@ -279,14 +283,28 @@ public final class RelayScheduler {
         peer.trimHints();
     }
 
+    private static void releaseAll(Map<String, Buffered> claims) {
+        for (Buffered buffered : claims.values()) buffered.inFlight--;
+        claims.clear();
+    }
+
     private boolean readyFor(Peer peer, String id) {
-        if (!eligible(id) || !peer.ready(id, timer.elapsed())) return false;
+        return readyFor(peer, id, null);
+    }
+
+    private boolean readyFor(Peer peer, String id, Map<String, Buffered> owned) {
+        if (!eligible(id)) return false;
+        Buffered buffered = queue.get(id);
+        // A reserved slot remains valid when a different peer acknowledges its later slot first.
+        if (owned != null && owned.get(id) == buffered) return true;
+        if (!peer.ready(id, timer.elapsed())) return false;
+        if (buffered.forwardCount + buffered.inFlight >= MAX_FORWARDS) return false;
         Hint hint = peer.hints.get(id);
         int attempts = hint == null ? 0 : hint.forwards;
         // Never spend the final global attempt retrying an already-served neighbor.
         // Keep an opportunity for a new relay that appears after a partition.
         return attempts < MAX_FORWARDS_PER_PEER
-                && (attempts == 0 || queue.get(id).forwardCount < MAX_FORWARDS - 1);
+                && (attempts == 0 || buffered.forwardCount + buffered.inFlight < MAX_FORWARDS - 1);
     }
 
     private static int priority(MeshMessage packet) {
@@ -352,9 +370,32 @@ public final class RelayScheduler {
             if (batch.isEmpty()) continue;
             Object session = new Object();
             sessions.put(peer.address, session);
+            Map<String, Buffered> claims = new HashMap<>();
+            reservations.put(session, claims);
+            Set<String> batchIds = new java.util.HashSet<>();
+            for (MeshTransport.Packet packet : batch) batchIds.add(packet.id);
             MeshTransport.SendListener callbacks =
                     new MeshTransport.SendListener() {
                         int forwarded;
+                        final Set<String> completed = new java.util.HashSet<>();
+
+                        private void release(String id) {
+                            Buffered buffered = claims.remove(id);
+                            if (buffered != null) buffered.inFlight--;
+                        }
+
+                        private boolean claim(String id) {
+                            if (!batchIds.contains(id)
+                                    || completed.contains(id)
+                                    || !readyFor(peer, id, claims)) return false;
+                            if (!claims.containsKey(id)) {
+                                Buffered buffered = queue.get(id);
+                                buffered.inFlight++;
+                                claims.put(id, buffered);
+                            }
+                            return true;
+                        }
+
                         String attempting;
                         long attemptStarted;
                         boolean yielded;
@@ -383,6 +424,8 @@ public final class RelayScheduler {
                                     break;
                                 }
                             if (removed || (remaining <= 0 && waitingText)) {
+                                if (removed) removedAttempts++;
+                                else turnYields++;
                                 yielded = true;
                                 if (!removed) {
                                     Hint previous = peer.hints.get(attempting);
@@ -408,7 +451,20 @@ public final class RelayScheduler {
                             }
                             cancelAttempt = cancel;
                             if (!id.equals(attempting)) {
+                                release(attempting);
                                 finishTurn();
+                            }
+                            if (!claim(id)) {
+                                Buffered blocked = queue.get(id);
+                                if (blocked != null
+                                        && blocked.forwardCount + blocked.inFlight >= MAX_FORWARDS)
+                                    budgetRefusals++;
+                                yielded = true;
+                                finishTurn();
+                                cancel.run();
+                                return;
+                            }
+                            if (!id.equals(attempting)) {
                                 attempting = id;
                                 attemptStarted = timer.elapsed();
                                 Buffered buffered = queue.get(id);
@@ -430,12 +486,20 @@ public final class RelayScheduler {
 
                         @Override
                         public boolean shouldSend(String id) {
-                            return current() && !yielded && readyFor(peer, id);
+                            return current()
+                                    && !yielded
+                                    && !completed.contains(id)
+                                    && batchIds.contains(id)
+                                    && readyFor(peer, id, claims);
                         }
 
                         @Override
                         public void onForwarded(String id) {
-                            if (!current() || yielded) return;
+                            if (!current() || yielded || !claim(id)) return;
+                            Buffered acknowledged = claims.get(id);
+                            release(id);
+                            completed.add(id);
+                            if (queue.get(id) != acknowledged) return;
                             if (id.equals(attempting)) finishTurn();
                             forwarded++;
                             Hint previous = peer.hints.get(id);
@@ -448,9 +512,11 @@ public final class RelayScheduler {
                             rememberHint(peer, id, sent);
                             Buffered buffered = queue.get(id);
                             if (buffered != null) {
+                                // Preserve known wire accounting in memory even if the DB write
+                                // fails.
+                                buffered.forwardCount++;
                                 try {
-                                    storage.forwarded(id, buffered.forwardCount + 1);
-                                    buffered.forwardCount++;
+                                    storage.forwarded(id, buffered.forwardCount);
                                 } catch (RuntimeException e) {
                                     listener.onError("Could not save forwarding progress");
                                 }
@@ -460,6 +526,8 @@ public final class RelayScheduler {
                         @Override
                         public void onComplete(String failure, boolean incompatible) {
                             finishTurn();
+                            releaseAll(claims);
+                            reservations.remove(session);
                             if (!current()) return;
                             sessions.remove(peer.address);
                             if (failure != null && !yielded) {
@@ -490,8 +558,48 @@ public final class RelayScheduler {
         }
     }
 
+    /** Aggregate-only state: no packet IDs, sender IDs, peer addresses or error descriptions. */
+    public String measurements() {
+        int exhausted = 0, activeClaims = 0;
+        long oldest = 0;
+        for (Buffered buffered : queue.values()) {
+            if (buffered.forwardCount >= MAX_FORWARDS) exhausted++;
+            oldest = Math.max(oldest, Math.max(0, timer.elapsed() - buffered.storedAt));
+        }
+        for (Map<String, Buffered> claims : reservations.values()) activeClaims += claims.size();
+        return "Relay measurements · aggregate only\n"
+                + "Queued packets: "
+                + queue.size()
+                + "\n"
+                + "Forward-budget exhausted packets: "
+                + exhausted
+                + "\n"
+                + "Active send sessions: "
+                + sessions.size()
+                + "\n"
+                + "Active forward reservations: "
+                + activeClaims
+                + "\n"
+                + "Oldest queued age: "
+                + oldest
+                + " ms\n"
+                + "Events since reset · turn yields: "
+                + turnYields
+                + " · removed active attempts: "
+                + removedAttempts
+                + " · global budget refusals: "
+                + budgetRefusals
+                + "\n"
+                + "Queue/leases are current state; reset clears only event counters. No delivery"
+                + " proof.";
+    }
+
+    public void resetMeasurements() {
+        turnYields = removedAttempts = budgetRefusals = 0;
+    }
+
     public String diagnostics() {
-        StringBuilder text = new StringBuilder();
+        StringBuilder text = new StringBuilder(measurements()).append("\n\n");
         text.append(
                 "Automatic relay: on while mesh is running\n"
                         + "Nearby peers are direct neighbors, not all reachable contacts.\n");
@@ -554,6 +662,7 @@ public final class RelayScheduler {
         final MeshMessage message;
         final long storedAt;
         int forwardCount;
+        int inFlight;
         long lastOpportunity;
 
         Buffered(MeshStorage.Pending pending, long storedAt) {

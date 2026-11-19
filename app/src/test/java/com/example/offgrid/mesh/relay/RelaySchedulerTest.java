@@ -61,6 +61,101 @@ public class RelaySchedulerTest {
     }
 
     @Test
+    public void failedAndPausedAttemptsReleaseUnusedReservations() {
+        MeshMessage packet = queued(5);
+        peer("peer-a", -10);
+        peer("peer-b", -20);
+        scheduler.start();
+        time.runDue();
+        Call first = transport.calls.get(0), second = transport.calls.get(1);
+        first.listener.onAttempt(packet.getMessageId(), () -> {});
+        assertFalse(second.listener.shouldSend(packet.getMessageId()));
+        first.listener.onComplete("real failure", false);
+        assertTrue(second.listener.shouldSend(packet.getMessageId()));
+        second.listener.onAttempt(packet.getMessageId(), () -> {});
+        scheduler.pause();
+        peer("peer-c", -30);
+        scheduler.start();
+        time.runDue();
+        Call resumed = transport.calls.get(2);
+        assertTrue(resumed.listener.shouldSend(packet.getMessageId()));
+        first.listener.onForwarded(packet.getMessageId());
+        assertFalse(storage.progress.containsKey(packet.getMessageId()));
+        resumed.listener.onAttempt(packet.getMessageId(), () -> {});
+        resumed.listener.onForwarded(packet.getMessageId());
+        assertEquals(Integer.valueOf(6), storage.progress.get(packet.getMessageId()));
+    }
+
+    @Test
+    public void reservedRetrySurvivesLaterSlotAcknowledgingFirstAndInventoryHints() {
+        MeshMessage packet = queued(3);
+        peer("peer-a", -10);
+        scheduler.start();
+        time.runDue();
+        Call initial = transport.calls.get(0);
+        initial.listener.onForwarded(packet.getMessageId());
+        initial.listener.onComplete(null, false);
+        time.advance(30_000);
+        peer("peer-a", -10);
+        peer("peer-b", -20);
+        time.runDue();
+        Call retry = transport.calls.get(1), fresh = transport.calls.get(2);
+        retry.listener.onAttempt(packet.getMessageId(), () -> fail("Reserved retry was cancelled"));
+        fresh.listener.onAttempt(
+                packet.getMessageId(), () -> fail("Last fresh-neighbor slot was cancelled"));
+        scheduler.inventory(
+                "peer-b", "2".repeat(32), Collections.singletonList(packet.getMessageId()));
+        assertTrue(fresh.listener.shouldSend(packet.getMessageId()));
+        fresh.listener.onForwarded(packet.getMessageId());
+        scheduler.inventory("peer-a", sender, Collections.singletonList(packet.getMessageId()));
+        assertTrue(retry.listener.shouldSend(packet.getMessageId()));
+        retry.listener.onForwarded(packet.getMessageId());
+        assertEquals(Integer.valueOf(6), storage.progress.get(packet.getMessageId()));
+        retry.listener.onForwarded(packet.getMessageId());
+        assertEquals(Integer.valueOf(6), storage.progress.get(packet.getMessageId()));
+    }
+
+    @Test
+    public void aggregateDiagnosticsAndResetNeverExposeIdsOrCancelAReservation() {
+        MeshMessage packet = queued(5);
+        peer("private-radio-address", -20);
+        scheduler.start();
+        time.runDue();
+        Call active = transport.calls.get(0);
+        active.listener.onAttempt(
+                packet.getMessageId(), () -> fail("Reset cancelled a live attempt"));
+        scheduler.resetMeasurements();
+        String report = scheduler.measurements();
+        assertTrue(report.contains("Active forward reservations: 1"));
+        assertTrue(report.contains("Queued packets: 1"));
+        assertFalse(report.contains(packet.getMessageId()));
+        assertFalse(report.contains(sender));
+        assertFalse(report.contains("private-radio-address"));
+        assertTrue(active.listener.shouldSend(packet.getMessageId()));
+    }
+
+    @Test
+    public void parallelAttemptsShareTheFinalForwardingSlotBeforeAnyAcknowledgement() {
+        MeshMessage packet = queued(5);
+        peer("peer-a", -10);
+        peer("peer-b", -20);
+        peer("peer-c", -30);
+        scheduler.start();
+        time.runDue();
+        assertEquals(3, transport.calls.size());
+        for (Call call : transport.calls)
+            call.listener.onAttempt(
+                    packet.getMessageId(), () -> call.listener.onComplete("closed", false));
+        assertTrue(transport.calls.get(0).listener.shouldSend(packet.getMessageId()));
+        assertFalse(
+                "The last slot is already reserved",
+                transport.calls.get(1).listener.shouldSend(packet.getMessageId()));
+        assertFalse(transport.calls.get(2).listener.shouldSend(packet.getMessageId()));
+        for (Call call : transport.calls) call.listener.onForwarded(packet.getMessageId());
+        assertEquals(Integer.valueOf(6), storage.progress.get(packet.getMessageId()));
+    }
+
+    @Test
     public void twoSlowPacketsCanFinishAfterEachGetsItsFirstTurn() {
         MeshMessage first = queued(0);
         peer("wifi:phone", -20);

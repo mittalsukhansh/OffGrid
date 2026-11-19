@@ -120,7 +120,7 @@ final class CocTransport {
             io.execute(() -> sendBatch(socket, address, packets, measured, epoch));
         } catch (RejectedExecutionException e) {
             close(socket);
-            block(address);
+            if (!measured.isCancelled()) block(address);
             measured.onComplete("L2CAP connection limit", false);
         }
         return true;

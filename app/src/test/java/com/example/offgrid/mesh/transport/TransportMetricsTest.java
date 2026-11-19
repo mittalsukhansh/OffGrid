@@ -9,6 +9,73 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TransportMetricsTest {
     @Test
+    public void repeatedResetDoesNotReviveCompletedSessionsOrBreakCancellation() {
+        AtomicLong clock = new AtomicLong();
+        TransportMetrics metrics = new TransportMetrics(clock::get);
+        MeshTransport.SendListener sent =
+                metrics.sending(
+                        TransferProfile.WIFI,
+                        Collections.emptyList(),
+                        new MeshTransport.SendListener() {
+                            public boolean shouldSend(String id) {
+                                return true;
+                            }
+
+                            public void onForwarded(String id) {}
+
+                            public void onComplete(String failure, boolean incompatible) {}
+                        });
+        clock.set(100);
+        metrics.reset();
+        clock.set(200);
+        metrics.reset();
+        clock.set(250);
+        sent.onComplete("failure", false);
+        String wifi = metrics.snapshot().split("\n\nWIFI:")[1].split("\n\n")[0];
+        assertTrue(wifi.contains("Sessions 1/1 · failures 1"));
+        assertTrue(wifi.contains("last session 50 ms"));
+        metrics.reset();
+        assertTrue(
+                metrics.snapshot().split("\n\nWIFI:")[1].split("\n\n")[0].contains("Sessions 0/0"));
+        int[] closed = {0};
+        sent.onAttempt("late", () -> closed[0]++);
+        assertEquals(1, closed[0]);
+        assertTrue(sent.isCancelled());
+    }
+
+    @Test
+    public void resetDuringActiveTransferKeepsLaterAcknowledgedBytesAndRebasesDuration() {
+        AtomicLong time = new AtomicLong(1000);
+        TransportMetrics metrics = new TransportMetrics(time::get);
+        MeshTransport.SendListener sent =
+                metrics.sending(
+                        TransferProfile.COC,
+                        Arrays.asList(
+                                new MeshTransport.Packet("before", new byte[1200]),
+                                new MeshTransport.Packet("after", new byte[600])),
+                        new MeshTransport.SendListener() {
+                            public boolean shouldSend(String id) {
+                                return true;
+                            }
+
+                            public void onForwarded(String id) {}
+
+                            public void onComplete(String failure, boolean incompatible) {}
+                        });
+        sent.onForwarded("before");
+        time.set(3000);
+        metrics.reset();
+        sent.onForwarded("before"); // duplicate completion must not be counted after reset
+        sent.onForwarded("after");
+        time.set(3500);
+        sent.onComplete(null, false);
+        String coc = metrics.snapshot().split("\n\nCOC:")[1].split("\n\n")[0];
+        assertTrue(coc.contains("TX 600 B / 1 packets"));
+        assertTrue(coc.contains("Sessions 1/1 · failures 0"));
+        assertTrue(coc.contains("last session 500 ms"));
+    }
+
+    @Test
     public void cancellationHandleSurvivesMetricsAndIntentionalYieldIsNotAFailure() {
         TransportMetrics metrics = new TransportMetrics(() -> 0L);
         int[] closed = {0};

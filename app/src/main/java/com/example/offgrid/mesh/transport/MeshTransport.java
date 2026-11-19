@@ -26,6 +26,8 @@ public interface MeshTransport {
 
     interface SendListener {
         /** Worker callback: cancel closes only this native connection, never every peer. */
+        // Call before opening a native connection and before each packet write. The scheduler
+        // reserves forwarding capacity here; shouldSend alone does not reserve capacity.
         default void onAttempt(String id, Runnable cancel) {}
 
         default boolean isCancelled() {
