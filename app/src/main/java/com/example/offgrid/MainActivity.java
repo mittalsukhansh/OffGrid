@@ -1045,7 +1045,7 @@ public class MainActivity extends AppCompatActivity {
                     show.accept(
                             new PrivateActions(this, MessageStore.get(this), crypto())
                                             .deliveryDetails(id)
-                                    + "\n\nMesh stopped. Start it to attempt delivery."));
+                                    + "\n\nMesh stopped."));
     }
 
     private void transferCommand(String id, PrivateActions.TransferCommand command) {
@@ -1062,7 +1062,7 @@ public class MainActivity extends AppCompatActivity {
                     if (!MeshService.identityRestoreSafe())
                         throw new IllegalStateException(
                                 "Mesh worker is reconnecting. Try again after it stops or"
-                                    + " reconnects.");
+                                        + " reconnects.");
                     new PrivateActions(this, MessageStore.get(this), crypto())
                             .transferCommand(id, command, System.currentTimeMillis());
                     result.accept("Saved locally. Start mesh to continue sending.");

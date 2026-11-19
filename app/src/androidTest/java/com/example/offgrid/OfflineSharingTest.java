@@ -535,6 +535,7 @@ public class OfflineSharingTest {
         MediaRecord row = a.store.dao().activeMedia().get(0);
         a.actions.transferCommand(row.id, PrivateActions.TransferCommand.PAUSE, now);
         assertTrue(a.store.dao().media(row.id).paused);
+        assertFalse(a.actions.deliveryNeedsRelay(row.id));
         assertEquals("PAUSED", a.store.dao().chat(row.id).status);
         assertNull(a.storage.pending(row.id));
         assertFalse(a.storage.pendingIds().contains(row.id));
@@ -549,6 +550,7 @@ public class OfflineSharingTest {
                 a.actions.transferCommands(row.id));
         a.actions.transferCommand(row.id, PrivateActions.TransferCommand.RESUME, now + 60_000);
         assertNotNull(a.storage.pending(row.id));
+        assertTrue(a.actions.deliveryNeedsRelay(row.id));
         assertEquals(1, a.store.dao().activeMedia().size());
         drain(a, c);
         for (int n = 0; n < 30 && !a.store.dao().chat(row.id).status.equals("DELIVERED"); n++) {
@@ -624,6 +626,7 @@ public class OfflineSharingTest {
         assertEquals(
                 row.chunkCount, BitSet.valueOf(a.store.dao().media(row.id).received).cardinality());
         assertTrue(a.actions.transferCommands(row.id).isEmpty());
+        assertFalse(a.actions.deliveryNeedsRelay(row.id));
         try {
             a.actions.transferCommand(
                     row.id, PrivateActions.TransferCommand.PAUSE, System.currentTimeMillis());

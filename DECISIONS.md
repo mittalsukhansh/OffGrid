@@ -625,10 +625,19 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Exact-source hosted Android/UI/migration checks and signed v1.1.4→1.1.5 verification/publication. Pre-upgrade queued query/offer wrappers cannot be linked by SQL and may still leave the phone; already relayed packets may arrive after a local stop. Physical phone results and existing licensing/security-review/admin/offline-backup items remain open. Adaptive tuning, private groups/SOS/battery modes remain deferred.
 - **Sources:** This change; D066; docs/TRANSFER_CONTROLS.md; RELEASE_NOTES_1.1.5.md; TESTING.md; ARCHITECTURE.md.
 
+## D068 — 2026-11-19 UTC — Keep terminal delivery details free of waiting-state explanations
+
+- **Status:** Implemented and locally checked; initial feature Android suite passed; final-source hosted/release checks pending
+- **Work:** Show live relay-wait details only for active outgoing queued/forwarded/transferring/unsend-request work. Delivered, paused, cancelled and other terminal rows retain their stored explanation without an unrelated generic waiting-for-receipt snapshot. Stopped-mesh details now state that the mesh is stopped without instructing a completed message to attempt delivery. Added durable-state assertions for queued/resumed versus paused/delivered snapshots.
+- **Decision / reason:** Stored authenticated completion must not conflict with a generic no-packet explanation. This refines the owner's requested honest delivery detail UI without changing queue policy or protocol.
+- **Validation / evidence:** Full feature source df2fd54 passed hosted run44536359627, including real Room6→7 migration, pause/restart/late-status/completion/cancellation/retry/rollback/expiry cases and control dialogs across rotation, plus existing runtime suites. This follow-up passed local debug build/lint,90 JVM tests and Android-test compilation. Six host checks passed for the feature. Final exact-source hosted and signed update results are recorded separately when complete.
+- **Open items:** Final exact-source CI, signed 1.1.4→1.1.5 upgrade and public artifact verification. Physical radio timing, legacy-control limits and prior owner/security/licensing/admin/offline-backup work remain open.
+- **Sources:** This change; D067; df2fd543b41dba1468bd58ffc77ba3820ed4010e; https://github.com/mittalsukhansh/OffGrid/actions/runs/44536359627.
+
 ## Template for the next work set
 
 ```markdown
-## D068 — YYYY-MM-DD HH:MM UTC — Short title
+## D069 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

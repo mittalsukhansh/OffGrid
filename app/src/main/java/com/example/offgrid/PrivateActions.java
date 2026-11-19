@@ -383,6 +383,16 @@ public final class PrivateActions implements MeshProtocol.Extensions {
         return summary + (!chat.kind.equals("text") ? "\n\n" + media.details(id) : "");
     }
 
+    public boolean deliveryNeedsRelay(String id) {
+        ChatRecord row = dao().chat(id);
+        return row != null
+                && row.outgoing
+                && (row.status.equals("QUEUED")
+                        || row.status.equals("FORWARDED")
+                        || row.status.equals("TRANSFERRING")
+                        || row.status.equals("UNSEND_PENDING"));
+    }
+
     public java.util.List<String> deliveryPacketIds(String id) {
         WithdrawalRecord withdrawal = dao().withdrawal(id);
         if (withdrawal != null) return java.util.Collections.singletonList(withdrawal.requestId);

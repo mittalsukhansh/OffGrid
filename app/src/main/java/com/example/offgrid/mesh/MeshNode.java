@@ -280,8 +280,9 @@ public final class MeshNode implements MeshTransport.Listener {
             try {
                 callback.accept(
                         actions.deliveryDetails(id)
-                                + "\n\n"
-                                + relay.explain(actions.deliveryPacketIds(id)));
+                                + (actions.deliveryNeedsRelay(id)
+                                        ? "\n\n" + relay.explain(actions.deliveryPacketIds(id))
+                                        : ""));
             } catch (RuntimeException e) {
                 callback.accept("Message details are unavailable.");
             }
