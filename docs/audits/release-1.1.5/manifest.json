@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "version": "1.1.5-experimental",
+  "versionCode": 115,
+  "tag": "v1.1.5",
+  "baselineVersion": "1.1.4-experimental",
+  "baselineVersionCode": 114,
+  "sourceCommit": "cbbfab3e50eae095607c83a14ddfc1d3cef9475e",
+  "baselineSource": "7e92162b024658eec65778fdb8cb4d6ea6d689c7",
+  "publish": true,
+  "sha256": {
+    "baseline-test.apk": "7012609255bc3567ba17ef115c392b4fc477dc11354775e4060ea5800c4ca69c",
+    "baseline.apk": "ca8e19fcc3a5e8ad10f84863409e69cf3ff93dbb8014f0e8005dcce668a61af6",
+    "offgrid-1.1.5-experimental.apk": "f76a64d491e5d8e77032875f4b711251b0336b2ddf6941c8b59c4307a038db50",
+    "upgrade-test.apk": "8a281d24bf07c2808ae43f3400f16b0004f254a2e438ca0f96c78ac8be38135f"
+  }
+}

@@ -634,10 +634,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Final exact-source CI, signed 1.1.4→1.1.5 upgrade and public artifact verification. Physical radio timing, legacy-control limits and prior owner/security/licensing/admin/offline-backup work remain open.
 - **Sources:** This change; D067; df2fd543b41dba1468bd58ffc77ba3820ed4010e; https://github.com/mittalsukhansh/OffGrid/actions/runs/44536359627.
 
+## D069 — 2026-11-19 UTC — Stage signed attachment-control update
+
+- **Status:** Exact-source hosted checks passed; signed artifacts prepared; signed emulator upgrade/publication pending
+- **Work:** Fast-forwarded the transfer-control commits into main and staged code115/1.1.5-experimental plus matching fixture on a single temporary artifact commit. Baseline is the actual published v1.1.4/code114 APK and its matching fixture. Manifest requires exact-source CI and explicit experimental publication. No private key/password material is staged.
+- **Decision / reason:** Ship durable attachment controls and relay explanations with a verified Room6→7 update and the persistent signing identity. Preserve existing release assets and require signed in-place continuity before publication.
+- **Validation / evidence:** Final source cbbfab3 passed run44537059460: build/lint,90 JVM/six host checks and Android runtime/migration/crypto/UI/identity suites. Local signed release assembly/lint/fixture build and APK certificate/package/version/code/source verification passed. Signing audit:698 reachable blobs, two public signing files, zero findings. Local staged verification runs before pushing; actual signed upgrade/public download results follow separately.
+- **Open items:** Signed 1.1.4→1.1.5 emulator update/publication, independent public-download verification and branch cleanup. Physical radio and previous owner/security/licensing/admin/offline-backup limits remain open.
+- **Sources:** This staging change; source cbbfab3e50eae095607c83a14ddfc1d3cef9475e; D067–D068; https://github.com/mittalsukhansh/OffGrid/actions/runs/44537059460; RELEASE_NOTES_1.1.5.md.
+
+## D070 — 2026-11-19 UTC — Publish verified attachment-control APK1.1.5
+
+- **Status:** Experimental v1.1.5 published; signed update and independent public artifact verification passed
+- **Work:** Published code115/1.1.5-experimental from tested source cbbfab3 after actual signed v1.1.4 baseline install-r continuity. Applied versioned release notes to explicitly targeted mittalsukhansh/OffGrid. Independently downloaded/verified public APK and archived public manifest/checksum/signature/upgrade evidence plus staging D069. Updated README/signing/review links and control/Room7 guidance. Remove this work's merged feature and temporary artifact branches after publishing this record; app/test binaries remain outside main.
+- **Decision / reason:** Complete the selected transfer-control/relay-explanation work with an installable persistent-key update and explicit experimental/physical-test limits. Preserve earlier releases; continue development on main. Adaptive policy remains measurement-dependent.
+- **Validation / evidence:** Final-source CI44537059460 passed build/lint,90 JVM/six host checks and Android runtime/migration/crypto/UI/identity suites; initial feature run44536359627 also passed. Signed API30 update/publication44537878353 preserved identity/signing key, verified dual-key contact/fingerprint, nickname and encrypted history. Downloaded APK SHA-256 f76a64d491e5d8e77032875f4b711251b0336b2ddf6941c8b59c4307a038db50 matches staged/published sums; signer pin, package, version/code and signed source verified, and public signature report matches local verification. Pre-stage audit698 blobs/two public signing files/zero findings. Final evidence/local links/manifest/diff checked; documentation-only publication record skips redundant Android CI.
+- **Open items:** Physical control/pause/cancel timing on BLE/CoC/Direct, A–B–C/weak-link measurements and existing licensing/security-review/admin/offline-backup work. Legacy unassociated query/wrapper packets and already relayed bytes may arrive after a local stop, as documented. Private groups/SOS/battery modes remain deferred.
+- **Sources:** This change; D067–D069; source cbbfab3e50eae095607c83a14ddfc1d3cef9475e; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.5; https://github.com/mittalsukhansh/OffGrid/actions/runs/44537059460; https://github.com/mittalsukhansh/OffGrid/actions/runs/44537878353; docs/audits/release-1.1.5/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D069 — YYYY-MM-DD HH:MM UTC — Short title
+## D071 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

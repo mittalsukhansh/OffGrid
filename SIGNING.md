@@ -175,3 +175,7 @@ The [v1.1 publication workflow](https://github.com/mittalsukhansh/OffGrid/action
 ## Published 1.1.4 maintenance update
 
 [Exact-source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44529729343) passed for 7e92162 (88 JVM/six host tests, build/lint and Android runtime suites). [Signed upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44530564163) verified actual published v1.1.3/code113→1.1.4-experimental/code114 continuity without uninstalling. The downloaded public APK passed independent checksum, signer pin, package, version/code and embedded-source verification. [Evidence](docs/audits/release-1.1.4/README.md). No physical radio result is implied.
+
+## Published 1.1.5 transfer-control update
+
+[Exact-source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44537059460) passed for cbbfab3 (90 JVM/six host checks and Android runtime/migration/control-dialog suites). [Signed update/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44537878353) verified actual published v1.1.4/code114→1.1.5-experimental/code115 continuity without uninstalling. The downloaded public APK passed independent checksum, certificate pin, package, version/code and source verification. [Evidence](docs/audits/release-1.1.5/README.md). Room migrates6→7; no physical-radio or security-audit result is implied.

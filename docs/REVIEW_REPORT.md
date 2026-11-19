@@ -7,12 +7,13 @@ Updated 16 November 2026 from the current source changes. This report separates 
 ## Current maintenance addendum — 19 November 2026
 
 The original 1.0 snapshot below is historical. Current published
-[1.1.4-experimental/code114](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.4)
-uses Room schema6, tiered replay admission and authenticated bounded OGB2 KDF parameters;
+[1.1.5-experimental/code115](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.5)
+uses Room schema7, tiered replay admission and authenticated bounded OGB2 KDF parameters;
 see SECURITY.md and the review follow-up for current details. This maintenance set
-adds live forwarding reservations, correct active-transfer measurement reset and
-aggregate relay export v2. [Evidence](audits/release-1.1.4/README.md) covers 88 JVM/six
-host checks, Android runtime suites and a signed actual-published 1.1.3→1.1.4 upgrade.
+adds durable outgoing attachment controls, progress and honest relay explanations,
+retaining live forwarding reservations, correct active-transfer reset and aggregate
+relay export v2. [Evidence](audits/release-1.1.5/README.md) covers 90 JVM/six
+host checks, Android runtime suites and a signed actual-published 1.1.4→1.1.5 upgrade.
 The [pinned session-library assessment](SESSION_PROTOCOL_REVIEW.md) is documented,
 without integrating either library or claiming forward secrecy. Physical radio,
 external security review, upstream consent, repo metadata write permission and
