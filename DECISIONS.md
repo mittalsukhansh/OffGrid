@@ -598,10 +598,28 @@ Never log private keys, passwords, secret values or private correspondence.
 - **Open items:** Physical A–B–C/CoC/Direct/weak-link measurements; live forward-secrecy design/review; inherited-code permission; owner USB restore verification. Retried prepared repository metadata script as mittalsukhansh: GitHub returned HTTP403 “Resource not accessible by integration”; description/topics remain owner-admin work. No signing secrets were printed or uploaded.
 - **Sources:** This change; D063; RELEASE_NOTES_1.1.4.md; docs/SESSION_PROTOCOL_REVIEW.md; TESTING.md; THROUGHPUT.md.
 
+## D065 — 2026-11-19 UTC — Stage signed 1.1.4 maintenance update
+
+- **Status:** Source checks passed; signed artifacts prepared; emulator upgrade/publication pending
+- **Work:** Fast-forwarded tested source into main. Staged four public signed app/test APK artifacts and schema2 manifest on one temporary artifact commit, using the actual published v1.1.3/code113 APK and its matching fixture as baseline. Explicit publish=true/tag v1.1.4 retains experimental labeling and the existing pinned signing identity. No signing keys/passwords are staged.
+- **Decision / reason:** Ship the relay reservation/reset corrections as a distinct in-place maintenance update, preserving immutable earlier releases. Require exact-source CI and signed emulator continuity before publication.
+- **Validation / evidence:** Exact source 7e92162 passed hosted run44529729343, including build/lint, 88 JVM/six host checks and Android runtime/identity/UI suites. Local signed release assembly/lint/fixture build and APK certificate/package/version/code/source verification passed. Signing audit:659 reachable blobs, two public signing files, zero findings. Local staged verifier checks the four artifacts before pushing; signed emulator results follow when actually complete.
+- **Open items:** Signed v1.1.3→1.1.4 emulator upgrade, publication and independent public download verification, artifact branch cleanup. Physical radio/security-review/licensing/admin/offline-media limitations remain open.
+- **Sources:** This staging change; source7e92162b024658eec65778fdb8cb4d6ea6d689c7; D064; https://github.com/mittalsukhansh/OffGrid/actions/runs/44529729343; RELEASE_NOTES_1.1.4.md.
+
+## D066 — 2026-11-19 UTC — Publish verified 1.1.4 maintenance APK
+
+- **Status:** Published experimental v1.1.4; signed upgrade and independent public artifact verification passed
+- **Work:** Source7e92162 passed hosted checks, merged into main, and signed staging workflow44530564163 verified actual published v1.1.3/code113→1.1.4/code114 install-r continuity before publication. Applied release notes to explicitly targeted mittalsukhansh/OffGrid. Downloaded public APK/checksum/signature/upgrade output, verified independently and archived public evidence plus staging D065. Updated current download/review/signing guidance. Remove this work's merged feature and temporary artifact branches after publishing this record; no app/test binary is added to main.
+- **Decision / reason:** Ship demonstrated relay/accounting corrections with the persistent signing identity and experimental label; preserve source/provenance and actual baseline evidence separately from physical-radio claims. Continue development on main.
+- **Validation / evidence:** Exact-source run44529729343 passed build/lint,88 JVM/six host checks and Android runtime/identity/UI suites. Signed API30 update preserved identity, verified dual-key contact/fingerprint, nickname and encrypted history. Public APK SHA-256 ca8e19fcc3a5e8ad10f84863409e69cf3ff93dbb8014f0e8005dcce668a61af6 matches staged/published sums; signer pin, package, code/version and signed source verified. Pre-stage audit659 blobs/two public signing files/zero findings. Final evidence/manifest/local links and diff formatting checked; documentation-only record skips redundant app CI.
+- **Open items:** Owner physical A–B–C/CoC/Direct/weak-link measurements, upstream consent, offline-media restore verification and integration-blocked repository description/topics. Session protocol design/prototype/external review remains future work; pinned library assessment is not implementation or a crypto audit. Previously deferred private groups/SOS/battery modes remain deferred.
+- **Sources:** This change; D064–D065; source7e92162b024658eec65778fdb8cb4d6ea6d689c7; https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.4; https://github.com/mittalsukhansh/OffGrid/actions/runs/44529729343; https://github.com/mittalsukhansh/OffGrid/actions/runs/44530564163; docs/audits/release-1.1.4/README.md.
+
 ## Template for the next work set
 
 ```markdown
-## D065 — YYYY-MM-DD HH:MM UTC — Short title
+## D067 — YYYY-MM-DD HH:MM UTC — Short title
 
 - **Status:** Implemented / documented / published / blocked / deferred (be specific)
 - **Work:** Concrete changes and affected components.

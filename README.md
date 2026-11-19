@@ -18,15 +18,15 @@ device captures or evidence of a working connection.
   <img src="docs/images/network-preview.svg" alt="Illustrative OffGrid network diagnostics screen preview" width="42%">
 </p>
 
-[Download OffGrid 1.1.3 — experimental merged UI update](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.3).
+[Download OffGrid 1.1.4 — experimental relay and diagnostics fixes](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.4).
 Install the same release APK on all test phones, **without uninstalling** the existing signed app, and follow the [1.1 relay/name retest](TESTING.md#version-11-relay-and-name-retest). Development continues from `main` on short feature branches. Current signed release source: `26ea58b`; published v1.0 assets remain unchanged.
 
 
-The [signed v1.1.2→1.1.3 emulator upgrade evidence](docs/audits/release-1.1.3/README.md) confirms identity, verified contact and encrypted history continuity; the earlier [v1.0→1.1 evidence](docs/audits/release-1.1/README.md) remains available. Source build/lint, 82 JVM tests, six host tests and Android runtime checks passed. This is automated evidence, not a confirmed fix of the owner's reported phone-radio failure.
+The [signed v1.1.3→1.1.4 emulator upgrade evidence](docs/audits/release-1.1.4/README.md) confirms identity, verified contact and encrypted history continuity; the earlier [v1.0→1.1 evidence](docs/audits/release-1.1/README.md) remains available. Source build/lint, 88 JVM tests, six host tests and Android runtime checks passed. This is automated evidence, not a confirmed fix of the owner's reported phone-radio failure.
 
 ## Current release and physical testing
 
-Version **1.1.3-experimental**, code **113**, ships the merged chat/conversation UI, completed resources and Android compatibility fixes. It gives stalled packets three-second first opportunities when untried chat/receipts are waiting, cancels active removed/unsent work immediately, and releases the composer on durable chat save. It also prioritizes chat/receipts and removes recurring inventory forwarding pauses. It includes a device-name prompt and signed named QRs, preserves custom local contact aliases, improves relay retry fairness and includes the post-1.0 replay/inventory/backup fixes. Update all phones before scanning new named QRs; names can repeat and fingerprints remain the identity check. Wire protocol remains 5. Start mesh on all three phones when testing A–B–C; nearby peer counts show direct neighbors.
+Version **1.1.4-experimental**, code **114**, adds concurrent forwarding reservations, reliable measurement reset during active transfers and aggregate relay export v2. It retains the merged chat/conversation UI, completed resources and Android compatibility fixes. It gives stalled packets three-second first opportunities when untried chat/receipts are waiting, cancels active removed/unsent work immediately, and releases the composer on durable chat save. It also prioritizes chat/receipts and removes recurring inventory forwarding pauses. It includes a device-name prompt and signed named QRs, preserves custom local contact aliases, improves relay retry fairness and includes the post-1.0 replay/inventory/backup fixes. Update all phones before scanning new named QRs; names can repeat and fingerprints remain the identity check. Wire protocol remains 5. Start mesh on all three phones when testing A–B–C; nearby peer counts show direct neighbors.
 
 The owner reports BLE bulk success and a third-phone relay failure on v1.0, without device models or diagnostic exports. Controlled three-phone/Direct/screen-off results and throughput measurements are still pending. See [review follow-up](docs/REVIEW_FOLLOWUP.md) and [private signing-key custody](KEY_CUSTODY.md). The owner confirmed the Windows signing backup; offline-media restore verification remains pending. Upstream licensing consent remains unresolved.
 
@@ -171,7 +171,7 @@ screen-off reliability, or successful Bluetooth mesh delivery.
 | Conversations and unread notifications | Per-contact/public histories, durable unread flags, generic notification routing | SQLite filtering/read/migration regressions and Espresso conversation/navigation checks | Notification permissions and OEM background behavior need phones |
 | Wi-Fi Direct | AP-free OffGrid DNS-SD discovery, explicit Android pairing, P2P-interface TCP and lifecycle recovery | Ownership/hello and transport tests; Android loopback socket and encrypted-media regressions | Physical pairing, permission/OEM behavior, group limits and throughput unverified |
 | Local Wi-Fi and diagnostics | Opt-in DNS-SD/IPv4 TCP alongside BLE, bounded sessions, live queue/endpoint/error diagnostics | Real TCP framing tests and transport selection/radio-state regressions | Physical NSD, access-point compatibility, network changes and throughput unverified |
-| Forward secrecy | **Not implemented**; per-message ephemeral ECDH with a static recipient agreement key | Session-protocol assessment in SECURITY.md | No ratchet or post-compromise recovery claim |
+| Forward secrecy | **Not implemented**; per-message ephemeral ECDH with a static recipient agreement key | [Pinned library assessment](docs/SESSION_PROTOCOL_REVIEW.md) | No ratchet or post-compromise recovery claim |
 
 ## Components and documentation
 

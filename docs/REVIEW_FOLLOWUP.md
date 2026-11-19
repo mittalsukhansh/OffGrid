@@ -53,3 +53,7 @@ The signed code-100→101 experimental candidate passed the API-30 in-place upda
 ## Published merged-UI 1.1.3 APK
 
 [Experimental v1.1.3](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.3), code113, now ships the consolidated UI/resources and retained queue/unsend/name functionality. The QR test reader matches the real QR-only scanner and UI compatibility issues were resolved during integration. [Actual source/UI checks, signed v1.1.2→1.1.3 upgrade and independent public download verification](audits/release-1.1.3/README.md) passed. Physical phone/UI/radio and existing legal/security/admin/offline-backup limitations remain open.
+
+## Published 1.1.4 relay/measurement corrections
+
+[Experimental v1.1.4](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.4), code114, reserves global forwarding slots before native attempts and keeps measurement accounting after reset during live transfers. Aggregate export v2 adds queue/reservation/event statistics without identifiers or message text. [Hosted checks, signed v1.1.3→1.1.4 upgrade and independent public download verification](audits/release-1.1.4/README.md) passed. Use this APK on all compatible phones for the next controlled A–B–C/Direct retest. The [pinned session-library assessment](SESSION_PROTOCOL_REVIEW.md) records integration constraints; no new crypto protocol or forward-secrecy claim is shipped. GitHub still rejects metadata writes with integration HTTP403; owner licensing/offline backup and physical results remain pending.

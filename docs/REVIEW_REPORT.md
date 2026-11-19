@@ -4,6 +4,20 @@ Post-release maintenance: see [review follow-up](REVIEW_FOLLOWUP.md) for explici
 
 Updated 16 November 2026 from the current source changes. This report separates implementation, automated evidence, physical evidence and external blockers. Consult [DECISIONS.md](../DECISIONS.md) for append-only validation/publication records.
 
+## Current maintenance addendum — 19 November 2026
+
+The original 1.0 snapshot below is historical. Current published
+[1.1.4-experimental/code114](https://github.com/mittalsukhansh/OffGrid/releases/tag/v1.1.4)
+uses Room schema6, tiered replay admission and authenticated bounded OGB2 KDF parameters;
+see SECURITY.md and the review follow-up for current details. This maintenance set
+adds live forwarding reservations, correct active-transfer measurement reset and
+aggregate relay export v2. [Evidence](audits/release-1.1.4/README.md) covers 88 JVM/six
+host checks, Android runtime suites and a signed actual-published 1.1.3→1.1.4 upgrade.
+The [pinned session-library assessment](SESSION_PROTOCOL_REVIEW.md) is documented,
+without integrating either library or claiming forward secrecy. Physical radio,
+external security review, upstream consent, repo metadata write permission and
+owner offline-media restore verification remain open.
+
 ## 1. About and differentiators
 
 OffGrid is an experimental Android offline messenger bridging BLE GATT/L2CAP, Wi-Fi Direct and optional shared-LAN TCP. It adds authenticated recipient receipts, persistent encrypted chat/relay queues, best-effort private unsend and resumable encrypted images/short videos. No internet server, phone-number account or global username registry is required. Human-readable nicknames are local labels; identity is derived from a signing public key.

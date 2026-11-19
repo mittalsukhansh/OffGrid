@@ -171,3 +171,7 @@ The [v1.1 publication workflow](https://github.com/mittalsukhansh/OffGrid/action
 ## Published merged-UI 1.1.3 update
 
 [Source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44102943274) passed for 26ea58b (82 JVM/six host tests, build/lint and Android runtime/UI suites). [Signed upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44103792519) verified actual published v1.1.2/code112→1.1.3-experimental/code113 identity, verified-contact/nickname and encrypted-history continuity on API30 before publishing. The public APK was downloaded and independently checked for hash, pin, package, code/version and signed source. [Evidence](docs/audits/release-1.1.3/README.md). No physical radio result is implied.
+
+## Published 1.1.4 maintenance update
+
+[Exact-source CI](https://github.com/mittalsukhansh/OffGrid/actions/runs/44529729343) passed for 7e92162 (88 JVM/six host tests, build/lint and Android runtime suites). [Signed upgrade/publication](https://github.com/mittalsukhansh/OffGrid/actions/runs/44530564163) verified actual published v1.1.3/code113→1.1.4-experimental/code114 continuity without uninstalling. The downloaded public APK passed independent checksum, signer pin, package, version/code and embedded-source verification. [Evidence](docs/audits/release-1.1.4/README.md). No physical radio result is implied.
